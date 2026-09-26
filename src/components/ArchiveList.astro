@@ -1,0 +1,172 @@
+---
+import { categoryLabel } from '../lib/categories';
+import { formatDisplayDate, formatIsoDate } from '../lib/content/dates';
+import { postUrl, type Post } from '../lib/posts';
+
+/** Archive: HTML thuần, hoạt động khi tắt JavaScript (mục 21). */
+interface Props {
+  posts: Post[];
+  currentPage: number;
+  lastPage: number;
+  total: number;
+}
+
+const { posts, currentPage, lastPage, total } = Astro.props;
+const pageHref = (n: number) => (n === 1 ? '/archive/' : `/archive/page/${n}/`);
+---
+
+<article class="archive">
+  <h1>Archive</h1>
+  <p class="count">{total} write-up · trang {currentPage}/{lastPage}</p>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Ngày</th>
+        <th scope="col">Write-up</th>
+        <th scope="col">CTF</th>
+        <th scope="col">Category</th>
+        <th scope="col" class="num">Points</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        posts.map((p) => (
+          <tr>
+            <td class="date">
+              <time datetime={formatIsoDate(p.data.date)}>{formatDisplayDate(p.data.date)}</time>
+            </td>
+            <td>
+              <a href={postUrl(p)}>{p.data.title}</a>
+            </td>
+            <td>{p.data.ctf || '—'}</td>
+            <td>{categoryLabel(p.data.category) || '—'}</td>
+            <td class="num">{p.data.points ?? '—'}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  {
+    lastPage > 1 && (
+      <nav class="pager" aria-label="Phân trang">
+        {currentPage > 1 ? <a href={pageHref(currentPage - 1)} rel="prev">← Mới hơn</a> : <span />}
+        <ol>
+          {Array.from({ length: lastPage }, (_, i) => i + 1).map((n) => (
+            <li>
+              {n === currentPage ? (
+                <span aria-current="page">{n}</span>
+              ) : (
+                <a href={pageHref(n)}>{n}</a>
+              )}
+            </li>
+          ))}
+        </ol>
+        {currentPage < lastPage ? <a href={pageHref(currentPage + 1)} rel="next">Cũ hơn →</a> : <span />}
+      </nav>
+    )
+  }
+</article>
+
+<style>
+  .archive {
+    max-width: 56rem;
+    margin: 0 auto;
+    padding: 2.5rem clamp(1rem, 3vw, 2.75rem) 4rem;
+  }
+  h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 600;
+  }
+  .count {
+    margin: 0.4rem 0 1.5rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+  }
+  th,
+  td {
+    padding: 0.6rem 0.7rem;
+    border-bottom: 1px solid var(--panel-border);
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  td {
+    color: var(--text-soft);
+  }
+  td a {
+    color: var(--text);
+    text-decoration: none;
+  }
+  td a:hover {
+    color: var(--accent);
+  }
+  .date {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .num {
+    text-align: right;
+    color: var(--points);
+    font-family: var(--font-mono);
+  }
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+  }
+  .pager ol {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .pager a,
+  .pager span[aria-current] {
+    display: inline-block;
+    min-width: 2rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.4rem;
+    text-align: center;
+    color: var(--text-soft);
+    text-decoration: none;
+  }
+  .pager a:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .pager span[aria-current] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1a0b14;
+    font-weight: 700;
+  }
+  @media (max-width: 640px) {
+    th:nth-child(4),
+    td:nth-child(4),
+    th:nth-child(3),
+    td:nth-child(3) {
+      display: none;
+    }
+  }
+</style>

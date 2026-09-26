@@ -1,0 +1,44 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+}
+const { title, description } = Astro.props;
+---
+
+<section class="empty">
+  <svg class="empty-icon" viewBox="0 0 48 48" aria-hidden="true">
+    <path d="M24 4 44 24 24 44 4 24Z" fill="none" stroke="currentColor" stroke-width="2.5"></path>
+    <path d="M24 15 33 24 24 33 15 24Z" fill="currentColor"></path>
+  </svg>
+  <h1 class="empty-title">{title}</h1>
+  {description && <p class="empty-desc">{description}</p>}
+  <slot />
+</section>
+
+<style>
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 18vh 2rem 3rem;
+  }
+  .empty-icon {
+    width: 3rem;
+    height: 3rem;
+    color: #8f8a99;
+  }
+  .empty-title {
+    margin: 1rem 0 0;
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--text-soft);
+  }
+  .empty-desc {
+    max-width: 32rem;
+    margin: 0.6rem 0 0;
+    color: #a09aab;
+    line-height: 1.6;
+  }
+</style>

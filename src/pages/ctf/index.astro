@@ -1,0 +1,12 @@
+---
+import TermIndex from '../../components/TermIndex.astro';
+import AppLayout from '../../layouts/AppLayout.astro';
+import { getSiteContent } from '../../lib/posts';
+
+const { ctfs } = await getSiteContent();
+const items = [...ctfs.terms].sort((a, b) => a.name.localeCompare(b.name)).map((t) => ({ href: `/ctf/${t.slug}/`, label: t.name, count: t.count }));
+---
+
+<AppLayout view="page" title="CTFs" description="Danh sách giải CTF có write-up.">
+  <TermIndex title="CTFs" items={items} />
+</AppLayout>

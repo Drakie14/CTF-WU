@@ -1,0 +1,71 @@
+---
+import { getImage } from 'astro:assets';
+import { render } from 'astro:content';
+import ArticleHeader from '../../components/ArticleHeader.astro';
+import PrevNext from '../../components/PrevNext.astro';
+import Toc from '../../components/Toc.astro';
+import AppLayout from '../../layouts/AppLayout.astro';
+import { getSiteContent, type Post } from '../../lib/posts';
+
+export async function getStaticPaths() {
+  const { posts } = await getSiteContent();
+  // `posts` mới nhất trước: previous = bài cũ hơn, next = bài mới hơn.
+  return posts.map((post, i) => ({
+    params: { slug: post.id },
+    props: { post, prev: posts[i + 1], next: posts[i - 1] },
+  }));
+}
+
+interface Props {
+  post: Post;
+  prev?: Post;
+  next?: Post;
+}
+
+const { post, prev, next } = Astro.props;
+const { tags, ctfs } = await getSiteContent();
+const { Content, headings } = await render(post);
+// Cover (nếu có) làm ảnh Open Graph: JPEG rộng tối đa 1200px để mọi mạng xã hội đọc được.
+const cover = post.data.cover
+  ? await getImage({ src: post.data.cover, width: Math.min(1200, post.data.cover.width), format: 'jpeg', quality: 80 })
+  : undefined;
+const ogImage = cover
+  ? { src: cover.src, width: Number(cover.attributes.width), height: Number(cover.attributes.height), alt: post.data.title }
+  : undefined;
+---
+
+<AppLayout
+  view="post"
+  currentSlug={post.id}
+  title={post.data.title}
+  description={post.data.summary || undefined}
+  ogType="article"
+  publishedTime={post.data.date}
+  tags={post.data.tags}
+  image={ogImage}
+>
+  <article class="article" data-pagefind-body>
+    <ArticleHeader post={post} tags={tags} ctfs={ctfs} />
+    <div class="article-grid">
+      <Toc headings={headings} />
+      <div class="prose" data-article-body>
+        <Content />
+      </div>
+    </div>
+    <PrevNext prev={prev} next={next} />
+  </article>
+</AppLayout>
+
+<style>
+  /* Bài chiếm trọn panel; TOC nổi ở góc phải (xem Toc.astro), không còn cột riêng. */
+  .article {
+    padding: 2.25rem clamp(1.25rem, 3vw, 2.75rem) 4rem;
+  }
+  .article-grid {
+    margin-top: 1.5rem;
+  }
+  /* Chừa chỗ cho thanh mục lục thu gọn để không đè lên chữ. */
+  .article-grid:has(> :global(.toc)) > .prose {
+    padding-right: 3rem;
+  }
+</style>

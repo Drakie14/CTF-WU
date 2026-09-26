@@ -1,0 +1,487 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/jetbrains-mono/wght.css';
+@import '@fontsource-variable/lexend/wght.css';
+
+/* ==========================================================================
+   Design tokens (mục 44) — mọi màu dùng qua CSS variables.
+   Tương phản chữ/nền đạt WCAG AA trên nền tối.
+   ========================================================================== */
+:root {
+  --bg: #16101f;
+  --panel: #1a1a1f;
+  --panel-2: #222228;
+  --panel-border: #2e2e36;
+  --text: #ece8f4;
+  --text-soft: #c9c1d8;
+  --muted: #a79dba;
+  --accent: #f472b6;
+  --accent-2: #c084fc;
+  --accent-strong: #ec4899;
+  --points: #fcd34d;
+  --tag: #86efac;
+  --warn: #fdba74;
+  --row-bg: rgb(22 14 32 / 0.62);
+  --row-bg-hover: rgb(48 30 64 / 0.72);
+  --row-selected: linear-gradient(90deg, rgb(236 72 153 / 0.55), rgb(192 132 252 / 0.35));
+  --radius-panel: 1.5rem;
+  --curve: 48px;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --font-sans: 'Lexend Variable', system-ui, 'Segoe UI', Roboto, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  color-scheme: dark;
+}
+
+@theme {
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --font-sans: 'Lexend Variable', system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+@media (max-width: 1023.98px) {
+  :root {
+    /* Mobile: giảm độ cong ~50% (mục 39). */
+    --curve: 24px;
+  }
+}
+
+html {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  /* Không đặt background cho body: nền nằm ở html + .bg-layer (z-index âm). */
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 50;
+  padding: 0.5rem 1rem;
+  background: var(--accent);
+  color: #1a0b14;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* ==========================================================================
+   Nền low-poly cố định + particles (mục 45)
+   ========================================================================== */
+.bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: var(--bg) center / cover no-repeat;
+}
+.bg-layer::after {
+  /* Lớp phủ tối để giữ tương phản cho chữ. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgb(22 16 31 / 0.55), rgb(22 16 31 / 0.15) 60%, rgb(22 16 31 / 0.05));
+}
+
+.particles {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.particles span {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s, 6px);
+  height: var(--s, 6px);
+  background: rgb(255 214 236 / 0.8);
+  transform: rotate(45deg);
+  opacity: 0;
+  animation: particle-float var(--d, 14s) linear var(--delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+@keyframes particle-float {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(45deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.7;
+  }
+  85% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate3d(var(--dx, 30px), -140px, 0) rotate(225deg);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .particles {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   Nội dung bài viết (sans-serif, mục 43)
+   ========================================================================== */
+.prose {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--text-soft);
+  overflow-wrap: break-word;
+}
+.prose > * + * {
+  margin-top: 1.1em;
+}
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.3;
+  scroll-margin-top: 1.5rem;
+}
+.prose h1 {
+  font-size: 1.75rem;
+  margin-top: 2em;
+}
+.prose h2 {
+  font-size: 1.4rem;
+  margin-top: 2em;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--panel-border);
+}
+.prose h3 {
+  font-size: 1.15rem;
+  margin-top: 1.6em;
+}
+.prose h4,
+.prose h5,
+.prose h6 {
+  font-size: 1rem;
+  margin-top: 1.4em;
+}
+.prose a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: rgb(244 114 182 / 0.45);
+  text-underline-offset: 3px;
+}
+.prose a:hover {
+  text-decoration-color: currentColor;
+}
+.prose strong {
+  color: var(--text);
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.5em;
+}
+.prose ul {
+  list-style: disc;
+}
+.prose ol {
+  list-style: decimal;
+}
+.prose li + li {
+  margin-top: 0.3em;
+}
+.prose li::marker {
+  color: var(--accent);
+}
+.prose blockquote {
+  border-left: 3px solid var(--accent-2);
+  padding: 0.25em 1em;
+  color: var(--muted);
+  background: rgb(192 132 252 / 0.06);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.prose hr {
+  border: 0;
+  border-top: 1px dashed var(--panel-border);
+  margin: 2em 0;
+}
+.prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-size: 0.875em;
+  padding: 0.12em 0.4em;
+  border-radius: 0.35rem;
+  background: rgb(255 255 255 / 0.07);
+  color: #f5d0fe;
+}
+.prose mark {
+  background: rgb(252 211 77 / 0.28);
+  color: #fff7d6;
+  padding: 0 0.2em;
+  border-radius: 0.2rem;
+}
+.prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+  border: 1px solid var(--panel-border);
+}
+.prose .img-fallback {
+  display: inline-block;
+  padding: 0.5em 0.9em;
+  border: 1px dashed var(--muted);
+  border-radius: 0.5rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+.prose .table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+}
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.925em;
+}
+.prose th,
+.prose td {
+  padding: 0.55em 0.9em;
+  border-bottom: 1px solid var(--panel-border);
+  text-align: left;
+}
+.prose th {
+  color: var(--text);
+  background: var(--panel-2);
+  font-weight: 600;
+}
+.prose tr:last-child td {
+  border-bottom: 0;
+}
+
+/* --- Code block (Shiki) ------------------------------------------------- */
+.prose .code-block {
+  margin-left: 0;
+  margin-right: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: #0d1117;
+}
+.prose .code-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.9rem;
+  background: rgb(0 0 0 / 0.25);
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+}
+.prose .code-lang {
+  margin-right: auto;
+  color: var(--muted);
+  font-weight: 600;
+}
+.prose .copy-btn {
+  font: inherit;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+}
+.prose .copy-btn:hover {
+  background: rgb(255 255 255 / 0.12);
+  color: var(--text);
+}
+.prose .copy-btn[data-copied] {
+  color: var(--tag);
+  border-color: rgb(134 239 172 / 0.5);
+}
+.prose pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  tab-size: 4;
+  white-space: pre;
+  /* Không gộp ký tự (==, !=, ->) để code CTF hiển thị đúng từng ký tự. */
+  font-variant-ligatures: none;
+}
+.prose pre code {
+  font-family: inherit;
+  display: block;
+  min-width: max-content;
+}
+/* ```lang! → tự xuống dòng giống HackMD */
+.prose .code-block[data-wrap] pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.prose .code-block[data-wrap] pre code {
+  min-width: 0;
+}
+
+/* --- Callouts (:::info / GitHub alerts) --------------------------------- */
+.prose .callout {
+  --c: var(--accent-2);
+  position: relative;
+  padding: 0.85rem 1rem 0.85rem 2.9rem;
+  border-left: 4px solid var(--c);
+  border-radius: 0 0.75rem 0.75rem 0;
+  background: color-mix(in srgb, var(--c) 10%, transparent);
+  color: var(--text-soft);
+}
+.prose .callout::before {
+  content: '';
+  position: absolute;
+  left: 0.9rem;
+  top: 1.05rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  background: var(--c);
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}
+.prose .callout > * + * {
+  margin-top: 0.7em;
+}
+.prose .callout-title {
+  font-weight: 600;
+  color: var(--c);
+}
+.prose .callout-info {
+  --c: #7dd3fc;
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z'/%3E%3C/svg%3E");
+}
+.prose .callout-success {
+  --c: #86efac;
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1.5 14.5-4-4 1.4-1.4 2.6 2.6 5.6-5.6 1.4 1.4-7 7Z'/%3E%3C/svg%3E");
+}
+.prose .callout-warning {
+  --c: #fcd34d;
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z'/%3E%3C/svg%3E");
+}
+.prose .callout-danger {
+  --c: #fca5a5;
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M15.7 2H8.3L3 7.3v7.4L8.3 20h7.4l5.3-5.3V7.3L15.7 2ZM13 16h-2v-2h2v2Zm0-4h-2V7h2v5Z'/%3E%3C/svg%3E");
+}
+
+/* --- Spoiler / details --------------------------------------------------- */
+.prose details {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: var(--panel-2);
+  padding: 0 1rem;
+}
+.prose details > summary {
+  cursor: pointer;
+  padding: 0.7rem 0;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+}
+.prose details > summary::-webkit-details-marker {
+  display: none;
+}
+.prose details > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 0.55em;
+  color: var(--accent);
+  transition: transform 0.15s ease;
+}
+.prose details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.prose details[open] {
+  padding-bottom: 0.9rem;
+}
+.prose details[open] > summary {
+  border-bottom: 1px dashed var(--panel-border);
+  margin-bottom: 0.8rem;
+}
+.prose details.spoiler > summary {
+  color: var(--accent);
+}
+
+/* --- Attachment card ----------------------------------------------------- */
+.prose a.attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: min(100%, 18rem);
+  padding: 0.7rem 1rem 0.7rem 0.85rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+  vertical-align: middle;
+}
+.prose a.attachment:hover {
+  border-color: var(--accent);
+}
+.prose a.attachment::before {
+  content: '';
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
+  background: var(--muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm-1 7V3.5L18.5 9H13Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm-1 7V3.5L18.5 9H13Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.prose a.attachment::after {
+  content: attr(data-size);
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* --- Footnotes ----------------------------------------------------------- */
+.prose .footnotes {
+  margin-top: 3em;
+  font-size: 0.9em;
+  color: var(--muted);
+  border-top: 1px solid var(--panel-border);
+  padding-top: 1em;
+}

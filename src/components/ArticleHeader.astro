@@ -1,0 +1,153 @@
+---
+import { categoryColor, categoryLabel } from '../lib/categories';
+import { slugify } from '../lib/content/slug';
+import { formatDisplayDate, formatIsoDate } from '../lib/content/dates';
+import type { Taxonomy } from '../lib/content/tags';
+import { isUnsorted, type Post } from '../lib/posts';
+
+interface Props {
+  post: Post;
+  tags: Taxonomy;
+  ctfs: Taxonomy;
+}
+
+const { post, tags, ctfs } = Astro.props;
+const { title, ctf, category, difficulty, points, date, readingTime } = post.data;
+---
+
+<header class="art-head">
+  <div class="art-title-row">
+    <h1 class="art-title" data-pagefind-meta="title">{title}</h1>
+    {points !== null && <p class="art-points" data-pagefind-ignore><b>{points}</b> pts</p>}
+  </div>
+  <div class="art-meta" data-pagefind-ignore>
+    {ctf && <a class="art-ctf" href={`/ctf/${ctfs.slugOf(ctf)}/`}>{ctf}</a>}
+    {
+      category && (
+        <a class="badge" href={`/category/${slugify(category)}/`} style={`--c:${categoryColor(category)}`}>
+          {categoryLabel(category)}
+        </a>
+      )
+    }
+    {difficulty && <span class={`badge diff diff-${difficulty}`}>{difficulty}</span>}
+    {isUnsorted(post) && <span class="badge unsorted">Chưa phân loại</span>}
+  </div>
+  <p class="art-sub" data-pagefind-ignore>
+    <time datetime={formatIsoDate(date)}>{formatDisplayDate(date)}</time>
+    <span aria-hidden="true">·</span>
+    <span>{readingTime} phút đọc</span>
+  </p>
+  {
+    post.data.tags.length > 0 && (
+      <ul class="art-tags" aria-label="Tags">
+        {post.data.tags.map((tag) => (
+          <li>
+            <a href={`/tags/${tags.slugOf(tag)}/`}>#{tags.bySlug.get(tags.slugOf(tag))?.name ?? tag}</a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</header>
+
+<style>
+  .art-head {
+    padding-bottom: 1.4rem;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .art-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+  .art-title {
+    margin: 0;
+    font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .art-points {
+    flex: none;
+    margin: 0.2rem 0 0;
+    font-size: 1.05rem;
+    color: var(--text-soft);
+    white-space: nowrap;
+  }
+  .art-points b {
+    font-size: 1.7rem;
+    font-weight: 600;
+    color: var(--points);
+  }
+  .art-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.6rem;
+    margin-top: 0.8rem;
+  }
+  .art-ctf {
+    color: var(--text-soft);
+    text-decoration: none;
+  }
+  .art-ctf:hover {
+    color: var(--accent);
+  }
+  .badge {
+    --c: var(--accent-2);
+    display: inline-block;
+    padding: 0.15rem 0.7rem;
+    border-radius: 0.45rem;
+    background: color-mix(in srgb, var(--c) 18%, transparent);
+    color: var(--c);
+    font-size: 0.82rem;
+    text-decoration: none;
+    text-transform: capitalize;
+  }
+  .diff-easy {
+    --c: #86efac;
+  }
+  .diff-medium {
+    --c: #fcd34d;
+  }
+  .diff-hard {
+    --c: #fdba74;
+  }
+  .diff-insane {
+    --c: #fca5a5;
+  }
+  .badge.unsorted {
+    --c: var(--warn);
+    text-transform: none;
+  }
+  .art-sub {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0.7rem 0 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .art-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.9rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .art-tags a {
+    display: inline-block;
+    padding: 0.1rem 0.6rem;
+    border: 1px solid rgb(134 239 172 / 0.4);
+    border-radius: 999px;
+    color: var(--tag);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-decoration: none;
+  }
+  .art-tags a:hover {
+    background: rgb(134 239 172 / 0.12);
+  }
+</style>

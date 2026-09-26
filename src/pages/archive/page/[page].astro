@@ -1,0 +1,27 @@
+---
+import type { GetStaticPaths, Page } from 'astro';
+import ArchiveList from '../../../components/ArchiveList.astro';
+import AppLayout from '../../../layouts/AppLayout.astro';
+import { ARCHIVE_PAGE_SIZE } from '../../../config/site';
+import { getSiteContent, type Post } from '../../../lib/posts';
+
+/** `/archive/page/<n>` — Astro pagination, 20 bài mỗi trang (mục 21). */
+export const getStaticPaths = (async ({ paginate }) => {
+  const { posts } = await getSiteContent();
+  return paginate(posts, { pageSize: ARCHIVE_PAGE_SIZE });
+}) satisfies GetStaticPaths;
+
+interface Props {
+  page: Page<Post>;
+}
+const { page } = Astro.props;
+---
+
+<AppLayout
+  view="page"
+  title={`Archive — trang ${page.currentPage}`}
+  description={`Toàn bộ write-up, trang ${page.currentPage}/${page.lastPage}.`}
+  canonical={page.currentPage === 1 ? '/archive/' : undefined}
+>
+  <ArchiveList posts={page.data} currentPage={page.currentPage} lastPage={page.lastPage} total={page.total} />
+</AppLayout>

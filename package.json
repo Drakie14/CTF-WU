@@ -1,0 +1,63 @@
+{
+  "name": "ctf-writeups-blog",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.22.3"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "predev": "node scripts/copy-cms.mjs",
+    "prebuild": "node scripts/copy-cms.mjs",
+    "build": "astro build && pagefind --site dist",
+    "preview": "astro preview",
+    "check": "astro check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "astro": "astro",
+    "generate:fixtures": "node scripts/generate-fixtures.mjs",
+    "clean:fixtures": "node scripts/clean-fixtures.mjs",
+    "build:fixtures": "node scripts/with-fixtures.mjs build",
+    "dev:fixtures": "node scripts/with-fixtures.mjs dev",
+    "verify": "node scripts/verify-dist.mjs",
+    "lighthouse": "lhci autorun"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "7.3.1",
+    "@astrojs/rss": "4.0.19",
+    "@astrojs/sitemap": "3.7.4",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@fontsource-variable/lexend": "5.3.0",
+    "@sveltia/cms": "0.221.1",
+    "astro": "7.3.5",
+    "rehype-raw": "7.0.0",
+    "rehype-sanitize": "6.0.0",
+    "remark-breaks": "4.0.0",
+    "remark-gemoji": "8.0.0",
+    "sharp": "0.35.4",
+    "shiki": "4.4.3",
+    "unist-util-visit": "5.1.0",
+    "vfile": "6.0.3",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@lhci/cli": "0.15.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/hast": "3.0.5",
+    "@types/mdast": "4.0.4",
+    "@types/node": "22.20.4",
+    "eslint": "10.11.0",
+    "eslint-plugin-astro": "3.2.1",
+    "pagefind": "1.5.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1",
+    "vitest": "5.0.2"
+  },
+  "allowScripts": {
+    "esbuild": true
+  }
+}

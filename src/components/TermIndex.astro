@@ -1,0 +1,71 @@
+---
+interface Props {
+  title: string;
+  items: Array<{ href: string; label: string; count: number }>;
+}
+const { title, items } = Astro.props;
+---
+
+<article class="term-page">
+  <h1>{title}</h1>
+  {
+    items.length ? (
+      <ul class="terms">
+        {items.map((i) => (
+          <li>
+            <a href={i.href}>
+              <span>{i.label}</span>
+              <b>{i.count}</b>
+            </a>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p class="empty">Chưa có mục nào.</p>
+    )
+  }
+</article>
+
+<style>
+  .term-page {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 2.5rem clamp(1.25rem, 3vw, 2.75rem) 4rem;
+  }
+  h1 {
+    margin: 0 0 1.5rem;
+    font-size: 2rem;
+    font-weight: 600;
+  }
+  .terms {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .terms a {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.6rem;
+    background: var(--panel-2);
+    color: var(--text);
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+  }
+  .terms a:hover {
+    border-color: var(--accent);
+  }
+  .terms b {
+    color: var(--points);
+    font-weight: 600;
+  }
+  .empty {
+    color: var(--muted);
+  }
+</style>

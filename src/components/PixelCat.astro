@@ -1,0 +1,84 @@
+---
+// Mèo pixel "Keep Hacking _" ở góc dưới sidebar. Vẽ bằng SVG (mỗi "X" là một pixel).
+const ART = [
+  '.X.....X.....',
+  '.XX...XX.....',
+  '.X.XXX.X.....',
+  'X.......X....',
+  'X.X...X.X....',
+  'X...X...X....',
+  '.X.....X.....',
+  'X.......X....',
+  'X.......X..X.',
+  'X.......X..X.',
+  'X.X...X.X.X..',
+  '.XXXXXXXXX...',
+];
+const pixels = ART.flatMap((row, y) => [...row].flatMap((c, x) => (c === 'X' ? [{ x, y }] : [])));
+const width = ART[0]!.length;
+---
+
+<div class="cat" aria-hidden="true">
+  <svg viewBox={`-1 -1 ${width + 3} ${ART.length + 2}`} shape-rendering="crispEdges">
+    {pixels.map((p) => <rect x={p.x} y={p.y} width="1" height="1" />)}
+    <rect class="spark" x={width} y="1" width="1" height="1" />
+    <rect class="spark spark-2" x={width + 1} y="4" width="1" height="1" />
+  </svg>
+  <p>Keep<br />Hacking <span class="cursor">_</span></p>
+</div>
+
+<style>
+  .cat {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1.1rem;
+    padding: 0.6rem 1.25rem 0.2rem;
+    color: var(--accent-2);
+    opacity: 0.85;
+    pointer-events: none;
+    user-select: none;
+  }
+  svg {
+    width: 3.4rem;
+    height: auto;
+    fill: currentColor;
+    filter: drop-shadow(0 0 6px rgb(192 132 252 / 0.45));
+  }
+  .spark {
+    opacity: 0.55;
+  }
+  p {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.5;
+    color: var(--text-soft);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .cursor {
+      animation: blink 1.1s steps(1) infinite;
+    }
+    .spark {
+      animation: twinkle 2.4s ease-in-out infinite;
+    }
+    .spark-2 {
+      animation-delay: 1.2s;
+    }
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  @keyframes twinkle {
+    50% {
+      opacity: 0.1;
+    }
+  }
+  @media (max-height: 560px) {
+    .cat {
+      display: none;
+    }
+  }
+</style>

@@ -1,0 +1,161 @@
+---
+import type { MarkdownHeading } from 'astro';
+
+interface Props {
+  headings: MarkdownHeading[];
+}
+
+// TOC tự tạo từ heading cấp 2–3 (mục 19); `[TOC]` trong Markdown đã bị xóa.
+// Thu gọn thành các thanh ngang mờ ở góc phải; hover / focus / chạm vào thì mở danh sách tiêu đề (cuộn được).
+const items = Astro.props.headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+---
+
+{
+  items.length > 1 && (
+    <nav class="toc" aria-label="Mục lục" data-toc data-pagefind-ignore="all">
+      <button class="toc-rail" type="button" aria-expanded="false" aria-controls="toc-pop" data-toc-toggle>
+        <span class="sr-only">Mục lục</span>
+        {items.map((h) => (
+          <span class={`toc-bar toc-d${h.depth}`} data-toc-bar={h.slug} aria-hidden="true" />
+        ))}
+      </button>
+      <div class="toc-pop" id="toc-pop" data-toc-pop>
+        <p class="toc-title">Mục lục</p>
+        <ol>
+          {items.map((h) => (
+            <li class={`toc-d${h.depth}`}>
+              <a href={`#${h.slug}`} data-toc-link={h.slug}>
+                {h.text}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </nav>
+  )
+}
+
+<style>
+  /* Chiều cao 0 + sticky: nổi ở góc phải trên cùng khi cuộn, không chiếm chỗ của bài. */
+  .toc {
+    position: sticky;
+    top: 1rem;
+    z-index: 20;
+    height: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    font-size: 0.8rem;
+  }
+  .toc-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
+    width: 2.4rem;
+    max-height: min(45vh, 20rem);
+    overflow: hidden;
+    padding: 0.7rem 0.55rem;
+    border: 1px solid rgb(236 232 244 / 0.08);
+    border-radius: 0.6rem;
+    background: rgb(34 34 40 / 0.45);
+    opacity: 0.6;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .toc-rail:hover {
+    opacity: 1;
+  }
+  .toc-bar {
+    flex: none;
+    display: block;
+    width: 100%;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--muted);
+  }
+  .toc-bar.toc-d3 {
+    width: 60%;
+  }
+  .toc-bar[data-active] {
+    background: var(--accent);
+  }
+
+  .toc-pop {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(19rem, calc(100vw - 3rem));
+    max-height: min(70vh, 36rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.4rem 0.6rem 0.6rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.75rem;
+    background: rgb(34 34 40 / 0.86);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.4);
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a44 transparent;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition:
+      opacity 0.15s,
+      transform 0.15s,
+      visibility 0s linear 0.15s;
+  }
+  .toc:hover .toc-pop,
+  .toc:focus-within .toc-pop,
+  .toc[data-open] .toc-pop {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition:
+      opacity 0.15s,
+      transform 0.15s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .toc-pop {
+      transition: none;
+    }
+  }
+  .toc-title {
+    position: sticky;
+    top: -0.4rem;
+    margin: 0 -0.6rem 0.2rem;
+    padding: 0.55rem 0.9rem 0.4rem;
+    background: rgb(34 34 40 / 0.96);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .toc li {
+    margin: 0.05rem 0;
+  }
+  .toc li.toc-d3 {
+    padding-left: 0.9rem;
+  }
+  .toc a {
+    display: block;
+    padding: 0.2rem 0.5rem;
+    border-left: 2px solid transparent;
+    color: var(--text-soft);
+    text-decoration: none;
+    line-height: 1.4;
+  }
+  .toc a:hover {
+    color: var(--text);
+  }
+  .toc a[aria-current='true'] {
+    border-left-color: var(--accent);
+    color: var(--accent);
+  }
+</style>

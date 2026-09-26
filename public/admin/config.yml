@@ -1,0 +1,195 @@
+# Cấu hình Sveltia CMS — https://sveltiacms.app/en/docs
+# yaml-language-server: $schema=https://unpkg.com/@sveltia/cms@0.221.1/schema/sveltia-cms.json
+#
+# KHÔNG đặt token/secret trong file này: file được deploy công khai.
+# Đăng nhập bằng GitHub Personal Access Token nhập trực tiếp trên trình duyệt
+# (Sveltia lưu token trong localStorage của trình duyệt, không đi qua server nào).
+
+backend:
+  name: github
+  # ĐỔI thành <tài-khoản-github>/<tên-repo> của bạn trước khi dùng /admin trên production.
+  repo: Drakie14/CTF-WU
+  branch: main
+  # Chỉ đăng nhập bằng access token: không cần OAuth proxy / Worker / server.
+  auth_methods: [token]
+  commit_messages:
+    create: 'content: thêm "{{slug}}"'
+    update: 'content: sửa "{{slug}}"'
+    delete: 'content: xóa "{{slug}}"'
+    uploadMedia: 'content: upload "{{path}}"'
+    deleteMedia: 'content: xóa file "{{path}}"'
+
+app_title: CTF Write-ups CMS
+show_preview_links: false
+
+# Thư mục media chung (hiếm khi dùng). Ảnh của bài được lưu cạnh index.md của bài
+# — xem media_folder/public_folder của collection bên dưới.
+media_folder: public/uploads
+public_folder: /uploads
+media_libraries:
+  default:
+    config:
+      # Giữ nguyên tên file gốc khi upload.
+      slugify_filename: false
+      max_file_size: 10485760
+
+slug:
+  encoding: ascii
+  clean_accents: true
+  sanitize_replacement: '-'
+
+output:
+  # Không ghi field trống (ctf: '', points: null...) vào frontmatter.
+  omit_empty_optional_fields: true
+  yaml:
+    indent_size: 2
+
+collections:
+  - name: posts
+    label: Write-ups
+    label_singular: Write-up
+    icon: flag
+    description: >-
+      Thân bài là văn bản thô: paste Markdown từ HackMD và CMS giữ nguyên từng ký tự.
+      Bài mới được lưu ở src/content/posts/(slug)/index.md (hoặc trong thư mục CTF đã chọn ở Parent Folder).
+    folder: src/content/posts
+    # Mỗi bài là một thư mục chứa index.md + ảnh/file đính kèm (page bundle).
+    path: '{{slug}}/index'
+    extension: md
+    format: yaml-frontmatter
+    # Ảnh upload được lưu cùng thư mục với index.md của bài; tham chiếu bằng ./ten-anh.png
+    media_folder: ''
+    public_folder: ''
+    # Hỗ trợ cả posts/<slug>/index.md và posts/<ctf>/<slug>/index.md.
+    # Cây thư mục bên trái = danh sách CTF; Parent Folder = chọn CTF có sẵn cho bài.
+    nested:
+      depth: 3
+      subfolders: true
+    meta:
+      path:
+        index_file: index
+    identifier_field: title
+    summary: '{{title}}'
+    sortable_fields:
+      fields: [date, title, ctf, category, difficulty, points]
+      default:
+        field: date
+        direction: descending
+    view_filters:
+      - { name: uncategorized, label: 'Chưa phân loại', field: category, empty: true }
+      - { name: no-ctf, label: 'Chưa có CTF (frontmatter)', field: ctf, empty: true }
+      - { name: web, label: 'Category: web', field: category, eq: web }
+      - { name: pwn, label: 'Category: pwn', field: category, eq: pwn }
+      - { name: crypto, label: 'Category: crypto', field: category, eq: crypto }
+      - { name: rev, label: 'Category: rev', field: category, eq: rev }
+      - { name: forensics, label: 'Category: forensics', field: category, eq: forensics }
+      - { name: misc, label: 'Category: misc', field: category, eq: misc }
+      - { name: osint, label: 'Category: osint', field: category, eq: osint }
+      - { name: mobile, label: 'Category: mobile', field: category, eq: mobile }
+      - { name: cloud, label: 'Category: cloud', field: category, eq: cloud }
+    view_groups:
+      - { name: ctf, label: CTF, field: ctf }
+      - { name: category, label: Category, field: category }
+      - { name: difficulty, label: Difficulty, field: difficulty }
+    editor:
+      preview: false
+    fields: &post_fields
+      - name: title
+        label: Title
+        widget: string
+        required: true
+      - name: date
+        label: Date
+        widget: datetime
+        type: date
+        format: YYYY-MM-DD
+        required: false
+        hint: Ngày theo giờ Việt Nam (Asia/Ho_Chi_Minh). Bỏ trống → lấy ngày commit đầu tiên.
+      - name: ctf
+        label: CTF
+        widget: string
+        required: false
+        hint: >-
+          Chọn CTF có sẵn bằng **Parent Folder** ở trên (bài trong thư mục CTF tự nhận tên CTF, để trống ô này),
+          hoặc gõ tên CTF mới vào đây — trang /ctf/... sẽ tự được tạo.
+      - name: category
+        label: Category
+        widget: select
+        required: false
+        dropdown_threshold: 0
+        options: [web, pwn, crypto, rev, forensics, misc, osint, mobile, cloud]
+      - name: difficulty
+        label: Difficulty
+        widget: select
+        required: false
+        dropdown_threshold: 0
+        options: [easy, medium, hard, insane]
+      - name: points
+        label: Points
+        widget: number
+        value_type: int
+        min: 0
+        required: false
+      - name: tags
+        label: Tags
+        label_singular: tag
+        widget: list
+        required: false
+        hint: Gõ tag bất kỳ (kể cả tag mới) — trang /tags/... tự được tạo, không cần sửa code.
+      - name: summary
+        label: Summary
+        widget: text
+        required: false
+        use_emoji_autocomplete: false
+        hint: Bỏ trống → dùng đoạn văn đầu tiên của bài.
+      - name: cover
+        label: Cover
+        widget: image
+        required: false
+        choose_url: false
+      - name: images
+        label: Ảnh trong bài
+        widget: image
+        multiple: true
+        required: false
+        choose_url: false
+        hint: >-
+          Upload ảnh dùng trong thân bài — ảnh được lưu cạnh file bài viết.
+          Chèn vào thân bài bằng `![](./ten-anh.png)`. (Danh sách này chỉ để CMS quản lý ảnh, website không dùng.)
+      - name: body
+        label: Nội dung (Markdown/HackMD)
+        # Widget văn bản thô: KHÔNG dùng markdown/richtext editor để không viết lại cú pháp HackMD.
+        widget: text
+        required: false
+        use_emoji_autocomplete: false
+        hint: >-
+          Paste nguyên Markdown từ HackMD. Ảnh: upload ở ô "Ảnh trong bài" rồi chèn `![](./ten-anh.png)`.
+
+  # Bài dạng một file: src/content/posts/<slug>.md. Collection "posts" ở trên (page bundle, nested)
+  # không đọc được dạng này, nên có collection riêng để sửa; bài MỚI luôn tạo ở "posts".
+  - name: posts_single
+    label: Write-ups (file .md đơn)
+    label_singular: Write-up (file .md đơn)
+    icon: description
+    description: >-
+      Các bài dạng src/content/posts/(slug).md. Chỉ để sửa — tạo bài mới ở collection Write-ups.
+    folder: src/content/posts
+    extension: md
+    format: yaml-frontmatter
+    create: false
+    # Ảnh nằm chung thư mục src/content/posts, tham chiếu bằng ./ten-anh.png
+    media_folder: ''
+    public_folder: ''
+    identifier_field: title
+    summary: '{{title}}'
+    sortable_fields:
+      fields: [date, title, ctf, category]
+      default:
+        field: date
+        direction: descending
+    view_groups:
+      - { name: ctf, label: CTF, field: ctf }
+      - { name: category, label: Category, field: category }
+    editor:
+      preview: false
+    fields: *post_fields

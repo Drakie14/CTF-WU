@@ -1,0 +1,14 @@
+---
+import ArchiveList from '../../components/ArchiveList.astro';
+import AppLayout from '../../layouts/AppLayout.astro';
+import { getSiteContent } from '../../lib/posts';
+import { ARCHIVE_PAGE_SIZE } from '../../config/site';
+
+// Trang 1 của archive (cùng dữ liệu với /archive/page/1, canonical về đây).
+const { posts } = await getSiteContent();
+const lastPage = Math.max(1, Math.ceil(posts.length / ARCHIVE_PAGE_SIZE));
+---
+
+<AppLayout view="page" title="Archive" description="Toàn bộ write-up, mới nhất trước.">
+  <ArchiveList posts={posts.slice(0, ARCHIVE_PAGE_SIZE)} currentPage={1} lastPage={lastPage} total={posts.length} />
+</AppLayout>

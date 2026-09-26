@@ -1,0 +1,633 @@
+---
+import { SITE } from '../config/site';
+import type { PostGroup } from '../lib/posts';
+import PixelCat from './PixelCat.astro';
+import PostRow from './PostRow.astro';
+
+interface Props {
+  groups: PostGroup[];
+  /** Tổng số bài / CTF của toàn site (không hard-code, mục 33). */
+  stats: { posts: number; ctfs: number };
+  currentSlug?: string | undefined;
+  /** Bộ lọc đang áp dụng (trang /ctf, /category, /tags). */
+  filter?: { kind: string; label: string } | undefined;
+  /** Số dòng render sẵn (mục 22); phần còn lại nằm trong <template> và được JS hiện dần. */
+  initialLimit?: number;
+}
+
+const { groups, stats, currentSlug, filter, initialLimit = 50 } = Astro.props;
+const total = groups.reduce((n, g) => n + g.posts.length, 0);
+const CHUNK = 25;
+
+// Chia mỗi nhóm thành phần hiển thị ngay + các khối <template> (tối đa CHUNK dòng).
+let shown = 0;
+const renderGroups = groups.map((group) => {
+  const visibleCount = Math.max(0, Math.min(group.posts.length, initialLimit - shown));
+  shown += visibleCount;
+  const visible = group.posts.slice(0, visibleCount);
+  const rest = group.posts.slice(visibleCount);
+  const chunks = [];
+  for (let i = 0; i < rest.length; i += CHUNK) chunks.push(rest.slice(i, i + CHUNK));
+  return { group, visible, chunks };
+});
+const hasMore = shown < total;
+---
+
+<aside class="sidebar" aria-label="Danh sách write-up" data-sidebar>
+  <header class="sb-header">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-full">{SITE.name}</span><span class="brand-short" aria-hidden="true">{SITE.shortName}</span></a>
+    <nav class="sb-nav" aria-label="Trang">
+      <a href="/about/">About</a>
+      <a href="/archive/">Archive</a>
+      <a href="/rss.xml">RSS</a>
+    </nav>
+  </header>
+
+  <div class="sb-stats">
+    <span>POSTS <b>{stats.posts}</b></span>
+    <span aria-hidden="true">·</span>
+    <span>CTFs <b>{stats.ctfs}</b></span>
+    <a class="sb-owner" href="/about/" title="Tác giả">by <b>{SITE.author}</b></a>
+  </div>
+
+  <div class="sb-tools">
+    <form class="sb-search" action="/search/" method="get" role="search" data-search-form>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"></path></svg>
+      <label class="sr-only" for="sb-q">Tìm write-up</label>
+      <input id="sb-q" name="q" type="search" placeholder="Search write-ups..." autocomplete="off" data-search-input />
+    </form>
+    <button class="tool-btn" type="button" data-group-toggle aria-pressed="false" title="Nhóm theo CTF / category" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5Zm4 6h14v2H7v-2Zm-4 6h18v2H3v-2Z"></path></svg>
+      <span class="sr-only">Đổi cách nhóm</span>
+    </button>
+    <button class="tool-btn" type="button" data-collapse-all aria-pressed="false" title="Thu gọn / mở rộng tất cả" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v5.2l2.6-2.6L17 6l-5 5-5-5 1.4-1.4L11 7.2V2Zm-8 9h18v2H3v-2Zm9 2 5 5-1.4 1.4-2.6-2.6V22h-2v-5.2l-2.6 2.6L7 18l5-5Z"></path></svg>
+      <span class="sr-only">Thu gọn / mở rộng tất cả nhóm</span>
+    </button>
+  </div>
+
+  {
+    filter && (
+      <div class="sb-filter">
+        <span class="sb-filter-kind">{filter.kind}</span>
+        <span class="sb-filter-label">{filter.label}</span>
+        <span class="sb-filter-count">{total}</span>
+        <a class="sb-filter-clear" href="/" aria-label="Bỏ lọc">✕</a>
+      </div>
+    )
+  }
+
+  <nav class="sb-list" aria-label="Write-ups" data-list>
+    <div data-list-results hidden aria-live="polite"></div>
+    <div data-list-groups>
+      {
+        renderGroups.map(({ group, visible, chunks }) => (
+          <details class:list={['group', { 'group-unsorted': group.unsorted }]} open data-group={group.key}>
+            <summary class="group-head">
+              <span class="group-diamond" aria-hidden="true" />
+              <span class="group-label">{group.label}</span>
+              <span class="group-line" aria-hidden="true" />
+              <span class="group-count">{group.posts.length}</span>
+              <span class="group-chevron" aria-hidden="true" />
+            </summary>
+            <ul class="rows">
+              {visible.map((post) => (
+                <PostRow post={post} current={post.id === currentSlug} />
+              ))}
+              {chunks.map((chunk) => (
+                <template data-more>
+                  {chunk.map((post) => (
+                    <PostRow post={post} current={post.id === currentSlug} />
+                  ))}
+                </template>
+              ))}
+            </ul>
+          </details>
+        ))
+      }
+      {total === 0 && <p class="sb-empty">Chưa có write-up nào.</p>}
+      {
+        hasMore && (
+          <p class="sb-more" data-more-sentinel>
+            <a href="/archive/">Xem toàn bộ {total} write-up trong Archive →</a>
+          </p>
+        )
+      }
+    </div>
+    <div data-list-alt hidden></div>
+  </nav>
+
+  <PixelCat />
+</aside>
+
+<style>
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    font-family: var(--font-mono);
+    color: var(--text);
+  }
+
+  .sb-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.25rem 0.25rem 0;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 1.1rem;
+    background: rgb(22 14 32 / 0.8);
+    clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+  .brand {
+    white-space: nowrap;
+  }
+  .brand-short {
+    display: none;
+  }
+  @media (max-width: 479.98px) {
+    .brand-full {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+    .brand-short {
+      display: inline;
+    }
+    .sb-nav a {
+      padding: 0.45rem 0.5rem;
+      letter-spacing: 0.1em;
+    }
+  }
+  .brand-mark {
+    width: 0.6rem;
+    height: 0.6rem;
+    background: var(--accent);
+    transform: rotate(45deg);
+  }
+  .sb-nav {
+    display: flex;
+    gap: 0.25rem;
+  }
+  .sb-nav a {
+    padding: 0.45rem 0.7rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--text-soft);
+    background: rgb(22 14 32 / 0.65);
+  }
+  .sb-nav a:hover {
+    color: var(--text);
+    background: rgb(48 30 64 / 0.8);
+  }
+
+  .sb-stats {
+    display: flex;
+    gap: 0.6rem;
+    margin: 1.4rem 0.5rem 0;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid rgb(236 232 244 / 0.16);
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    color: var(--text-soft);
+  }
+  .sb-owner {
+    margin-left: auto;
+    color: var(--text-soft);
+    text-decoration: none;
+    letter-spacing: 0.12em;
+  }
+  .sb-stats .sb-owner b {
+    color: var(--accent);
+    text-transform: none;
+  }
+  .sb-stats .sb-owner:hover b {
+    text-decoration: underline;
+  }
+  .sb-stats b {
+    color: var(--points);
+    font-weight: 700;
+    margin-left: 0.4em;
+  }
+
+  .sb-tools {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0.9rem 0 0.6rem;
+  }
+  .sb-search {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0 1rem;
+    height: 2.6rem;
+    background: rgb(22 14 32 / 0.82);
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  }
+  .sb-search svg {
+    flex: none;
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: var(--muted);
+  }
+  .sb-search input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    background: transparent;
+    border: 0;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    letter-spacing: 0.04em;
+  }
+  .sb-search input::placeholder {
+    color: var(--muted);
+  }
+  .sb-search input:focus {
+    outline: none;
+  }
+  .sb-search:focus-within {
+    background: rgb(48 30 64 / 0.92);
+  }
+  .tool-btn {
+    display: grid;
+    place-items: center;
+    width: 2.8rem;
+    height: 2.6rem;
+    border: 0;
+    background: rgb(22 14 32 / 0.82);
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+    color: var(--text-soft);
+    cursor: pointer;
+  }
+  .tool-btn[hidden] {
+    display: none;
+  }
+  .tool-btn svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: currentColor;
+  }
+  .tool-btn:hover,
+  .tool-btn[aria-pressed='true'] {
+    color: var(--accent);
+    background: rgb(48 30 64 / 0.92);
+  }
+
+  .sb-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 0.5rem;
+    padding: 0.45rem 0.6rem 0.45rem 0.9rem;
+    background: rgb(236 72 153 / 0.18);
+    border-left: 3px solid var(--accent);
+    font-size: 0.78rem;
+  }
+  .sb-filter-kind {
+    color: var(--accent);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+  }
+  .sb-filter-label {
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sb-filter-count {
+    color: var(--points);
+  }
+  .sb-filter-clear {
+    margin-left: auto;
+    padding: 0 0.4rem;
+    text-decoration: none;
+    color: var(--text-soft);
+  }
+
+  /* ---- Danh sách (scroll độc lập, mục 22) ---- */
+  .sb-list {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(244 114 182 / 0.4) transparent;
+    padding: 0 calc(var(--curve) + 0.75rem) 2rem 0;
+    /* Lớp mờ nhẹ sau cả danh sách (rẻ hơn nhiều so với blur từng dòng). */
+    background: linear-gradient(90deg, rgb(22 16 31 / 0.35), transparent);
+  }
+  .sb-empty {
+    padding: 2rem 1rem;
+    color: var(--muted);
+  }
+  .sb-list[data-searching] [data-list-groups],
+  .sb-list[data-searching] [data-list-alt] {
+    display: none;
+  }
+  :global(.sb-status) {
+    margin: 0.6rem 0 0.5rem;
+    padding: 0 1rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .sb-more {
+    margin: 1rem 0 0;
+    padding: 0 1rem;
+    font-size: 0.8rem;
+  }
+  .sb-more a {
+    color: var(--accent);
+  }
+
+  :global(.group-head) {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.85rem 0.5rem 0.6rem 0.9rem;
+    list-style: none;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    background: linear-gradient(180deg, #1b1226 82%, rgb(27 18 38 / 0));
+  }
+  :global(.group-head::-webkit-details-marker) {
+    display: none;
+  }
+  :global(.group-diamond) {
+    flex: none;
+    width: 0.55rem;
+    height: 0.55rem;
+    background: var(--accent);
+    transform: rotate(45deg);
+  }
+  :global(.group-label) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70%;
+  }
+  :global(.group-line) {
+    flex: 1;
+    border-top: 2px dotted rgb(244 114 182 / 0.45);
+  }
+  :global(.group-count) {
+    color: var(--points);
+    letter-spacing: 0.1em;
+  }
+  :global(.group-chevron) {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid var(--text-soft);
+    border-bottom: 2px solid var(--text-soft);
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 0.15s ease;
+  }
+  :global(.group:not([open]) .group-chevron) {
+    transform: rotate(-45deg);
+  }
+  :global(.group-unsorted .group-head) {
+    color: var(--warn);
+  }
+  :global(.group-unsorted .group-diamond) {
+    background: var(--warn);
+  }
+  :global(.group-unsorted .group-line) {
+    border-top-color: rgb(253 186 116 / 0.4);
+  }
+
+  :global(.rows) {
+    list-style: none;
+    margin: 0;
+    padding: 0.15rem 0 0.4rem;
+  }
+</style>
+
+<style is:global>
+  /* Dòng bài viết — global vì cũng được JS render (kết quả search, nhóm theo category). */
+  .row-item + .row-item {
+    margin-top: 0.4rem;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    min-height: 4.1rem;
+    padding: 0.6rem 1.6rem 0.6rem 1rem;
+    background: var(--row-bg);
+    clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%);
+    text-decoration: none;
+    color: var(--text);
+    transition: background-color 0.15s ease;
+  }
+  .row:hover {
+    background: var(--row-bg-hover);
+  }
+  .row[aria-current='page'] {
+    background: var(--row-selected);
+    /* Bài đang mở luôn rõ nét, kể cả khi nằm ở mép danh sách cong. */
+    opacity: 1 !important;
+  }
+  .row.unsorted {
+    box-shadow: inset 3px 0 0 rgb(253 186 116 / 0.65);
+  }
+  .diamond {
+    flex: none;
+    width: 0.62rem;
+    height: 0.62rem;
+    border: 1.5px solid var(--text-soft);
+    transform: rotate(45deg);
+  }
+  .row[aria-current='page'] .diamond {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgb(244 114 182 / 0.8);
+  }
+  .row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+    flex: 1;
+  }
+  .row-title {
+    font-weight: 700;
+    font-size: 0.92rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .row-sub {
+    -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+    mask-image: linear-gradient(90deg, #000 85%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    white-space: nowrap;
+  }
+  .row-ctf {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pill {
+    flex: none;
+    padding: 0 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--tag-c) 55%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tag-c) 14%, transparent);
+    color: var(--tag-c);
+    font-size: 0.7rem;
+    line-height: 1.35rem;
+  }
+  .unsorted-label {
+    flex: none;
+    padding: 0 0.45rem;
+    border: 1px solid rgb(253 186 116 / 0.55);
+    color: var(--warn);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    line-height: 1.25rem;
+  }
+  .row-excerpt {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--text-soft);
+  }
+  .row-excerpt mark {
+    background: rgb(252 211 77 / 0.3);
+    color: #fff7d6;
+  }
+  .row-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.2rem;
+    flex: none;
+    text-align: right;
+  }
+  .pts {
+    font-size: 0.85rem;
+    color: var(--text-soft);
+  }
+  .pts b {
+    color: var(--points);
+    font-size: 1rem;
+  }
+  .row-meta {
+    font-size: 0.7rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  @media (max-width: 639.98px) {
+    .row {
+      padding-right: 1.3rem;
+      gap: 0.7rem;
+    }
+    .row-title {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      white-space: normal;
+      font-size: 0.85rem;
+      letter-spacing: 0.06em;
+    }
+    .row-meta {
+      font-size: 0.65rem;
+    }
+  }
+
+  /* ---- Danh sách cong (mục 37–39) ----
+     Dòng ở giữa vùng nhìn thấy dịch phải nhiều nhất và rõ nhất; càng xa tâm càng
+     lệch trái và mờ dần. Chỉ animate transform + opacity → không layout shift. */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .sb-list .row {
+        animation: row-curve linear both;
+      }
+      /* Tách riêng: minifier gộp `animation-timeline` vào shorthand `animation`
+         thành cú pháp không hợp lệ nếu hai khai báo nằm cùng một rule. */
+      .sb-list a.row {
+        animation-timeline: view();
+      }
+    }
+  }
+  @keyframes row-curve {
+    0% {
+      transform: translateX(0);
+      opacity: 0.35;
+    }
+    10% {
+      transform: translateX(calc(var(--curve) * 0.6));
+      opacity: 0.6;
+    }
+    25% {
+      transform: translateX(calc(var(--curve) * 0.87));
+      opacity: 0.87;
+    }
+    50% {
+      transform: translateX(var(--curve));
+      opacity: 1;
+    }
+    75% {
+      transform: translateX(calc(var(--curve) * 0.87));
+      opacity: 0.87;
+    }
+    90% {
+      transform: translateX(calc(var(--curve) * 0.6));
+      opacity: 0.6;
+    }
+    100% {
+      transform: translateX(0);
+      opacity: 0.35;
+    }
+  }
+  /* Fallback JS (requestAnimationFrame) ghi trực tiếp transform/opacity. */
+  .sb-list[data-curve-js] .row {
+    will-change: transform, opacity;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sb-list .row {
+      animation: none !important;
+      transform: none !important;
+      opacity: 1 !important;
+    }
+  }
+</style>

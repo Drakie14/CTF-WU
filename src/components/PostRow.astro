@@ -1,0 +1,42 @@
+---
+import { categoryColor } from '../lib/categories';
+import { formatDisplayDate, formatIsoDate } from '../lib/content/dates';
+import { isUnsorted, postUrl, type Post } from '../lib/posts';
+
+interface Props {
+  post: Post;
+  current?: boolean;
+}
+
+const { post, current = false } = Astro.props;
+const { title, ctf, tags, points, date, difficulty, category } = post.data;
+const unsorted = isUnsorted(post);
+const color = categoryColor(category);
+---
+
+<li class="row-item">
+  <a
+    class:list={['row', { unsorted }]}
+    href={postUrl(post)}
+    data-slug={post.id}
+    data-category={category}
+    aria-current={current ? 'page' : undefined}
+    style={`--tag-c:${color}`}
+  >
+    <span class="diamond" aria-hidden="true"></span>
+    <span class="row-main">
+      <span class="row-title">{title}</span>
+      <span class="row-sub">
+        {unsorted && <span class="unsorted-label">UNSORTED</span>}
+        {ctf && <span class="row-ctf">{ctf}</span>}
+        {tags.slice(0, 3).map((tag) => <span class="pill">{tag}</span>)}
+      </span>
+    </span>
+    <span class="row-side">
+      {points !== null && <span class="pts"><b>{points}</b> pts</span>}
+      <span class="row-meta">
+        <time datetime={formatIsoDate(date)}>{formatDisplayDate(date)}</time>{difficulty && <> · {difficulty}</>}
+      </span>
+    </span>
+  </a>
+</li>

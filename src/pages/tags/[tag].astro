@@ -1,0 +1,32 @@
+---
+import FilterPanel from '../../components/FilterPanel.astro';
+import AppLayout from '../../layouts/AppLayout.astro';
+import { getSiteContent, type Post } from '../../lib/posts';
+
+/** `/tags/<slug>` — tự sinh cho mọi tag xuất hiện trong content, không hard-code (mục 10, 20). */
+export async function getStaticPaths() {
+  const { posts, tags } = await getSiteContent();
+  return tags.terms.map((term) => ({
+    params: { tag: term.slug },
+    props: { label: term.name, posts: posts.filter((p) => p.data.tags.some((t) => tags.slugOf(t) === term.slug)) },
+  }));
+}
+
+interface Props {
+  label: string;
+  posts: Post[];
+}
+const { label, posts } = Astro.props;
+const { tags } = await getSiteContent();
+const description = `${posts.length} write-up có tag #${label}.`;
+---
+
+<AppLayout
+  view="filter"
+  title={`Tag: ${label}`}
+  description={description}
+  sidebarPosts={posts}
+  filter={{ kind: 'Tag', label: `#${label}`, key: `tag-${Astro.params.tag}` }}
+>
+  <FilterPanel kind="Tag" label={`#${label}`} description={description} posts={posts} tags={tags} />
+</AppLayout>

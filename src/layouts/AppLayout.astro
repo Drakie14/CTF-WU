@@ -1,0 +1,183 @@
+---
+import BaseLayout, { type Props as BaseProps } from './BaseLayout.astro';
+import Sidebar from '../components/Sidebar.astro';
+import { getSiteContent, groupPosts, type Post } from '../lib/posts';
+
+interface Props extends BaseProps {
+  /**
+   * home/filter: desktop hiện danh sách + panel trống; mobile chỉ hiện danh sách.
+   * post/page: mobile chỉ hiện panel (full-screen) với nút Back.
+   */
+  view: 'home' | 'filter' | 'post' | 'page';
+  currentSlug?: string;
+  /** Danh sách bài của sidebar (mặc định: tất cả). */
+  sidebarPosts?: Post[];
+  filter?: { kind: string; label: string; key: string };
+}
+
+const { view, currentSlug, sidebarPosts, filter, ...seo } = Astro.props;
+const { posts, ctfs } = await getSiteContent();
+const groups = groupPosts(sidebarPosts ?? posts, ctfs);
+// Sidebar được giữ nguyên khi chuyển trang (View Transitions) nếu cùng danh sách.
+const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
+---
+
+<BaseLayout {...seo}>
+  <div class="shell" data-view={view}>
+    <div class="shell-side" transition:persist={persistKey} data-persist-key={persistKey}>
+      <Sidebar groups={groups} stats={{ posts: posts.length, ctfs: ctfs.terms.length }} currentSlug={currentSlug} filter={filter} />
+    </div>
+    <main id="main" class="panel" tabindex="-1" data-panel transition:animate="fade">
+      <div class="side-toggle-wrap">
+        <button class="side-toggle" type="button" aria-pressed="false" title="Thu gọn danh sách write-up" data-side-toggle>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3V4Zm2 2v12h4V6H5Zm6 0v12h8V6h-8Z"></path></svg>
+          <span class="sr-only">Thu gọn / hiện danh sách write-up</span>
+        </button>
+      </div>
+      {
+        (view === 'post' || view === 'page') && (
+          <a class="back-btn" href="/" data-back>
+            <span aria-hidden="true">←</span> Back
+          </a>
+        )
+      }
+      <slot />
+    </main>
+  </div>
+</BaseLayout>
+
+<script>
+  import '../scripts/sidebar';
+  import '../scripts/panel';
+  import '../scripts/side-toggle';
+</script>
+
+<style>
+  .shell {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 1.75rem;
+    height: 100dvh;
+    padding: 1.5rem 1.75rem 0 2rem;
+    box-sizing: border-box;
+  }
+  .shell-side {
+    min-height: 0;
+    padding-bottom: 1.5rem;
+  }
+  .panel {
+    min-height: 0;
+    height: calc(100dvh - 3rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--panel);
+    border-radius: var(--radius-panel);
+    box-shadow: 0 20px 60px rgb(0 0 0 / 0.45);
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a44 transparent;
+  }
+  .panel:focus {
+    outline: none;
+  }
+  .back-btn {
+    display: none;
+  }
+
+  /* ---- Thu gọn sidebar (desktop) ---- */
+  :global(html[data-side-collapsed]) .shell {
+    grid-template-columns: 0 minmax(0, 1fr);
+    gap: 0;
+  }
+  :global(html[data-side-collapsed]) .shell-side {
+    visibility: hidden;
+    overflow: hidden;
+  }
+  /* Chiều cao 0 + sticky: nút nổi ở góc trái trên của panel, không đẩy nội dung xuống. */
+  .side-toggle-wrap {
+    position: sticky;
+    top: 0.9rem;
+    z-index: 20;
+    height: 0;
+  }
+  .side-toggle {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    margin-left: 0.5rem;
+    padding: 0;
+    border: 1px solid rgb(236 232 244 / 0.08);
+    border-radius: 0.5rem;
+    background: rgb(34 34 40 / 0.45);
+    color: var(--muted);
+    opacity: 0.6;
+    cursor: pointer;
+    transition:
+      opacity 0.15s,
+      color 0.15s;
+  }
+  .side-toggle:hover,
+  .side-toggle:focus-visible {
+    opacity: 1;
+    color: var(--text);
+  }
+  .side-toggle[aria-pressed='true'] {
+    color: var(--accent);
+  }
+  .side-toggle svg {
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: currentColor;
+  }
+
+  /* ---- Mobile (< 1024px, mục 36) ---- */
+  @media (max-width: 1023.98px) {
+    .shell {
+      display: block;
+      height: auto;
+      min-height: 100dvh;
+      padding: 1rem 0.75rem 0;
+    }
+    .shell-side {
+      height: calc(100dvh - 1rem);
+      padding-bottom: 0.75rem;
+    }
+    .panel {
+      height: auto;
+      min-height: calc(100dvh - 1rem);
+      overflow: visible;
+      border-radius: 1.25rem 1.25rem 0 0;
+    }
+    .shell[data-view='home'] .panel,
+    .shell[data-view='filter'] .panel {
+      display: none;
+    }
+    .shell[data-view='post'] .shell-side,
+    .shell[data-view='page'] .shell-side {
+      display: none;
+    }
+    .side-toggle-wrap {
+      display: none;
+    }
+    :global(html[data-side-collapsed]) .shell-side {
+      visibility: visible;
+    }
+    .back-btn {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.75rem 0 0 0.75rem;
+      padding: 0.5rem 1rem;
+      background: rgb(22 14 32 / 0.92);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: var(--text);
+    }
+  }
+</style>

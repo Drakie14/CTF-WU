@@ -1,0 +1,44 @@
+# build output
+dist/
+dist-fixtures/
+
+# generated types / Astro cache
+.astro/
+
+# dependencies
+node_modules/
+
+# remote image cache & other build caches
+.cache/
+node_modules/.astro/
+.lighthouseci/
+
+# fixtures (generated test posts)
+fixtures/
+src/content/posts/__fixtures__/
+
+# environment variables (never commit secrets)
+.env
+.env.*
+
+# task prompt
+PROMPT.md
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# Sveltia CMS bundle (chép từ node_modules bởi scripts/copy-cms.mjs)
+public/admin/sveltia-cms.js
+public/admin/sveltia-cms.LICENSE.txt
+public/admin/chunks/
+
+# Profile Chrome tạm của Lighthouse khi chạy trong WSL (chrome-launcher tạo thư mục mang tên đường dẫn Windows)
+/C:*

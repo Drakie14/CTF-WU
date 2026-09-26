@@ -1,0 +1,4 @@
+# Giữ LF cho nội dung: Sveltia CMS luôn ghi LF, tránh diff toàn file khi sửa bài trên Windows.
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

@@ -1,0 +1,76 @@
+---
+import { postUrl, type Post } from '../lib/posts';
+
+interface Props {
+  prev?: Post | undefined;
+  next?: Post | undefined;
+}
+const { prev, next } = Astro.props;
+---
+
+{
+  (prev || next) && (
+    <nav class="pn" aria-label="Bài trước / bài sau" data-pagefind-ignore="all">
+      {prev ? (
+        <a class="pn-link" href={postUrl(prev)} rel="prev">
+          <span class="pn-label">← Previous</span>
+          <span class="pn-title">{prev.data.title}</span>
+        </a>
+      ) : (
+        <span />
+      )}
+      {next && (
+        <a class="pn-link pn-next" href={postUrl(next)} rel="next">
+          <span class="pn-label">Next →</span>
+          <span class="pn-title">{next.data.title}</span>
+        </a>
+      )}
+    </nav>
+  )
+}
+
+<style>
+  .pn {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--panel-border);
+  }
+  .pn-link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.9rem 1.1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.75rem;
+    background: var(--panel-2);
+    text-decoration: none;
+    min-width: 0;
+  }
+  .pn-link:hover {
+    border-color: var(--accent);
+  }
+  .pn-next {
+    text-align: right;
+  }
+  .pn-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .pn-title {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (max-width: 640px) {
+    .pn {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

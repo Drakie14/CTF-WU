@@ -1,0 +1,32 @@
+---
+import FilterPanel from '../../components/FilterPanel.astro';
+import AppLayout from '../../layouts/AppLayout.astro';
+import { getSiteContent, type Post } from '../../lib/posts';
+
+/** `/ctf/<slug>` — tự sinh cho mọi CTF xuất hiện trong content (mục 20). */
+export async function getStaticPaths() {
+  const { posts, ctfs } = await getSiteContent();
+  return ctfs.terms.map((term) => ({
+    params: { name: term.slug },
+    props: { label: term.name, posts: posts.filter((p) => p.data.ctf && ctfs.slugOf(p.data.ctf) === term.slug) },
+  }));
+}
+
+interface Props {
+  label: string;
+  posts: Post[];
+}
+const { label, posts } = Astro.props;
+const { tags } = await getSiteContent();
+const description = `${posts.length} write-up từ giải ${label}.`;
+---
+
+<AppLayout
+  view="filter"
+  title={`CTF: ${label}`}
+  description={description}
+  sidebarPosts={posts}
+  filter={{ kind: 'CTF', label, key: `ctf-${Astro.params.name}` }}
+>
+  <FilterPanel kind="CTF" label={label} description={description} posts={posts} tags={tags} />
+</AppLayout>

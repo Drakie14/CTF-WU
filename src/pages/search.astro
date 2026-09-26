@@ -1,0 +1,193 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { formatDisplayDate } from '../lib/content/dates';
+import { getSiteContent, postUrl } from '../lib/posts';
+
+/**
+ * `/search` — có JS: tìm bằng Pagefind theo `?q=`.
+ * Không có JS: form + danh sách đầy đủ mọi bài (title, CTF, tags, summary) để
+ * dùng Ctrl+F của trình duyệt, kèm link Archive.
+ */
+const { posts } = await getSiteContent();
+---
+
+<AppLayout view="page" title="Search" description="Tìm kiếm write-up." noindex>
+  <article class="search-page">
+    <h1>Search</h1>
+    <form action="/search/" method="get" role="search" class="sp-form" data-search-page-form>
+      <label class="sr-only" for="sp-q">Từ khóa</label>
+      <input id="sp-q" name="q" type="search" placeholder="Tìm theo tiêu đề, nội dung, tag..." data-search-page-input />
+      <button type="submit">Tìm</button>
+    </form>
+    <div class="sp-results" data-search-page-results hidden aria-live="polite"></div>
+    <section class="sp-all" data-search-page-all>
+      <h2>Tất cả write-up ({posts.length})</h2>
+      <p class="sp-note">Không dùng JavaScript? Dùng Ctrl+F để tìm trong danh sách này, hoặc xem <a href="/archive/">Archive</a>.</p>
+      <ul>
+        {
+          posts.map((p) => (
+            <li>
+              <a href={postUrl(p)}>{p.data.title}</a>
+              <span class="meta">
+                {p.data.ctf || 'Chưa phân loại'} · {formatDisplayDate(p.data.date)}
+                {p.data.tags.length > 0 && <> · {p.data.tags.map((t) => `#${t}`).join(' ')}</>}
+              </span>
+              {p.data.summary && <p class="sum">{p.data.summary}</p>}
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+  </article>
+</AppLayout>
+
+<script>
+  import { searchItems } from '../scripts/search';
+
+  const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+  function init() {
+    const form = document.querySelector<HTMLFormElement>('[data-search-page-form]');
+    const input = document.querySelector<HTMLInputElement>('[data-search-page-input]');
+    const out = document.querySelector<HTMLElement>('[data-search-page-results]');
+    const all = document.querySelector<HTMLElement>('[data-search-page-all]');
+    if (!form || !input || !out || !all || form.dataset.ready) return;
+    form.dataset.ready = '1';
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let seq = 0;
+    const run = async () => {
+      const q = input.value.trim();
+      const my = ++seq;
+      const url = new URL(location.href);
+      if (q) url.searchParams.set('q', q);
+      else url.searchParams.delete('q');
+      history.replaceState(history.state, '', url);
+      if (!q) {
+        out.hidden = true;
+        all.hidden = false;
+        return;
+      }
+      out.hidden = false;
+      all.hidden = true;
+      out.innerHTML = '<p class="sp-status">Đang tìm…</p>';
+      try {
+        const found = await searchItems(q, 100);
+        if (my !== seq) return;
+        out.innerHTML =
+          `<p class="sp-status">${found.length} kết quả cho “${esc(q)}”</p><ul>` +
+          found
+            .map(
+              ({ item, excerpt }) =>
+                `<li><a href="${esc(item.url)}">${esc(item.title)}</a><span class="meta">${esc(item.ctf || 'Chưa phân loại')} · ${esc(item.date)}</span><p class="sum">${excerpt}</p></li>`,
+            )
+            .join('') +
+          '</ul>';
+      } catch {
+        if (my !== seq) return;
+        out.innerHTML = '<p class="sp-status">Không tải được chỉ mục tìm kiếm (chỉ có sau <code>npm run build</code>).</p>';
+      }
+    };
+    input.value = new URLSearchParams(location.search).get('q') ?? '';
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(run, 200);
+    });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void run();
+    });
+    if (input.value) void run();
+  }
+
+  // Script này có thể được nạp SAU khi `astro:page-load` đã phát (khi tới trang bằng
+  // View Transitions) → chạy ngay, và cũng lắng nghe cho các lần điều hướng sau.
+  init();
+  document.addEventListener('astro:page-load', init);
+</script>
+
+<style>
+  .search-page {
+    max-width: 48rem;
+    margin: 0 auto;
+    padding: 2.5rem clamp(1rem, 3vw, 2.75rem) 4rem;
+  }
+  h1 {
+    margin: 0 0 1.25rem;
+    font-size: 2rem;
+    font-weight: 600;
+  }
+  .sp-form {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .sp-form input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.6rem;
+    background: var(--panel-2);
+    color: var(--text);
+    font: inherit;
+  }
+  .sp-form button {
+    padding: 0 1.2rem;
+    border: 0;
+    border-radius: 0.6rem;
+    background: var(--accent);
+    color: #1a0b14;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .sp-all h2 {
+    margin: 2rem 0 0.3rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  .sp-note {
+    margin: 0 0 1rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .sp-note a {
+    color: var(--accent);
+  }
+  .search-page ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .search-page :global(li) {
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .search-page :global(li > a) {
+    color: var(--text);
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .search-page :global(li > a:hover) {
+    color: var(--accent);
+  }
+  .search-page :global(.meta) {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .search-page :global(.sum) {
+    margin: 0.35rem 0 0;
+    font-size: 0.9rem;
+    color: var(--text-soft);
+  }
+  .search-page :global(.sum mark) {
+    background: rgb(252 211 77 / 0.3);
+    color: #fff7d6;
+  }
+  .search-page :global(.sp-status) {
+    margin: 1.5rem 0 0.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+</style>

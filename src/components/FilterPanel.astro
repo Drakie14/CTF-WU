@@ -1,0 +1,70 @@
+---
+import EmptyState from './EmptyState.astro';
+import type { Taxonomy } from '../lib/content/tags';
+import type { Post } from '../lib/posts';
+
+interface Props {
+  kind: string;
+  label: string;
+  description: string;
+  posts: Post[];
+  tags: Taxonomy;
+}
+
+const { kind, label, description, posts, tags } = Astro.props;
+// Tag phổ biến trong nhóm này (tự tính từ content).
+const counts = new Map<string, number>();
+for (const p of posts) for (const t of p.data.tags) counts.set(tags.slugOf(t), (counts.get(tags.slugOf(t)) ?? 0) + 1);
+const topTags = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
+---
+
+<EmptyState title={`${kind} · ${label}`} description={description}>
+  {
+    topTags.length > 0 && (
+      <ul class="chips" aria-label="Tags trong nhóm">
+        {topTags.map(([slug, n]) => (
+          <li>
+            <a href={`/tags/${slug}/`}>
+              #{tags.bySlug.get(slug)?.name ?? slug} <span>{n}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  <p class="hint">Chọn một write-up ở danh sách bên trái · <a href="/">Xem tất cả</a></p>
+</EmptyState>
+
+<style>
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.45rem;
+    max-width: 32rem;
+    margin: 1.75rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .chips a {
+    display: inline-block;
+    padding: 0.15rem 0.7rem;
+    border: 1px solid rgb(134 239 172 / 0.4);
+    border-radius: 999px;
+    color: var(--tag);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-decoration: none;
+  }
+  .chips span {
+    color: var(--muted);
+  }
+  .hint {
+    margin-top: 1.75rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .hint a {
+    color: var(--accent);
+  }
+</style>
