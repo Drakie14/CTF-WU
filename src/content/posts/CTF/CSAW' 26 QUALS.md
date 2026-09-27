@@ -1,6 +1,12 @@
 ---
 title: CSAW' 26 QUALS
-
+ctf: CSAW' 26 QUALS
+category: web
+difficulty: hard
+tags:
+  - Misc
+  - JWT
+  - leaf certìicate
 ---
 
 # Misc
@@ -396,4 +402,4 @@ Avispa Country Club is where old money like Woozie and Ryder think their vault i
 Word is, there's a Golden Putter in that vault. One of one. All you have to do is find the right numbers, speak the right words, and let the caddy do the rest - the caddy always does.
 https://golf-heist.ctf.csaw.io/
 File: [golf-heist.zip](https://github.com/Drakie14/Challenges/blob/CSAW'-26-QUALS/golf-heist.zip)
-#### Solution 
+#### Solution
