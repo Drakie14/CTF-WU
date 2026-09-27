@@ -119,6 +119,8 @@ describe('public/_headers', () => {
     const p = csp('/admin/*');
     expect(p).toMatch(/script-src 'self';/);
     expect(p).toMatch(/connect-src [^;]*https:\/\/api\.github\.com/);
+    // Bản dịch giao diện (locales/vi.json…) tải từ unpkg; thiếu thì CMS treo với trình duyệt tiếng Việt.
+    expect(p).toMatch(/connect-src [^;]*https:\/\/unpkg\.com\/@sveltia\/[ ;]/);
     expect(p).toMatch(/frame-ancestors 'none'/);
     expect(p).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline|script-src[^;]*unpkg/);
     expect(admin).toContain('X-Robots-Tag: noindex, nofollow');

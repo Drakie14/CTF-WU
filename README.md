@@ -353,7 +353,9 @@ một server trung gian. Vì vậy `/admin` chỉ bật **đăng nhập bằng G
 5. **Bật 2FA cho GitHub** (*Settings → Password and authentication → Two-factor authentication*):
    ai có quyền vào tài khoản đều có thể tạo token sửa blog.
 
-Khi chạy local (`npm run dev`, mở `http://localhost:4321/admin/`) có thể chọn
+Khi chạy local (`npm run dev`, mở `http://localhost:4321/admin/index.html` — dev server của Astro
+không tự trả `index.html` cho thư mục trong `public/`, nên `/admin/` sẽ ra 404; bản build/`npm run preview`
+và Cloudflare Pages thì mở `/admin/` bình thường) có thể chọn
 **Work with Local Repository** (Chrome/Edge) để sửa trực tiếp thư mục project, không cần token.
 
 ### Tạo và sửa bài
@@ -405,12 +407,13 @@ frontmatter được Sveltia ghi lại (ví dụ `tags: [a, b]` thành danh sác
 ### CSP của `/admin`
 
 `/admin/*` có CSP riêng trong `public/_headers` (tách khỏi CSP public bằng `! Content-Security-Policy`):
-`script-src 'self'` (không `unsafe-inline`/`unsafe-eval`), `connect-src` cho `api.github.com` và
-`www.githubstatus.com`, `img-src` cho `*.githubusercontent.com`, `font-src` cho `cdn.jsdelivr.net`
+`script-src 'self'` (không `unsafe-inline`/`unsafe-eval`), `connect-src` cho `api.github.com`,
+`www.githubstatus.com` và `unpkg.com/@sveltia/` (bundle không kèm bản dịch giao diện: Sveltia tải
+`locales/vi.json`… từ unpkg theo ngôn ngữ trình duyệt; bị chặn thì CMS retry vô hạn và treo trang trắng
+với trình duyệt không phải tiếng Anh — chỉ là fetch JSON, không phải script), `img-src` cho `*.githubusercontent.com`, `font-src` cho `cdn.jsdelivr.net`
 (font giao diện mà bundle Sveltia tham chiếu cố định; chỉ là font, không phải script), kèm
 `X-Robots-Tag: noindex`, `<meta name="robots" content="noindex">` và `Disallow: /admin` trong
-`robots.txt`. Lệnh kiểm tra phiên bản mới của Sveltia tới `unpkg.com` bị CSP chặn có chủ ý (chỉ
-hiện một lỗi trong console). CSP của trang public không thay đổi.
+`robots.txt`. CSP của trang public không thay đổi.
 
 ---
 

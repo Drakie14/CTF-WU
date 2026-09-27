@@ -35,11 +35,14 @@
 # Sveltia CMS (/admin): CSP riêng, KHÔNG nới lỏng CSP của trang public.
 # - script-src 'self': bundle CMS được self-host (không tải từ unpkg/CDN).
 # - connect-src/img-src: GitHub API + avatar/ảnh của repo; blob:/data: cho preview ảnh upload.
+# - connect-src unpkg.com/@sveltia/: bundle KHÔNG kèm bản dịch giao diện, Sveltia fetch
+#   locales/<ngôn-ngữ>.json từ unpkg theo ngôn ngữ trình duyệt. Bị chặn thì với trình duyệt
+#   không phải tiếng Anh, CMS retry vô hạn và treo trang trắng. Chỉ là fetch JSON — script-src vẫn 'self'.
 # - font-src cdn.jsdelivr.net: font giao diện CMS (Source Sans 3, Noto Mono, Material Symbols)
 #   được bundle Sveltia tham chiếu cố định tới jsdelivr — chỉ là font, không phải script.
 # - style-src 'unsafe-inline': Svelte chèn style động; không ảnh hưởng script.
 /admin/*
   ! Content-Security-Policy
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' blob: data: https://*.githubusercontent.com; media-src 'self' blob:; connect-src 'self' blob: data: https://api.github.com https://www.githubstatus.com; frame-src blob:; worker-src 'self' blob:; manifest-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' blob: data: https://*.githubusercontent.com; media-src 'self' blob:; connect-src 'self' blob: data: https://unpkg.com/@sveltia/ https://api.github.com https://www.githubstatus.com; frame-src blob:; worker-src 'self' blob:; manifest-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
   X-Robots-Tag: noindex, nofollow
   Cache-Control: no-cache
