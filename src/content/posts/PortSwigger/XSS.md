@@ -1,6 +1,8 @@
 ---
 title: XSS
-
+category: web
+tags:
+  - XSS
 ---
 
 # Introduction
@@ -939,4 +941,3 @@ Vì ở đoạn code này chỉ dùng hàm `replace` để thay thế 1 lần th
 Ta có thể chèn ở author là `Name` hoặc body là `Comment` vì ở trên có 2 đoạn code giống nhau
 
 -> Payload: `<> <img src=x onerror=alert(1)>`, `<> <script>alert(1)</script>`,...
-
