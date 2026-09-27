@@ -172,11 +172,16 @@ collections:
     label_singular: Write-up (file .md đơn)
     icon: description
     description: >-
-      Các bài dạng src/content/posts/(slug).md. Chỉ để sửa — tạo bài mới ở collection Write-ups.
+      Các bài dạng src/content/posts/(slug).md hoặc src/content/posts/(CTF)/(slug).md.
+      Chỉ để sửa — tạo bài mới ở collection Write-ups.
     folder: src/content/posts
     extension: md
     format: yaml-frontmatter
     create: false
+    # Đọc cả file .md trong thư mục con (posts/CTF/NNS CTF.md, posts/PortSwigger/XSS.md...).
+    nested:
+      depth: 3
+      subfolders: true
     # Ảnh nằm chung thư mục src/content/posts, tham chiếu bằng ./ten-anh.png
     media_folder: ''
     public_folder: ''
