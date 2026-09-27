@@ -1,6 +1,11 @@
 ---
 title: NNS CTF
-
+ctf: NNS CTF
+category: web
+difficulty: easy
+tags:
+  - phpBB
+  - Path Traversal
 ---
 
 # WEB
