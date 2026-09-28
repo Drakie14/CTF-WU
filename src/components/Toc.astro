@@ -5,9 +5,12 @@ interface Props {
   headings: MarkdownHeading[];
 }
 
-// TOC tự tạo từ heading cấp 2–3 (mục 19); `[TOC]` trong Markdown đã bị xóa.
+// TOC tự tạo từ heading cấp 1–3 (#, ##, ###); `[TOC]` trong Markdown đã bị xóa.
 // Thu gọn thành các thanh ngang mờ ở góc phải; hover / focus / chạm vào thì mở danh sách tiêu đề (cuộn được).
-const items = Astro.props.headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+// Thụt lề theo cấp tương đối: heading nông nhất của bài luôn là cấp 0 (bài chỉ có ##/### không bị thụt thừa).
+const headings = Astro.props.headings.filter((h) => h.depth >= 1 && h.depth <= 3);
+const minDepth = Math.min(...headings.map((h) => h.depth));
+const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
 ---
 
 {
@@ -16,14 +19,14 @@ const items = Astro.props.headings.filter((h) => h.depth >= 2 && h.depth <= 3);
       <button class="toc-rail" type="button" aria-expanded="false" aria-controls="toc-pop" data-toc-toggle>
         <span class="sr-only">Mục lục</span>
         {items.map((h) => (
-          <span class={`toc-bar toc-d${h.depth}`} data-toc-bar={h.slug} aria-hidden="true" />
+          <span class={`toc-bar toc-l${h.level}`} data-toc-bar={h.slug} aria-hidden="true" />
         ))}
       </button>
       <div class="toc-pop" id="toc-pop" data-toc-pop>
         <p class="toc-title">Mục lục</p>
         <ol>
           {items.map((h) => (
-            <li class={`toc-d${h.depth}`}>
+            <li class={`toc-l${h.level}`}>
               <a href={`#${h.slug}`} data-toc-link={h.slug}>
                 {h.text}
               </a>
@@ -74,8 +77,11 @@ const items = Astro.props.headings.filter((h) => h.depth >= 2 && h.depth <= 3);
     border-radius: 1px;
     background: var(--muted);
   }
-  .toc-bar.toc-d3 {
-    width: 60%;
+  .toc-bar.toc-l1 {
+    width: 78%;
+  }
+  .toc-bar.toc-l2 {
+    width: 56%;
   }
   .toc-bar[data-active] {
     background: var(--accent);
@@ -140,8 +146,11 @@ const items = Astro.props.headings.filter((h) => h.depth >= 2 && h.depth <= 3);
   .toc li {
     margin: 0.05rem 0;
   }
-  .toc li.toc-d3 {
+  .toc li.toc-l1 {
     padding-left: 0.9rem;
+  }
+  .toc li.toc-l2 {
+    padding-left: 1.8rem;
   }
   .toc a {
     display: block;
