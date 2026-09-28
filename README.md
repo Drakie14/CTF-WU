@@ -8,7 +8,11 @@ tự build lại. Không database, không server, không serverless function, ch
 - Tương thích HackMD: callout, spoiler, `==mark==`, `[TOC]`, emoji, kích thước ảnh, code block
   `lang!`… (xem [HackMD syntax](#hackmd-syntax)).
 - Frontmatter **không bắt buộc**; tag/CTF hoàn toàn dynamic; ảnh remote được tải về lúc build.
-- Tìm kiếm Pagefind, RSS, sitemap, `/admin` (Sveltia CMS) không cần server.
+- Mục lục tự tạo từ heading `#`, `##`, `###` (thu gọn ở góc phải bài).
+- Tìm kiếm Pagefind, sitemap, RSS feed `/rss.xml` (không có link trên giao diện), `/admin` (Sveltia CMS)
+  không cần server.
+- `/admin/import/`: import **một** file `.md` của cả giải → tự tách thành từng bài theo `# Category` /
+  `## Challenge` (xem [Import một file .md nhiều bài](#import-một-file-md-nhiều-bài)).
 
 ## Mục lục
 
@@ -21,6 +25,7 @@ tự build lại. Không database, không server, không serverless function, ch
 - [Code block](#code-block)
 - [HackMD syntax](#hackmd-syntax)
 - [Admin (Sveltia CMS)](#admin-sveltia-cms)
+  - [Import một file .md nhiều bài](#import-một-file-md-nhiều-bài)
 - [Lệnh npm](#lệnh-npm)
 - [Kiểm tra chất lượng](#kiểm-tra-chất-lượng)
 - [Version](#version)
@@ -90,7 +95,9 @@ npm run verify    # quét dist/: XSS, ảnh remote, link hỏng, SEO/RSS/sitemap
 4. Cloudflare Pages tự build (1–2 phút) → website cập nhật: bài xuất hiện ở trang chủ, `/ctf/...`,
    `/category/...`, `/tags/...`, `/archive`, RSS, sitemap và search.
 
-Có thể dùng [`/admin`](#admin-sveltia-cms) thay cho bước 2–3.
+Có thể dùng [`/admin`](#admin-sveltia-cms) thay cho bước 2–3. Note HackMD chứa **cả giải** (nhiều
+challenge trong một file)? Dùng [`/admin/import/`](#import-một-file-md-nhiều-bài) để tự tách thành
+từng bài riêng, phân loại theo heading `#`.
 
 ### Frontmatter mẫu (tất cả đều không bắt buộc)
 
@@ -304,7 +311,7 @@ File `.md` tải từ HackMD hiển thị đúng mà không phải sửa tay.
 | `> [!NOTE]` / `> [!TIP]` / `> [!WARNING]` | Callout kiểu GitHub |
 | `:::spoiler Tiêu đề` … `:::` | `<details>` thu gọn mặc định; lồng nhau được; không có tiêu đề → tiêu đề mặc định |
 | `==highlight==` | `<mark>` |
-| `[TOC]`, `[toc]` | Bị xóa — blog tự tạo mục lục bên cạnh bài (heading đang đọc được làm nổi) |
+| `[TOC]`, `[toc]` | Bị xóa — blog tự tạo mục lục từ heading `#`, `##`, `###` ở góc phải bài (heading đang đọc được làm nổi) |
 | ` ```lang `, ` ```lang! ` | Xem [Code block](#code-block) |
 | `:smile:`, `:tada:` … | Emoji |
 | `![alt](url =300x)`, `=300x200`, `=x200` | Đặt width/height cho ảnh |
@@ -330,12 +337,14 @@ Cú pháp bên trong code block/inline code không bao giờ bị xử lý.
 `/admin/` là Sveltia CMS **self-host**: `npm run dev`/`npm run build` tự chạy `scripts/copy-cms.mjs`
 để chép bundle từ `node_modules/@sveltia/cms` (version khóa trong `package-lock.json`) vào
 `public/admin/`. Không tải CMS từ CDN; JavaScript của CMS chỉ nạp ở `/admin`. File bundle đã được
-gitignore.
+gitignore. Ngoài CMS còn có trang [`/admin/import/`](#import-một-file-md-nhiều-bài) để import một file
+`.md` nhiều bài.
 
 ### Trước khi dùng trên production
 
-Sửa `backend.repo` trong `public/admin/config.yml` thành `<tài-khoản-github>/<tên-repo>` của bạn
-(mặc định đang là placeholder `your-github-username/ctf-writeups`), commit và push.
+`backend.repo` trong `public/admin/config.yml` phải là `<tài-khoản-github>/<tên-repo>` của bạn (hiện là
+`Drakie14/CTF-WU`, nhánh `main`). Đổi repo thì sửa ở đây, commit và push — `/admin/import/` cũng đọc
+repo/nhánh từ file này.
 
 ### Authentication — không cần OAuth proxy / server
 
@@ -382,19 +391,74 @@ và Cloudflare Pages thì mở `/admin/` bình thường) có thể chọn
 Lọc bài: cây thư mục CTF bên trái; menu **Filter** → “Chưa phân loại”, “Chưa có CTF”, “Category: …”;
 menu **Group** → CTF / Category / Difficulty.
 
+### Import một file .md nhiều bài
+
+Note HackMD thường gom **cả giải** vào một file: mỗi `# Category` là một mảng, mỗi `## Challenge` là
+một bài. Trang `/admin/import/` tách file đó thành từng bài riêng và commit tất cả trong **một commit**:
+
+1. Đăng nhập `/admin/` một lần trên trình duyệt đó — trang import dùng lại token Sveltia đã lưu. Chưa
+   đăng nhập thì trang hiện ô nhập token (fine-grained, **Contents: Read and write**); token này chỉ
+   dùng trong trang, không được lưu.
+2. Mở `https://<site>/admin/import/` (link cũng có trong mô tả collection **Write-ups**) → kéo thả
+   file `.md`, hoặc paste Markdown từ HackMD.
+3. Xem trước: sửa **CTF**, **Ngày**, và title / category / slug của từng bài; bỏ tick bài không muốn đăng.
+4. **Commit N bài lên GitHub** → Cloudflare tự build. Bài mới cũng hiện trong CMS (collection
+   **Write-ups**, thư mục CTF).
+
+```markdown
+---
+title: NNS CTF          # tên CTF (ưu tiên ctf:, không có thì lấy tên file)
+date: 2026-09-20        # tùy chọn — gán cho mọi bài (tags: cũng vậy)
+---
+
+# Web                   ← category web
+## NNS Travel           ← bài 1
+...
+## File monster (misc)  ← bài 2, category ghi đè thành misc
+...
+# Reversing             ← category rev (alias)
+## Crackme              ← bài 3
+```
+
+Kết quả: `src/content/posts/NNS CTF/nns-travel/index.md`, `…/file-monster/index.md`, … mỗi file có
+frontmatter `title`, `ctf`, `category` (và `date`, `tags` nếu file gốc có).
+
+| Trong file gốc | Xử lý |
+| --- | --- |
+| `# Web`, `# WEB`, `# Reversing`… | Category của các bài bên dưới: không phân biệt hoa thường, nhận alias (`reverse`, `forensic`, `binary`, `cryptography`…). `#` không khớp category (ví dụ `# Labs`) → bài không có category, chọn tay trong bảng xem trước. |
+| `## Tên challenge` | Một bài. `## Tên (misc)` → category `misc`, title bỏ phần `(misc)`. `## ` rỗng bị bỏ qua. |
+| Nội dung giữa `#` và `##` đầu tiên | Ghép vào đầu bài đầu tiên của nhóm; nhóm không có `##` nào thì chính nhóm thành một bài. |
+| `#`, `##` trong code block | Không bao giờ bị tách (ví dụ dòng `# comment` trong script). |
+| `####`, `#####` trong bài | Tùy chọn **Nâng heading** (mặc định bật): heading nông nhất thành `##` để mục lục có mục. Bỏ tick để giữ nguyên. |
+
+- **Trùng slug** (lỗi duy nhất làm build fail) bị chặn trước khi commit: trang đọc danh sách bài trong
+  repo, slug đã có → tự thêm tiền tố CTF (`nns-ctf-ass`); vẫn sửa tay được. Trang cảnh báo khi bài
+  có vẻ **đã import rồi**, dừng lại nếu repo vừa thay đổi giữa lúc xem trước và lúc commit, và khóa
+  nút sau khi commit xong (chọn file khác để import tiếp).
+- Công cụ chỉ **thêm** file. Nếu bản gộp của giải đã nằm trong repo (ví dụ `posts/CTF/NNS CTF.md`),
+  xóa nó (CMS → **Write-ups (file .md đơn)**, hoặc GitHub) để không có hai bản.
+- Ảnh đường dẫn tương đối (`![](./a.png)`) không được chép theo → trang cảnh báo; upload lại ảnh qua
+  CMS. Ảnh HackMD (`https://hackmd.io/_uploads/…`) không bị ảnh hưởng.
+- Chạy local: `npm run dev` → `http://localhost:4321/admin/import/`. Commit vẫn ghi thẳng lên repo
+  GitHub trong `backend.repo`, kể cả khi chạy local.
+- Logic tách nằm ở `src/lib/content/split-ctf.ts` (test: `tests/content/split-ctf.test.ts`); trang ở
+  `src/pages/admin/import.astro`.
+
 ### Giới hạn về cấu trúc thư mục (mục 66.5-C)
 
 | Cấu trúc | Collection | Ghi chú |
 | --- | --- | --- |
 | `posts/<slug>/index.md` | **Write-ups** | Bài mới luôn được tạo ở đây (hoặc trong thư mục CTF chọn ở Parent Folder). |
-| `posts/<ctf>/<slug>/index.md` | **Write-ups** | Thư mục CTF hiện thành cây bên trái. |
-| `posts/<slug>.md` | **Write-ups (file .md đơn)** | Chỉ sửa, không tạo mới. |
+| `posts/<ctf>/<slug>/index.md` | **Write-ups** | Thư mục CTF hiện thành cây bên trái. Bài tạo bởi `/admin/import/` có dạng này. |
+| `posts/<slug>.md`, `posts/<ctf>/<slug>.md` | **Write-ups (file .md đơn)** | Chỉ sửa, không tạo mới. |
 
 - Collection dạng thư mục lồng (nested) của Sveltia không đọc được file `.md` đơn, nên dạng
-  `<slug>.md` được quản lý bằng collection thứ hai.
+  `<slug>.md` được quản lý bằng collection thứ hai. Collection này chỉ đọc sâu 2 cấp
+  (`nested.depth: 2`); để 3 thì các bài `<ctf>/<slug>/index.md` cũng khớp và bị liệt kê hai lần.
 - Sveltia **không tạo được thư mục CTF mới**. CTF mới được tạo bằng ô **CTF** (bài lưu ở
   `posts/<slug>/index.md` với `ctf:` trong frontmatter). Muốn gom vào thư mục CTF riêng, tạo thư mục
-  qua GitHub Web UI.
+  qua GitHub Web UI — hoặc dùng [`/admin/import/`](#import-một-file-md-nhiều-bài), trang này tự tạo
+  thư mục `posts/<CTF>/`.
 
 ### CMS không viết lại Markdown HackMD
 
@@ -413,7 +477,8 @@ frontmatter được Sveltia ghi lại (ví dụ `tags: [a, b]` thành danh sác
 với trình duyệt không phải tiếng Anh — chỉ là fetch JSON, không phải script), `img-src` cho `*.githubusercontent.com`, `font-src` cho `cdn.jsdelivr.net`
 (font giao diện mà bundle Sveltia tham chiếu cố định; chỉ là font, không phải script), kèm
 `X-Robots-Tag: noindex`, `<meta name="robots" content="noindex">` và `Disallow: /admin` trong
-`robots.txt`. CSP của trang public không thay đổi.
+`robots.txt`. CSP của trang public không thay đổi. `/admin/import/` nằm dưới cùng CSP này: script của
+trang được bundle thành `/_astro/*.js` (`script-src 'self'`) và chỉ gọi `api.github.com`.
 
 ---
 
@@ -436,7 +501,7 @@ với trình duyệt không phải tiếng Anh — chỉ là fetch JSON, không 
 ## Kiểm tra chất lượng
 
 - **Test** (`tests/`): pipeline Markdown/HackMD, alias ngôn ngữ, XSS, frontmatter, tag, múi giờ,
-  round-trip CMS, config CMS/CSP.
+  round-trip CMS, config CMS/CSP, tách file CTF cho `/admin/import/`.
 - **Lighthouse**: `npm run lighthouse` cần Chrome/Chromium. Nếu không tự tìm thấy, đặt
   `CHROME_PATH` tới file chạy của Chrome. Mục tiêu ≥ 95 cho Performance/Accessibility/Best
   Practices/SEO (chế độ mobile).
