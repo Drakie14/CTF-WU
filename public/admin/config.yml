@@ -179,8 +179,11 @@ collections:
     format: yaml-frontmatter
     create: false
     # Đọc cả file .md trong thư mục con (posts/CTF/NNS CTF.md, posts/PortSwigger/XSS.md...).
+    # depth 2 = tối đa 2 cấp đường dẫn (<slug>.md, <CTF>/<slug>.md). Không để 3: khi đó
+    # <CTF>/<slug>/index.md (bài của collection "posts", ví dụ bài tạo bởi /admin/import/)
+    # cũng khớp và mỗi bài bị liệt kê hai lần trong CMS.
     nested:
-      depth: 3
+      depth: 2
       subfolders: true
     # Ảnh nằm chung thư mục src/content/posts, tham chiếu bằng ./ten-anh.png
     media_folder: ''

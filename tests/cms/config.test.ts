@@ -39,11 +39,13 @@ describe('Sveltia CMS config.yml', () => {
     expect(posts.public_folder).toBe('');
   });
 
-  it('collection posts_single sửa được bài dạng <slug>.md (không tạo bài mới), cùng bộ field', () => {
+  it('collection posts_single sửa được bài dạng <slug>.md và <ctf>/<slug>.md (không tạo bài mới), cùng bộ field', () => {
     const single = config.collections.find((c) => c.name === 'posts_single') as Collection & { create?: boolean };
     expect(single.folder).toBe('src/content/posts');
     expect(single.path).toBeUndefined();
-    expect(single.nested).toBeUndefined();
+    // Sveltia khớp tối đa `depth` cấp đường dẫn: 2 → <slug>.md, <ctf>/<slug>.md. Với 3 thì
+    // <ctf>/<slug>/index.md (thuộc collection posts) cũng khớp → bài bị liệt kê hai lần.
+    expect(single.nested).toEqual({ depth: 2, subfolders: true });
     expect(single.create).toBe(false);
     expect(single.fields).toEqual(posts.fields);
   });
