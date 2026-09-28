@@ -3,7 +3,7 @@ export const CATEGORIES = ['web', 'pwn', 'crypto', 'rev', 'forensics', 'misc', '
 export type Category = (typeof CATEGORIES)[number];
 
 /** Một vài cách viết phổ biến được map về category chuẩn. */
-export const CATEGORY_ALIASES: Readonly<Record<string, Category>> = {
+const CATEGORY_ALIASES: Readonly<Record<string, Category>> = {
   reverse: 'rev',
   reversing: 'rev',
   're': 'rev',
@@ -14,3 +14,9 @@ export const CATEGORY_ALIASES: Readonly<Record<string, Category>> = {
 
 export const DIFFICULTIES = ['easy', 'medium', 'hard', 'insane'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
+
+/** Chuỗi bất kỳ ("Web ", "WEB", "Reversing"…) → category chuẩn, hoặc `undefined` nếu không khớp. */
+export function toCategory(input: string): Category | undefined {
+  const c = input.trim().toLowerCase();
+  return (CATEGORIES as readonly string[]).includes(c) ? (c as Category) : CATEGORY_ALIASES[c];
+}

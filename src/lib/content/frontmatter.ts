@@ -1,5 +1,5 @@
 import { parse as parseYaml } from 'yaml';
-import { CATEGORIES, CATEGORY_ALIASES, DIFFICULTIES, type Category, type Difficulty } from './constants';
+import { CATEGORIES, DIFFICULTIES, toCategory, type Category, type Difficulty } from './constants';
 import { parseSiteDate } from './dates';
 import { normalizeTagInput } from './tags';
 
@@ -194,8 +194,7 @@ export function normalizeFrontmatter(
   // category
   let category: NormalizedFrontmatter['category'] = '';
   if (raw.category !== undefined && raw.category !== null && raw.category !== '') {
-    const c = asTrimmedString(raw.category)?.toLowerCase() ?? '';
-    const mapped = (CATEGORIES as readonly string[]).includes(c) ? (c as Category) : CATEGORY_ALIASES[c];
+    const mapped = toCategory(asTrimmedString(raw.category) ?? '');
     if (mapped) category = mapped;
     else warn('category', `must be one of ${CATEGORIES.join(', ')}`, raw.category, '');
   }

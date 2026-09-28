@@ -52,6 +52,7 @@ collections:
     description: >-
       Thân bài là văn bản thô: paste Markdown từ HackMD và CMS giữ nguyên từng ký tự.
       Bài mới được lưu ở src/content/posts/(slug)/index.md (hoặc trong thư mục CTF đã chọn ở Parent Folder).
+      Có một file .md chứa cả giải CTF? Mở /admin/import/ để tự tách thành từng bài theo # category / ## challenge.
     folder: src/content/posts
     # Mỗi bài là một thư mục chứa index.md + ảnh/file đính kèm (page bundle).
     path: '{{slug}}/index'

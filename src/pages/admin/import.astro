@@ -1,0 +1,592 @@
+---
+import { CATEGORIES } from '../../lib/content/constants';
+
+// Công cụ admin: import MỘT file .md của cả giải CTF → tách thành nhiều bài theo `#` (category) / `##` (challenge)
+// rồi commit tất cả trong một commit qua GitHub API. Chạy hoàn toàn trên trình duyệt (không cần server),
+// dùng lại token GitHub mà Sveltia CMS đã lưu khi đăng nhập ở /admin/.
+---
+
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="same-origin" />
+    <title>Import & tách write-up</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Import &amp; tách write-up</h1>
+        <a href="/admin/">← Về CMS</a>
+      </header>
+      <p class="lead">
+        Chọn <b>một</b> file <code>.md</code> của cả giải CTF. Mỗi <code># Heading 1</code> là một category (Web, Pwn, Crypto…),
+        mỗi <code>## Heading 2</code> bên dưới là một bài. Xem trước, chỉnh lại nếu cần, rồi commit tất cả lên GitHub trong một lần.
+      </p>
+
+      <section class="card">
+        <h2>1. File nguồn</h2>
+        <label class="drop" data-drop>
+          <input type="file" accept=".md,.markdown,text/markdown,text/plain" data-file />
+          <span data-drop-label>Kéo thả file .md vào đây hoặc bấm để chọn</span>
+        </label>
+        <details>
+          <summary>…hoặc paste Markdown (từ HackMD)</summary>
+          <textarea rows="10" data-paste placeholder="# Web&#10;## Tên challenge&#10;..."></textarea>
+          <button type="button" data-parse-paste>Phân tích nội dung đã paste</button>
+        </details>
+      </section>
+
+      <section class="card" data-step2 hidden>
+        <h2>2. Xem trước</h2>
+        <div class="grid">
+          <label>CTF <input type="text" data-ctf required /></label>
+          <label>Ngày <input type="date" data-date /></label>
+          <label class="check"><input type="checkbox" data-promote checked /> Nâng heading (#### → ##) để mục lục hiển thị</label>
+        </div>
+        <p class="hint" data-folder></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th><input type="checkbox" data-all checked aria-label="Chọn tất cả" /></th><th>Tiêu đề</th><th>Category</th><th>Slug (URL)</th><th>Độ dài</th></tr>
+            </thead>
+            <tbody data-rows></tbody>
+          </table>
+        </div>
+        <ul class="warnings" data-warnings></ul>
+      </section>
+
+      <section class="card" data-step3 hidden>
+        <h2>3. Commit lên GitHub</h2>
+        <p class="hint" data-repo>Đang đọc cấu hình…</p>
+        <div data-token-box hidden>
+          <label>GitHub token (fine-grained, quyền Contents: Read and write)
+            <input type="password" autocomplete="off" data-token placeholder="github_pat_…" />
+          </label>
+          <p class="hint">Chưa đăng nhập CMS trên trình duyệt này. Token chỉ dùng trong trang, không được lưu.</p>
+        </div>
+        <button type="button" class="primary" data-commit>Commit</button>
+        <p class="status" data-status role="status"></p>
+      </section>
+    </main>
+
+    <template data-category-options>
+      <option value="">(không có)</option>
+      {CATEGORIES.map((c) => <option value={c}>{c}</option>)}
+    </template>
+
+    <script>
+      import { parse as parseYaml } from 'yaml';
+      import type { Category } from '../../lib/content/constants';
+      import { assignSlugs, buildPostFile, ctfFolderName, slugFromRepoPath, splitCtfMarkdown, type SplitPost } from '../../lib/content/split-ctf';
+      import { slugify, slugifyOrHash } from '../../lib/content/slug';
+
+      const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
+      const fileInput = $<HTMLInputElement>('[data-file]');
+      const drop = $('[data-drop]');
+      const ctfInput = $<HTMLInputElement>('[data-ctf]');
+      const dateInput = $<HTMLInputElement>('[data-date]');
+      const promoteInput = $<HTMLInputElement>('[data-promote]');
+      const rowsEl = $('[data-rows]');
+      const allBox = $<HTMLInputElement>('[data-all]');
+      const statusEl = $('[data-status]');
+      const commitBtn = $<HTMLButtonElement>('[data-commit]');
+      const tokenInput = $<HTMLInputElement>('[data-token]');
+      const categoryOptions = $<HTMLTemplateElement>('[data-category-options]');
+
+      interface Row extends SplitPost {
+        include: boolean;
+        slug: string;
+        slugEdited: boolean;
+      }
+
+      let source = { text: '', name: '' };
+      let rows: Row[] = [];
+      /** Tags trong frontmatter của file gốc — gán cho mọi bài. */
+      let tags: string[] = [];
+      let repo = { name: '', branch: 'main' };
+      /** Commit đầu nhánh + đường dẫn file + slug đang có trong repo (để tránh trùng slug → build fail). */
+      let existing: { head: string; paths: Set<string>; slugs: Set<string> } | undefined;
+      /** Đang commit / đã commit file hiện tại: khóa nút để không tạo bài trùng. */
+      let busy = false;
+      let done = false;
+
+      const api = async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
+        const res = await fetch(`https://api.github.com/repos/${repo.name}${path}`, {
+          ...init,
+          headers: {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${token()}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+            ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+          },
+        });
+        if (!res.ok) {
+          const msg = ((await res.json().catch(() => ({}))) as { message?: string }).message ?? res.statusText;
+          throw new Error(`GitHub ${res.status}: ${msg}`);
+        }
+        return (await res.json()) as T;
+      };
+
+      /** Token mà Sveltia CMS lưu trong localStorage khi đăng nhập ở /admin/ (cùng origin). */
+      function storedToken(): string {
+        try {
+          const user = JSON.parse(localStorage.getItem('sveltia-cms.user') ?? 'null') as { token?: unknown } | null;
+          return typeof user?.token === 'string' ? user.token : '';
+        } catch {
+          return '';
+        }
+      }
+      const token = () => storedToken() || tokenInput.value.trim();
+
+      function setStatus(text: string, kind: 'info' | 'error' | 'ok' = 'info', link?: string) {
+        statusEl.textContent = text;
+        statusEl.dataset.kind = kind;
+        if (link) {
+          const a = document.createElement('a');
+          a.href = link;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = ' Xem commit ↗';
+          statusEl.append(a);
+        }
+      }
+
+      async function loadConfig() {
+        const repoEl = $('[data-repo]');
+        try {
+          const cfg = parseYaml(await (await fetch('/admin/config.yml')).text()) as { backend?: { repo?: string; branch?: string } };
+          repo = { name: cfg.backend?.repo ?? '', branch: cfg.backend?.branch ?? 'main' };
+          repoEl.textContent = `Repo: ${repo.name} · nhánh ${repo.branch}`;
+        } catch {
+          repoEl.textContent = 'Không đọc được /admin/config.yml';
+        }
+        $('[data-token-box]').hidden = Boolean(storedToken());
+      }
+
+      /** Đọc cây file của nhánh (dùng lại kết quả cũ trừ khi `force`). */
+      async function loadExisting(force = false) {
+        if (existing && !force) return existing;
+        if (!repo.name || !token()) return undefined;
+        const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
+        const tree = await api<{ tree: Array<{ path: string; type: string }> }>(`/git/trees/${ref.object.sha}?recursive=1`);
+        const paths = new Set(tree.tree.filter((t) => t.type === 'blob').map((t) => t.path));
+        const slugs = new Set<string>();
+        for (const p of paths) {
+          const s = slugFromRepoPath(p);
+          if (s) slugs.add(s);
+        }
+        existing = { head: ref.object.sha, paths, slugs };
+        return existing;
+      }
+
+      function recomputeSlugs() {
+        const auto = rows.filter((r) => r.include && !r.slugEdited);
+        const taken = [...(existing?.slugs ?? []), ...rows.filter((r) => r.include && r.slugEdited).map((r) => r.slug)];
+        const slugs = assignSlugs(auto.map((r) => r.title), ctfInput.value, taken);
+        auto.forEach((r, i) => (r.slug = slugs[i] ?? r.slug));
+      }
+
+      function analyze() {
+        if (!source.text) return;
+        const doc = splitCtfMarkdown(source.text, { fallbackCtf: source.name, promoteHeadings: promoteInput.checked });
+        if (!ctfInput.value || ctfInput.dataset.source !== source.name) {
+          ctfInput.value = doc.ctf;
+          dateInput.value = doc.date;
+          ctfInput.dataset.source = source.name;
+        }
+        rows = doc.posts.map((p) => ({ ...p, include: Boolean(p.body.trim()), slug: '', slugEdited: false }));
+        tags = doc.tags;
+        recomputeSlugs();
+        render();
+        $('[data-step2]').hidden = false;
+        $('[data-step3]').hidden = false;
+        loadExisting()
+          .then(() => {
+            recomputeSlugs();
+            render();
+          })
+          .catch(() => {
+            /* Chưa có token: sẽ kiểm tra lại lúc commit. */
+          });
+      }
+      function render() {
+        $('[data-folder]').textContent = `Bài sẽ được lưu ở src/content/posts/${ctfFolderName(ctfInput.value || 'ctf')}/<slug>/index.md`;
+        rowsEl.replaceChildren(
+          ...rows.map((row) => {
+            const tr = document.createElement('tr');
+            tr.classList.toggle('off', !row.include);
+
+            const inc = Object.assign(document.createElement('input'), { type: 'checkbox', checked: row.include });
+            inc.addEventListener('change', () => {
+              row.include = inc.checked;
+              recomputeSlugs();
+              render();
+            });
+
+            const title = Object.assign(document.createElement('input'), { type: 'text', value: row.title });
+            title.addEventListener('change', () => {
+              row.title = title.value.trim() || row.title;
+              recomputeSlugs();
+              render();
+            });
+
+            const cat = document.createElement('select');
+            cat.append(categoryOptions.content.cloneNode(true));
+            cat.value = row.category;
+            cat.addEventListener('change', () => (row.category = cat.value as Category | ''));
+
+            const slug = Object.assign(document.createElement('input'), { type: 'text', value: row.slug });
+            slug.addEventListener('change', () => {
+              row.slug = slugify(slug.value);
+              row.slugEdited = Boolean(row.slug);
+              recomputeSlugs();
+              render();
+            });
+
+            const section = document.createElement('small');
+            section.textContent = row.section ? `# ${row.section}` : '';
+            const size = document.createElement('td');
+            size.textContent = row.body.trim() ? `${row.body.length.toLocaleString('vi-VN')} ký tự` : 'trống';
+
+            const cells = [[inc], [title, section], [cat], [slug]].map((children) => {
+              const td = document.createElement('td');
+              td.append(...children);
+              return td;
+            });
+            tr.append(...cells, size);
+            return tr;
+          }),
+        );
+        allBox.checked = rows.length > 0 && rows.every((r) => r.include);
+
+        const warnings: string[] = [];
+        const chosen = rows.filter((r) => r.include);
+        if (!rows.length) warnings.push('Không tìm thấy bài nào: file cần có heading "## Tên challenge".');
+        const dupSlug = chosen.map((r) => r.slug).find((s, i, all) => all.indexOf(s) !== i);
+        if (dupSlug) warnings.push(`Slug "${dupSlug}" bị trùng giữa các bài.`);
+        const clash = chosen.find((r) => existing?.slugs.has(r.slug));
+        if (clash) warnings.push(`Slug "${clash.slug}" đã có trong repo — đổi slug khác (trùng slug làm build lỗi).`);
+        const folder = `src/content/posts/${ctfFolderName(ctfInput.value || 'ctf')}/`;
+        const imported = chosen.filter((r) => existing?.paths.has(`${folder}${slugifyOrHash(r.title, 'post')}/index.md`)).map((r) => r.title);
+        if (imported.length && !done) warnings.push(`Có vẻ đã import rồi (CTF này đã có bài cùng tên): ${imported.join(', ')}.`);
+        const relImg = chosen.filter((r) => /!\[[^\]]*\]\((?!https?:|\/|data:)[^)]+\)/.test(r.body)).map((r) => r.title);
+        if (relImg.length) warnings.push(`Có ảnh đường dẫn tương đối (sẽ không có trong thư mục mới): ${relImg.join(', ')}. Upload lại ảnh qua CMS sau khi import.`);
+        if (!chosen.some((r) => r.category)) warnings.push('Không bài nào có category: heading # không khớp web/pwn/crypto/rev/forensics/misc/osint/mobile/cloud.');
+        $('[data-warnings]').replaceChildren(
+          ...warnings.map((w) => Object.assign(document.createElement('li'), { textContent: w })),
+        );
+        commitBtn.textContent = done ? 'Đã commit ✓' : `Commit ${chosen.length} bài lên GitHub`;
+        commitBtn.disabled = busy || done || chosen.length === 0 || Boolean(dupSlug) || Boolean(clash) || !ctfInput.value.trim();
+      }
+
+      async function commit() {
+        const chosen = rows.filter((r) => r.include);
+        if (!token()) return setStatus('Cần GitHub token (đăng nhập /admin/ hoặc nhập token ở trên).', 'error');
+        if (!repo.name) return setStatus('Chưa cấu hình backend.repo trong /admin/config.yml.', 'error');
+        busy = true;
+        render();
+        try {
+          setStatus('Đang kiểm tra repo…');
+          const state = await loadExisting(true);
+          if (!state) throw new Error('Không đọc được repo.');
+          const { head } = state;
+          // Repo vừa có bài mới trùng slug → slug tự đổi: không commit khác với bản xem trước.
+          const shown = rows.map((r) => r.slug).join('\n');
+          recomputeSlugs();
+          if (rows.map((r) => r.slug).join('\n') !== shown) {
+            throw new Error('Repo vừa có bài trùng slug nên slug đã được đổi — kiểm tra lại bảng rồi bấm Commit lần nữa.');
+          }
+          const ctf = ctfInput.value.trim();
+          const files = chosen.map((r) => buildPostFile({ ...r, ctf, date: dateInput.value, tags }));
+          const conflict = files.find((f) => state.paths.has(f.path)) ?? chosen.find((r) => state.slugs.has(r.slug));
+          if (conflict) throw new Error(`Đã tồn tại: ${'path' in conflict ? conflict.path : conflict.slug}. Đổi slug rồi thử lại.`);
+
+          setStatus(`Đang tạo commit ${files.length} file…`);
+          const parent = await api<{ tree: { sha: string } }>(`/git/commits/${head}`);
+          const tree = await api<{ sha: string }>('/git/trees', {
+            method: 'POST',
+            body: JSON.stringify({
+              base_tree: parent.tree.sha,
+              tree: files.map((f) => ({ path: f.path, mode: '100644', type: 'blob', content: f.content })),
+            }),
+          });
+          const created = await api<{ sha: string; html_url: string }>('/git/commits', {
+            method: 'POST',
+            body: JSON.stringify({ message: `content: import "${ctf}" (${files.length} bài)`, tree: tree.sha, parents: [head] }),
+          });
+          await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: created.sha }) });
+          existing = undefined;
+          done = true;
+          setStatus(`Đã commit ${files.length} bài. Site sẽ build lại sau vài phút; bài mới cũng hiện trong CMS.`, 'ok', created.html_url);
+        } catch (err) {
+          setStatus(err instanceof Error ? err.message : String(err), 'error');
+        } finally {
+          busy = false;
+          render();
+        }
+      }
+
+      async function readFile(file: File | undefined) {
+        if (!file) return;
+        source = { text: await file.text(), name: file.name.replace(/\.(md|markdown|txt)$/i, '') };
+        $('[data-drop-label]').textContent = file.name;
+        ctfInput.value = '';
+        done = false;
+        analyze();
+      }
+
+      fileInput.addEventListener('change', () => void readFile(fileInput.files?.[0]));
+      drop.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        drop.dataset.over = '';
+      });
+      drop.addEventListener('dragleave', () => delete drop.dataset.over);
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault();
+        delete drop.dataset.over;
+        void readFile(e.dataTransfer?.files[0]);
+      });
+      $('[data-parse-paste]').addEventListener('click', () => {
+        source = { text: $<HTMLTextAreaElement>('[data-paste]').value, name: `paste-${Date.now()}` };
+        ctfInput.value = '';
+        done = false;
+        analyze();
+      });
+      promoteInput.addEventListener('change', () => {
+        const edits = new Map(rows.map((r, i) => [i, r]));
+        analyze();
+        // Giữ lại chỉnh sửa tay (title/category/slug/chọn bài) khi chỉ đổi tùy chọn heading.
+        rows.forEach((r, i) => {
+          const old = edits.get(i);
+          if (old) Object.assign(r, { title: old.title, category: old.category, include: old.include, slug: old.slug, slugEdited: old.slugEdited });
+        });
+        render();
+      });
+      ctfInput.addEventListener('input', () => {
+        recomputeSlugs();
+        render();
+      });
+      allBox.addEventListener('change', () => {
+        rows.forEach((r) => (r.include = allBox.checked));
+        recomputeSlugs();
+        render();
+      });
+      tokenInput.addEventListener('change', () => {
+        loadExisting(true)
+          .then(() => {
+            recomputeSlugs();
+            render();
+          })
+          .catch((err: unknown) => setStatus(err instanceof Error ? err.message : String(err), 'error'));
+      });
+      commitBtn.addEventListener('click', () => void commit());
+      void loadConfig();
+    </script>
+
+    <style is:global>
+      :root {
+        color-scheme: dark;
+        --bg: #16101f;
+        --card: #221a2e;
+        --border: #3a2e4a;
+        --text: #ece8f4;
+        --muted: #a79fb6;
+        --accent: #c4b5fd;
+        --error: #fca5a5;
+        --ok: #86efac;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 system-ui, sans-serif;
+      }
+      main {
+        max-width: 64rem;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 4rem;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+      }
+      h1 {
+        font-size: 1.4rem;
+        margin: 0;
+      }
+      h2 {
+        font-size: 1rem;
+        margin: 0 0 0.75rem;
+      }
+      a {
+        color: var(--accent);
+      }
+      code {
+        background: #0003;
+        padding: 0 0.3em;
+        border-radius: 3px;
+      }
+      .lead,
+      .hint {
+        color: var(--muted);
+      }
+      .hint {
+        font-size: 0.85rem;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin: 1rem 0;
+      }
+      .drop {
+        display: block;
+        border: 2px dashed var(--border);
+        border-radius: 0.6rem;
+        padding: 1.5rem;
+        text-align: center;
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .drop[data-over],
+      .drop:hover {
+        border-color: var(--accent);
+        color: var(--text);
+      }
+      .drop input {
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+      }
+      details {
+        margin-top: 0.75rem;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
+      input[type='text'],
+      input[type='date'],
+      input[type='password'],
+      select,
+      textarea {
+        width: 100%;
+        background: #0004;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 0.4rem;
+        padding: 0.35rem 0.5rem;
+        font: inherit;
+      }
+      textarea {
+        margin: 0.5rem 0;
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+      }
+      button {
+        background: #0004;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 0.4rem;
+        padding: 0.45rem 0.9rem;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        color: #1b1426;
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 0.75rem;
+        align-items: end;
+      }
+      .grid label {
+        display: grid;
+        gap: 0.25rem;
+      }
+      .grid .check {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        margin-top: 0.5rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 44rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.35rem 0.4rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        font-size: 0.8rem;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      td small {
+        display: block;
+        color: var(--muted);
+        margin-top: 0.15rem;
+      }
+      td:last-child {
+        white-space: nowrap;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      tr.off td:not(:first-child) {
+        opacity: 0.4;
+      }
+      .warnings {
+        color: #fcd34d;
+        font-size: 0.9rem;
+        padding-left: 1.2rem;
+      }
+      .warnings:empty {
+        display: none;
+      }
+      .status[data-kind='error'] {
+        color: var(--error);
+      }
+      .status[data-kind='ok'] {
+        color: var(--ok);
+      }
+      [data-token-box] label {
+        display: grid;
+        gap: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+      @media (max-width: 40rem) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </body>
+</html>
