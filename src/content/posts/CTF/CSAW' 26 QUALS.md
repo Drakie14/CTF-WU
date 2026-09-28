@@ -6,7 +6,7 @@ difficulty: hard
 tags:
   - Misc
   - JWT
-  - leaf certìicate
+  - leaf certificate
 ---
 
 # Misc
