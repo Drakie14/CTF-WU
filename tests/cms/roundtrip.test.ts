@@ -43,7 +43,8 @@ function cmsSerialize(entry: Entry): string {
 /** Thân bài như pipeline Astro nhìn thấy (sau khối frontmatter, bỏ dòng trống đầu). */
 const bodyOf = (text: string) => splitFrontmatter(text.replace(/\r\n?/g, '\n')).body.replace(/^\n/, '');
 
-const SAMPLES = ['tests/cms/hackmd-sample.md', 'src/content/posts/hackmd-dom-xss/index.md'];
+// Chỉ dùng fixture cố định trong tests/: bài thật trong src/content/posts thay đổi theo nội dung blog.
+const SAMPLES = ['tests/cms/hackmd-sample.md'];
 
 describe('Sveltia CMS round-trip giữ nguyên Markdown HackMD', () => {
   for (const file of SAMPLES) {

@@ -73,7 +73,8 @@ describe('Sveltia CMS config.yml', () => {
     expect(tags.options).toBeUndefined();
     expect(tags.field).toBeUndefined();
     expect(tags.default).toBeUndefined();
-    expect(read('public/admin/config.yml')).not.toMatch(/\b(sqli|jwt|xss)\b/i);
+    // Chỉ xét dữ liệu cấu hình (đã parse), không xét comment YAML — comment có thể nhắc tên bài như XSS.md.
+    expect(JSON.stringify(config)).not.toMatch(/\b(sqli|jwt|xss)\b/i);
   });
 
   it('CTF nhập tự do (tạo CTF mới); có lọc category, "Chưa phân loại" và nhóm theo CTF', () => {
