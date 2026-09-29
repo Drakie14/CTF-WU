@@ -98,4 +98,8 @@ python3 exploit.py \
   "https://<host>/upload" -k
 ```
 
+Chạy exploit (upload file mồi qua web + `mapReduce` qua kết nối Mongo) — flag hiện ra:
+
+![image](./02-exploit.png)
+
 -> Flag: `NNS{60oD_Job_g3ttiN6_7hi5_tas7y_fla6_fr0m_7he_Fla6_m0ns7er}`
