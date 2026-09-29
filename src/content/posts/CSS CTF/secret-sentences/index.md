@@ -13,7 +13,7 @@ tags:
 ## Đề bài
 At first glance, this looks like an innocent website. Super empty. But is it?
 
-`https://first-flag-secret-sentences.netlify.app/`
+https://first-flag-secret-sentences.netlify.app/
 
 Flag Format: `FirstFlag{<flag>}`
 ## Solution

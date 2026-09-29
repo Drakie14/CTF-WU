@@ -13,7 +13,7 @@ tags:
 ## Đề bài
 AI generated this website for us. It's super duper secure!
 
-`https://first-flag-absurd-admin.netlify.app/`
+https://first-flag-absurd-admin.netlify.app/
 
 Flag Format: `FirstFlag{<flag>}`
 ## Solution
