@@ -49,9 +49,17 @@ Hai tên khác nhau ở mức Python string (qua được kiểm tra trùng tên
 2. Đăng ký `CLIENT` tên `MAẞA` -> nhận private key, subject đụng độ admin.
 3. Lấy nonce, ký bằng key CLIENT, nộp cert CLIENT vào `/admin` -> subject khớp -> flag.
 
-WebCrypto có sẵn `Ed25519` nên **cả chuỗi khai thác chạy gọn trong DevTools Console** (đăng ký 2 cert, ký nonce bằng private key CLIENT, nộp `/admin`):
+WebCrypto có sẵn `Ed25519` nên ta làm **từng bước ngay trong DevTools Console**.
 
-![image](./02-console.png)
+**Bước 1 — Đăng ký & lấy nonce.** Tạo cert `ADMIN` tên `MASSA` (server **không** trả `private_key`, chỉ chiếm slot admin), rồi `CLIENT` tên `MAẞA` — cùng subject với admin nhưng khác string nên qua được kiểm tra trùng tên, và **được trả `private_key`**. Cuối cùng xin một `nonce`:
+
+![image](./02-console-register.png)
+
+Để ý `admin` chỉ có `certificate`, còn `client` có cả `private_key` — dù hai tên `MASSA` và `MAẞA` sẽ **bằng nhau** khi server so subject.
+
+**Bước 2 — Ký & lấy flag.** Trích private key CLIENT ra DER, import thành khoá `Ed25519`, ký chuỗi `nonce`, rồi `POST /admin` bằng cert CLIENT. Server chuẩn hoá subject thấy khớp cert ADMIN -> trả flag:
+
+![image](./03-console-flag.png)
 
 -> Flag: `NNS{unic0de_subject_c0llisi0n_pwn}`
 
