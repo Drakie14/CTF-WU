@@ -58,8 +58,12 @@ Lưu ý: gọi thẳng `decryptFlag()` **không** ra flag vì hàm này cố tì
   const data = new Uint8Array(ct.length + tag.length); data.set(ct); data.set(tag, ct.length);
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b(v.iv) }, key, data);
   return new TextDecoder().decode(pt);   // -> "FirstFlag{theQuickBrownFoxIsTired}"
-})();
+})().then(f => console.log("FLAG:", f));
 ```
+
+Console in ra flag:
+
+![image](./03-console.png)
 
 Hoặc ta tự giải bằng Python, lưu ý `GCM` cần `tag` để verify:
 ```python!

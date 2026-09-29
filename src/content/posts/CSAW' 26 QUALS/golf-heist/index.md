@@ -195,8 +195,12 @@ Toàn bộ chuỗi khai thác cũng làm được **hoàn toàn trong trình duy
       headers: { 'content-type':'application/json', 'X-User-Role':'admin' },
       body: JSON.stringify({ phrase }) })).json();
   return j.flag;
-})();
+})().then(f => console.log("FLAG:", f));
 ```
+
+Console cho thấy 3 request `418 I'm a Teapot` (rò rỉ rotor qua header) rồi in ra flag:
+
+![image](./04-console.png)
 
 :::warning
 Bản source công khai **không kèm flag thật** — flag thật do BTC bơm qua biến môi trường `FLAG` trên server thi đấu (giải đã kết thúc, không còn instance). Vì vậy ảnh/kết quả bên dưới chạy **local với flag demo** `csaw{fake_local_flag_verify_123}` để kiểm chứng exploit chạy đúng; chỗ này trên server thật sẽ là flag thật.
