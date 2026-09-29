@@ -30,7 +30,7 @@ curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&folder=inbox'
 curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&mode=view&p=1'
 ```
 
-->Flag: `NNS{...}` (lấy từ nội dung private message của admin trên instance online)
+->Flag: đọc trực tiếp từ private message của admin trên instance online lúc thi — flag sinh riêng theo từng instance/đội, không có giá trị cố định (source chỉ ship sẵn placeholder `NNS{test_flag}`)
 
 Full solve:
 
