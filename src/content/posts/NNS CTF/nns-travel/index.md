@@ -42,8 +42,12 @@ WORKDIR container là `/app` (xem `Dockerfile`), nên `./tickets/` = `/app/ticke
 curl -s -X POST "http://HOST:PORT/get-file?pnr=../../flag.txt"
 ```
 
-Muốn tương tác thẳng trên trình duyệt, ta mở DevTools Console rồi `fetch` tới endpoint với payload traversal — server trả về nội dung `/flag.txt`:
+Muốn tương tác thẳng trên trình duyệt, ta mở DevTools -> Console rồi `fetch` tới endpoint với payload traversal:
 
-![image](./02-flag.png)
+![image](./02-console-fetch.png)
+
+`fetch` trả về một `Response`, ta xem nội dung ở tab Network -> chọn request -> `Preview`, thấy ngay `/flag.txt`:
+
+![image](./03-network-flag.png)
 
 -> Flag: `NNS{WH0op5_You_found_4_p4th_7R4v3rs4l_in_My_cod3}`
