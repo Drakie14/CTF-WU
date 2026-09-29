@@ -60,9 +60,13 @@ async def clubs(req):
 # /balls -> R2 (Rotor II), /bags -> R3 (Rotor III)
 ```
 
-Truy cập thẳng một endpoint pro-shop trên trình duyệt, ta thấy nó trả `I'm a teapot.` (HTTP 418) — còn giá trị rotor thì nằm ở header `X-Golf-Hint` (mở tab Network để đọc):
+Truy cập thẳng một endpoint pro-shop trên trình duyệt, trang chỉ hiện `I'm a teapot.` (HTTP 418) — có vẻ vô dụng:
 
-![image](./02-proshop-418.png)
+![image](./02-teapot.png)
+
+Nhưng mở tab **Network**, chọn request đó rồi xem **Response headers**, giá trị rotor lộ ra ở header `X-Golf-Hint` (đây là `R1` — `X-Caddy-Note: Rotor I` xác nhận), dạng base64 của 6 chữ số:
+
+![image](./02b-network-hint.png)
 
 Bảng `WORDS` cũng công khai luôn tại `GET /api/word-table`:
 
