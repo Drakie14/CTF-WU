@@ -16,6 +16,10 @@ Everything should be self-serve in 2026
 
 File: [web_ass.tar.gz](https://github.com/Drakie14/Challenges/blob/NNS-CTF/web_ass.tar.gz)
 ## Solution
+Truy cập trang, ta thấy một CA "Administration Self-Service" cho tự đăng ký certificate (chọn profile `CLIENT`/`ADMIN`):
+
+![image](./01-site.png)
+
 `ASS` = *Administration Self-Service*, một CA nội bộ cấp certificate Ed25519. Muốn lấy flag phải gọi `POST /admin` với cert do CA ký, còn hạn, ký đúng `nonce`, và có **subject bằng subject của cert ADMIN**. Nhưng cert ADMIN không trả private key và chỉ cấp được **một lần**.
 
 Mấu chốt: server so subject bằng `asn1crypto`:
@@ -44,6 +48,10 @@ Hai tên khác nhau ở mức Python string (qua được kiểm tra trùng tên
 1. Đăng ký `ADMIN` tên `MASSA` -> chiếm slot admin (không cần private key).
 2. Đăng ký `CLIENT` tên `MAẞA` -> nhận private key, subject đụng độ admin.
 3. Lấy nonce, ký bằng key CLIENT, nộp cert CLIENT vào `/admin` -> subject khớp -> flag.
+
+WebCrypto có sẵn `Ed25519` nên **cả chuỗi khai thác chạy gọn trong DevTools Console** (đăng ký 2 cert, ký nonce bằng private key CLIENT, nộp `/admin`):
+
+![image](./02-console.png)
 
 -> Flag: `NNS{unic0de_subject_c0llisi0n_pwn}`
 
