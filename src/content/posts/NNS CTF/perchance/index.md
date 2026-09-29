@@ -80,4 +80,4 @@ POST /perchance  perchance=https://doc.rust-lang.org.<attacker>/         (Bug 1)
 
 Trang khai thác: xem `solve/index.html` (sửa `ATTACKER_HOST` thành webhook của bạn, host tại domain dạng `doc.rust-lang.org.<something>` qua HTTPS, rồi submit URL đó vào `/perchance`). Cookie `flag` về webhook sau ~40s.
 
-->Flag: `NNS{...}` (giá trị thật lấy từ biến môi trường `FLAG` của instance online — xem `process.env.FLAG` trong `src/browser.ts`)
+->Flag: `NNS{...}`
