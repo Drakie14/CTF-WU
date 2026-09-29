@@ -16,6 +16,10 @@ I run a phpBB forum, but it's a bit outdated. Maybe there's a well-known vulnera
 
 File: [web_php-is-my-passion.tar.gz](https://github.com/Drakie14/Challenges/blob/NNS-CTF/web_php-is-my-passion.tar.gz)
 ## Solution
+Truy cập forum, ta thấy một board phpBB bình thường:
+
+![image](./01-forum-home.png)
+
 phpBB **3.3.16**. `seed.php` nhét flag vào một **private message gửi cho `user_id=2` (admin)**; mật khẩu admin ngẫu nhiên 24 ký tự đặt lúc build nên không đăng nhập trực tiếp được.
 
 Bản này dính **[CVE-2026-48611](https://pentest-tools.com/research/phpbb-authentication-bypass)** (auth bypass, vá ở 3.3.17): controller liên kết tài khoản OAuth `ucp.php?mode=login_link` cho phép **chọn auth provider tuỳ ý** qua tham số `auth_provider`, bỏ qua `auth_method=db` của board. Provider **`apache`** uỷ quyền xác thực cho web server — chỉ kiểm tra `PHP_AUTH_USER == username` và `PHP_AUTH_PW != ''`, **không** so mật khẩu với hash.
@@ -32,6 +36,10 @@ curl -i -u admin:x -c cookies.txt \
 curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&folder=inbox'
 curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&mode=view&p=1'
 ```
+
+Sau khi bypass, ta có session của `admin` (không cần biết mật khẩu — để ý góc phải đã là `admin` kèm link ACP) và đọc được private message chứa flag:
+
+![image](./03-pm-flag.png)
 
 -> Flag: `NNS{PHP_1s_mY_P455ion_4ND_s0_aRe_4PacHe_4u7h_pRoviD3r5}`
 
