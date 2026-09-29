@@ -94,4 +94,4 @@ python3 exploit.py \
   "https://<host>/upload" -k
 ```
 
-->Flag: `NNS{60oD_Job_g3ttiN6_7hi5_tas7y_fla6_fr0m_7he_Fla6_m0ns7er}`
+-> Flag: `NNS{60oD_Job_g3ttiN6_7hi5_tas7y_fla6_fr0m_7he_Fla6_m0ns7er}`

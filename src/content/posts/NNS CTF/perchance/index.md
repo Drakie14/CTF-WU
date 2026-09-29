@@ -166,4 +166,4 @@ setTimeout(() => { location = 'https://doc.rust-lang.org/stable/std/index.html';
 </html>
 ```
 
-->Flag: `NNS{...}`
+-> Flag: `NNS{...}`

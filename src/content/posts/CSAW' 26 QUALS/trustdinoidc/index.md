@@ -135,7 +135,7 @@ x5c
         ↓
    server đánh dấu trusted
 ```
-->Flag: `csaw{str4ta_sk1pped_th3_p1n}`
+-> Flag: `csaw{str4ta_sk1pped_th3_p1n}`
 ![image](https://hackmd.io/_uploads/BJ75UHM5Ge.png)
 
 Code đầy đủ solve:

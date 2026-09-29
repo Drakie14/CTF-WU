@@ -10,12 +10,12 @@ tags:
   - Puzzle
 ---
 
-### Đề bài
+## Đề bài
 A labyrinth of "hollow" rooms served as a static website — each room links to others, and the flag lies waiting in the sanctum. Players wander the interlinked rooms (and read what the pages are quietly telling them) to find the way in. Hosted service on port 8000.
 
 https://hollow-houses.ctf.csaw.io/
-### Solution 
-## Trang chủ
+## Solution 
+### Trang chủ
 Đây là một bài ctf thú vị được giải mã thông qua việc người lần lượt truy cập các đường URL được ẩn giấu trong lời mô tả của trang
 
 Ta nhận thấy đây là một trang web có chứa thông tin về các phòng với các font chữ khác nhau và rất nhiều đường link URL nhằm gây nhiễu user
@@ -34,7 +34,7 @@ Trong challenge này có hai dấu hiệu kết hợp:
 → một file text ở root/front gate.
 
 Vậy ta phải truy cập [/robots.txt/](https://hollow-houses.ctf.csaw.io/robots.txt)
-## Kẻ phục tùng (The obedient)
+### Kẻ phục tùng (The obedient)
 với [robots.txt](https://www.cloudflare.com/learning/bots/what-is-robots-txt/#how-does-a-robotstxt-file-work) là một file chuẩn đặt ở root của website: https://hollow-houses.ctf.csaw.io/robots.txt
 
 Kết quả trả về:
@@ -49,7 +49,7 @@ Vì ở đây `Disallow: /atrium/` chứng tỏ rằng `/atrium/` là 1 đườn
 
 -> Ta truy cập đường dẫn [/atrium/](https://hollow-houses.ctf.csaw.io/atrium/)
 
-## Giếng trời (Atrium)
+### Giếng trời (Atrium)
 
 
 ```html!
@@ -86,7 +86,7 @@ Vì ở đây `Disallow: /atrium/` chứng tỏ rằng `/atrium/` là 1 đườn
 Ta thấy chữ cái đầu tiên của mỗi dòng đều được cố ý làm mờ gần với màu tường rất đáng ngờ
 -> Ta truy cập đường dẫn [/ossuary/](https://hollow-houses.ctf.csaw.io/ossuary/)
 
-## Nơi chôn cất (Ossuary)
+### Nơi chôn cất (Ossuary)
 Trang này có chứa một đoạn mật mã khó hiểu và đáng ngờ ở giữa trang
 `d2hhdCB0aGUgbWlycm9yIHNlZXMsIHRoZSBtaXJyb3Iga2VlcHM=`
 
@@ -104,7 +104,7 @@ The noun is the name of the next room.`
 
 Mà ở trong câu `what the mirror sees, the mirror keeps` có noun chính là `mirror`
 -> Ta truy cập đường dẫn [/mirror/](https://hollow-houses.ctf.csaw.io/mirror/)
-## Chiếc gương (Mirror)
+### Chiếc gương (Mirror)
 Ở trang này tất cả các chữ cái đều bị lật ngược lại
 
 Vì vậy ta đọc source để xem thông tin của trang, nhận thấy trang này đã chỉ rõ room tiếp theo
@@ -118,7 +118,7 @@ Do not speak above the water.
 </p>
 ```
 -> Ta truy cập đường dẫn [/wellspring/](https://hollow-houses.ctf.csaw.io/wellspring/)
-## Suối nguồn (Wellspring)
+### Suối nguồn (Wellspring)
 Khi xem trang, ta nhận thấy mỗi dòng câu đều có những khoảng cách kì lạ và có tần suất lặp lại riêng biệt 
 
 Ta liên tưởng đến mật mã Morse:
@@ -132,7 +132,7 @@ Decode toàn bộ ta thu được kết quả sau
 `THE FLAG LIES WAITING IN THE SANCTUM`
 
 Ta truy cập đường dẫn [/sanctum/](https://hollow-houses.ctf.csaw.io/sanctum/)
-## Thánh địa (Sanctum)
+### Thánh địa (Sanctum)
 Đến trang này thì ta thu được flag: 
 `csaw{w4nd3r3r_0f_th3_h0ll0w_h0us3}`
 

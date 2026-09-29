@@ -33,7 +33,7 @@ curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&folder=inbox'
 curl -s -b cookies.txt 'http://HOST:PORT/ucp.php?i=pm&mode=view&p=1'
 ```
 
-->Flag: `NNS{PHP_1s_mY_P455ion_4ND_s0_aRe_4PacHe_4u7h_pRoviD3r5}`
+-> Flag: `NNS{PHP_1s_mY_P455ion_4ND_s0_aRe_4PacHe_4u7h_pRoviD3r5}`
 
 Full solve:
 

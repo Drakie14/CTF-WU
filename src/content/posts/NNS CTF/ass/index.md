@@ -45,7 +45,7 @@ Hai tên khác nhau ở mức Python string (qua được kiểm tra trùng tên
 2. Đăng ký `CLIENT` tên `MAẞA` → nhận private key, subject đụng độ admin.
 3. Lấy nonce, ký bằng key CLIENT, nộp cert CLIENT vào `/admin` → subject khớp → flag.
 
-->Flag: `NNS{unic0de_subject_c0llisi0n_pwn}`
+-> Flag: `NNS{unic0de_subject_c0llisi0n_pwn}`
 
 Full solve:
 

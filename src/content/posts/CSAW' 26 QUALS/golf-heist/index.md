@@ -163,4 +163,4 @@ Kết quả chạy thực tế (local, flag giả để verify):
 [+] FLAG: csaw{fake_local_flag_verify_123}
 ```
 
-->Flag: `csaw{...}` (flag thật lấy từ biến môi trường `FLAG` của instance online — chạy `exploit.py` với URL server thi đấu)
+-> Flag: `csaw{...}` (flag thật lấy từ biến môi trường `FLAG` của instance online — chạy `exploit.py` với URL server thi đấu)
