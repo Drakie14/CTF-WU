@@ -16,6 +16,10 @@ The file monster like files and flags.
 File: [web_file-monster.tar.gz](https://github.com/Drakie14/Challenges/blob/NNS-CTF/web_file-monster.tar.gz)
 
 ## Solution
+Trang chủ cho upload file, kèm mục gợi ý "phân tích file đã upload bằng MongoDB (user read-only)":
+
+![image](./01-site.png)
+
 App gồm **Bun** (web, port 3000) + **MongoDB 8.2.10** chạy chung một container, share `/tmp`. Flag chỉ tồn tại trong biến môi trường `process.env.FLAG` — không nằm sẵn trong file nào. Ta được cấp tài khoản Mongo **`viewer:viewer`** *read-only* (port 27017, `bindIp: 0.0.0.0`) để "phân tích DB". Lời giải ghép **4 mắt xích**.
 
 ### Bug 1 — `/upload`: ghi file tuỳ ý vào `/tmp` + tự thay FLAG
