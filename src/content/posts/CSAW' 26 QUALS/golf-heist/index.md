@@ -70,6 +70,14 @@ Bảng `WORDS` cũng công khai luôn tại `GET /api/word-table`:
 
 Giải base64 -> được `R1,R2,R3`, chạy lại đúng hàm `enigma()` của đề -> 3 chữ cái -> tra bảng `WORDS` (index `[0],[1],[0]` — cũng lộ qua `GET /api/word-table`) -> ghép thành mật khẩu. Server tự tay đưa hết mọi mảnh ghép; không cần phá mã Enigma gì cả.
 
+Trang `/vault` cho nhập 3 từ này. Nhập đúng mật khẩu (`divot inside xeric` cho instance đang chạy):
+
+![image](./06-vault-filled.png)
+
+Bấm **OPEN VAULT** -> vault mở với quyền `privileged user`, nhưng "special item" (flag) vẫn báo **ADMIN CLEARANCE REQUIRED** — tức đã qua lớp mật khẩu nhưng chưa đủ quyền admin:
+
+![image](./07-vault-result.png)
+
 ### Lớp 2 — Header Injection (Caddy CVE GHSA-7r4p-vjf4-gxv4)
 
 Có mật khẩu, `/api/vault/enter` cho vào tầng "privileged" và gợi ý CVE của caddy. Xem `GET /api/engineer/caddyfile`:
