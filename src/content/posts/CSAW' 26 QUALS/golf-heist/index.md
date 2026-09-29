@@ -56,7 +56,7 @@ async def clubs(req):
 # /balls -> R2 (Rotor II), /bags -> R3 (Rotor III)
 ```
 
-Giải base64 → được `R1,R2,R3`, chạy lại đúng hàm `enigma()` của đề → 3 chữ cái → tra bảng `WORDS` (index `[0],[1],[0]` — cũng lộ qua `GET /api/word-table`) → ghép thành mật khẩu. Server tự tay đưa hết mọi mảnh ghép; không cần phá mã Enigma gì cả.
+Giải base64 -> được `R1,R2,R3`, chạy lại đúng hàm `enigma()` của đề -> 3 chữ cái -> tra bảng `WORDS` (index `[0],[1],[0]` — cũng lộ qua `GET /api/word-table`) -> ghép thành mật khẩu. Server tự tay đưa hết mọi mảnh ghép; không cần phá mã Enigma gì cả.
 
 ### Lớp 2 — Header Injection (Caddy CVE GHSA-7r4p-vjf4-gxv4)
 
@@ -74,11 +74,11 @@ Có mật khẩu, `/api/vault/enter` cho vào tầng "privileged" và gợi ý C
 
 `copy_headers` copy `X-User-*` từ phản hồi auth service xuống backend. **CVE GHSA-7r4p-vjf4-gxv4**: Caddy dính lỗi **không strip header do client gửi lên** trước khi forward. `/auth` không set `X-User-Role`, nên header `X-User-Role: admin` client tự nhét vào được giữ nguyên và backend tin tưởng — đúng như gợi ý *"The caddy doesn't strip what the auth service doesn't set."*
 
-> Bản source chạy thẳng uvicorn (không có Caddy trước), nên header gửi trực tiếp tới FastAPI luôn được nhận. Trên server thật có Caddy nhưng dính CVE nên header vẫn xuyên qua → cùng một exploit chạy được ở cả hai nơi.
+> Bản source chạy thẳng uvicorn (không có Caddy trước), nên header gửi trực tiếp tới FastAPI luôn được nhận. Trên server thật có Caddy nhưng dính CVE nên header vẫn xuyên qua -> cùng một exploit chạy được ở cả hai nơi.
 
 ### Chuỗi khai thác
 
-`clubs/balls/bags` → giải base64 → `R1,R2,R3` → `enigma` → `WORDS` → `PHRASE` → `POST /api/vault/admin-item` với body `{"phrase": "<PHRASE>"}` **và header `X-User-Role: admin`** → nhận flag.
+`clubs/balls/bags` -> giải base64 -> `R1,R2,R3` -> `enigma` -> `WORDS` -> `PHRASE` -> `POST /api/vault/admin-item` với body `{"phrase": "<PHRASE>"}` **và header `X-User-Role: admin`** -> nhận flag.
 
 ```python!
 #!/usr/bin/env python3

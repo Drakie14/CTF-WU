@@ -31,7 +31,7 @@ const txt = (await file.text())
 await Bun.write(path, txt);
 ```
 
-→ Ta tạo được **file không có dấu nháy** trong `/tmp`, và nếu nội dung chứa `FLAG` thì flag thật được nhét thẳng vào file của ta.
+-> Ta tạo được **file không có dấu nháy** trong `/tmp`, và nếu nội dung chứa `FLAG` thì flag thật được nhét thẳng vào file của ta.
 
 ### Bug 2 — mongod `import()` = primitive đọc file phía server
 
@@ -39,7 +39,7 @@ await Bun.write(path, txt);
 
 ### Bug 3 — timing: `$function` không drain, `mapReduce` thì có
 
-Trong `$function`, Promise của `import()` **không bao giờ settle** (không có vòng lặp event) → module không eval. Nhưng trong **`mapReduce` chạy trên ≥2 document**, hàng đợi job của JS **được drain giữa các lần gọi `map`**, và `globalThis` được giữ xuyên suốt query. Vậy chạy `import()` từ mapReduce thì module **eval thật**, side-effect lộ ra ở lần `map` thứ 2 trở đi. (Nhớ upload sẵn ≥2 file để collection `files` có ≥2 doc.)
+Trong `$function`, Promise của `import()` **không bao giờ settle** (không có vòng lặp event) -> module không eval. Nhưng trong **`mapReduce` chạy trên ≥2 document**, hàng đợi job của JS **được drain giữa các lần gọi `map`**, và `globalThis` được giữ xuyên suốt query. Vậy chạy `import()` từ mapReduce thì module **eval thật**, side-effect lộ ra ở lần `map` thứ 2 trở đi. (Nhớ upload sẵn ≥2 file để collection `files` có ≥2 doc.)
 
 ### Bug 4 — exfil không dùng quote bằng regex `.source`
 

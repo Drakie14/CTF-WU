@@ -20,7 +20,7 @@ phpBB **3.3.16**. `seed.php` nhét flag vào một **private message gửi cho `
 
 Bản này dính **[CVE-2026-48611](https://pentest-tools.com/research/phpbb-authentication-bypass)** (auth bypass, vá ở 3.3.17): controller liên kết tài khoản OAuth `ucp.php?mode=login_link` cho phép **chọn auth provider tuỳ ý** qua tham số `auth_provider`, bỏ qua `auth_method=db` của board. Provider **`apache`** uỷ quyền xác thực cho web server — chỉ kiểm tra `PHP_AUTH_USER == username` và `PHP_AUTH_PW != ''`, **không** so mật khẩu với hash.
 
-Ảnh `php:8.2-apache` (mod_php) tự map header `Authorization: Basic` → `PHP_AUTH_*`, còn `login_link_x=1` (nút submit kiểu image) làm dữ liệu login_link khác rỗng để qua cửa. Một request là có session admin:
+Ảnh `php:8.2-apache` (mod_php) tự map header `Authorization: Basic` -> `PHP_AUTH_*`, còn `login_link_x=1` (nút submit kiểu image) làm dữ liệu login_link khác rỗng để qua cửa. Một request là có session admin:
 
 ```bash!
 # 1) Auth bypass -> session admin (Set-Cookie: ..._u=2)

@@ -30,11 +30,11 @@ if (!url || !url.startsWith('https://doc.rust-lang.org')) {   // (!) thiếu d�
 await runBrowser(url);
 ```
 
-Thiếu `/` cuối nên `https://doc.rust-lang.org.<attacker>/` vẫn qua → ép bot mở thẳng **trang attacker**, ta có full JS. (Hint đề: `doc.rust-lang.org` itself is out of scope → phải dùng subdomain kiểu này.)
+Thiếu `/` cuối nên `https://doc.rust-lang.org.<attacker>/` vẫn qua -> ép bot mở thẳng **trang attacker**, ta có full JS. (Hint đề: `doc.rust-lang.org` itself is out of scope -> phải dùng subdomain kiểu này.)
 
 ### Bug 2 — Điều khiển `activateOn` (options.js postMessage)
 
-`web_accessible_resources: ["*"]` + UUID cố định → nhúng được `moz-extension://<uuid>/options.html`. `options.js` **không kiểm tra `e.origin`**, chỉ cần chuỗi *chứa* `https://doc.rust-lang.org/`, rồi lưu **`u.origin`** làm `activateOn`:
+`web_accessible_resources: ["*"]` + UUID cố định -> nhúng được `moz-extension://<uuid>/options.html`. `options.js` **không kiểm tra `e.origin`**, chỉ cần chuỗi *chứa* `https://doc.rust-lang.org/`, rồi lưu **`u.origin`** làm `activateOn`:
 
 ```js!
 window.addEventListener('message', (e) => {         // không check origin
@@ -44,12 +44,12 @@ window.addEventListener('message', (e) => {         // không check origin
 //               browser.storage.local.set({ activateOn: u.origin });
 ```
 
-- Gửi `"<OUR_ORIGIN>/https://doc.rust-lang.org/"` → `activateOn = OUR_ORIGIN` (tiêm `cs.js` vào trang attacker).
-- Gửi `"https://doc.rust-lang.org/"` → reset để tiêm `cs.js` vào trang docs thật.
+- Gửi `"<OUR_ORIGIN>/https://doc.rust-lang.org/"` -> `activateOn = OUR_ORIGIN` (tiêm `cs.js` vào trang attacker).
+- Gửi `"https://doc.rust-lang.org/"` -> reset để tiêm `cs.js` vào trang docs thật.
 
 ### Bug 3 — Bypass js-xss bằng import map (ghi `previous` thô)
 
-`cs.js` lưu `previous = window[nonce](location.href)`, với `window[nonce]` là default export của `http://localhost:3000/jsxss.js` (đáng lẽ là `filterXSS`). `nonce` ngẫu nhiên nhưng **specifier import là URL tuyệt đối cố định** → đặt sẵn **import map** trong top frame để remap:
+`cs.js` lưu `previous = window[nonce](location.href)`, với `window[nonce]` là default export của `http://localhost:3000/jsxss.js` (đáng lẽ là `filterXSS`). `nonce` ngẫu nhiên nhưng **specifier import là URL tuyệt đối cố định** -> đặt sẵn **import map** trong top frame để remap:
 
 ```html!
 <script type="importmap">
@@ -58,9 +58,9 @@ window.addEventListener('message', (e) => {         // không check origin
 </script>
 ```
 
-→ `default` không còn là `filterXSS` mà là hàm trả HTML thô → `previous` chứa payload chưa qua sanitizer (background `updateLastUrl` cũng không check `sender`).
+-> `default` không còn là `filterXSS` mà là hàm trả HTML thô -> `previous` chứa payload chưa qua sanitizer (background `updateLastUrl` cũng không check `sender`).
 
-### Bug 4 — innerHTML sink → XSS trên `doc.rust-lang.org`
+### Bug 4 — innerHTML sink -> XSS trên `doc.rust-lang.org`
 
 Khi `cs.js` chạy trên trang docs thật:
 
@@ -68,7 +68,7 @@ Khi `cs.js` chạy trên trang docs thật:
 elm.innerHTML = 'Previous: ' + previous;   // (!) SINK
 ```
 
-`<img onerror>` do content script tạo là node DOM thật của trang → inline handler **chạy trong world của `doc.rust-lang.org`**. Trang ở `/stable/std/` nên `document.cookie` chứa cookie `flag` (non-httpOnly) → đọc và exfil về server attacker.
+`<img onerror>` do content script tạo là node DOM thật của trang -> inline handler **chạy trong world của `doc.rust-lang.org`**. Trang ở `/stable/std/` nên `document.cookie` chứa cookie `flag` (non-httpOnly) -> đọc và exfil về server attacker.
 
 ### Luồng hoàn chỉnh
 

@@ -66,10 +66,10 @@ Trong JWT có `"x5c":[certificate]`, với `x5c` viết tắt cho [X.509 certifi
 Để đọc được thông tin của X.509 certificate, ta cần phải decode từ Base64-> DER và đọc DER
 Dùng OpenSSL:
 ```Bash!
-# base64_x5c → DER
+# base64_x5c -> DER
 echo 'BASE64_X5C' | base64 -d > cert.der
 
-# DER → đọc X.509
+# DER -> đọc X.509
 openssl x509 -inform DER -in cert.der -text -noout
 ```
 
@@ -102,7 +102,7 @@ Muốn xác nhận cryptographically, ta cần kiểm tra certificate có thể 
 
 Để kiểm tra certificate có tự kí không, ta cần phải chuyển từ DER về PEM và verify
 ```bash!
-# DER → PEM
+# DER -> PEM
 openssl x509 -inform DER -in cert.der -out cert.pem
 
 # Verify

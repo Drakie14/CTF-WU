@@ -29,9 +29,9 @@ Kết quả trả về là 404.
 Ta quay trở lại với việc làm thủ công và đọc trang web, phát hiện được đoạn văn đáng ngờ `The obedient have always been answered first, and the answer issued to them is a catalogue, organised alphabetically, of every place the atrium is not. The catalogue is, by long custom, kept at the front gate, in a small text file the house permits to be read by anyone who knows to ask for it. It is, of course, a complete list.` 
 Trong challenge này có hai dấu hiệu kết hợp:
 1. `the obedient`
-→ gợi đến crawler/bot.
+-> gợi đến crawler/bot.
 3. `at the front gate, in a small text file`
-→ một file text ở root/front gate.
+-> một file text ở root/front gate.
 
 Vậy ta phải truy cập [/robots.txt/](https://hollow-houses.ctf.csaw.io/robots.txt)
 ### Kẻ phục tùng (The obedient)
@@ -123,10 +123,10 @@ Khi xem trang, ta nhận thấy mỗi dòng câu đều có những khoảng cá
 
 Ta liên tưởng đến mật mã Morse:
 - Trong mỗi dòng:
-    1. 1 space giữa hai từ → `.`
-    2. 3 spaces → `-`
+    1. 1 space giữa hai từ -> `.`
+    2. 3 spaces -> `-`
 - Mỗi dòng tương ứng với một ký tự Morse
-- Dòng trống → ngăn cách các từ
+- Dòng trống -> ngăn cách các từ
 
 Decode toàn bộ ta thu được kết quả sau 
 `THE FLAG LIES WAITING IN THE SANCTUM`

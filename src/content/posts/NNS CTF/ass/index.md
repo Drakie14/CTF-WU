@@ -41,9 +41,9 @@ prep("MA" + "ẞ" + "A") == " massa "   # 'MA' + ẞ + 'A'
 
 Hai tên khác nhau ở mức Python string (qua được kiểm tra trùng tên `issued_names`) nhưng bằng nhau khi so subject. Vậy:
 
-1. Đăng ký `ADMIN` tên `MASSA` → chiếm slot admin (không cần private key).
-2. Đăng ký `CLIENT` tên `MAẞA` → nhận private key, subject đụng độ admin.
-3. Lấy nonce, ký bằng key CLIENT, nộp cert CLIENT vào `/admin` → subject khớp → flag.
+1. Đăng ký `ADMIN` tên `MASSA` -> chiếm slot admin (không cần private key).
+2. Đăng ký `CLIENT` tên `MAẞA` -> nhận private key, subject đụng độ admin.
+3. Lấy nonce, ký bằng key CLIENT, nộp cert CLIENT vào `/admin` -> subject khớp -> flag.
 
 -> Flag: `NNS{unic0de_subject_c0llisi0n_pwn}`
 

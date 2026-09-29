@@ -25,7 +25,7 @@ const f = Bun.file('./tickets/' + ticket);   // (!) nối thẳng input vào pat
 return new Response(await f.text(), { headers: { 'Content-Type': 'application/json' } });
 ```
 
-`pnr` được nối thẳng vào đường dẫn file mà **không lọc `../`** → **Path Traversal**. Ràng buộc 6 ký tự chỉ nằm ở client nên ta gọi thẳng API để bỏ qua.
+`pnr` được nối thẳng vào đường dẫn file mà **không lọc `../`** -> **Path Traversal**. Ràng buộc 6 ký tự chỉ nằm ở client nên ta gọi thẳng API để bỏ qua.
 
 WORKDIR container là `/app` (xem `Dockerfile`), nên `./tickets/` = `/app/tickets/`. Leo lên 2 cấp là tới `/`, mà đề cho biết flag ở `/flag.txt`:
 
