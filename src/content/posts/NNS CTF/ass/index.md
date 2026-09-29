@@ -3,7 +3,12 @@ title: ASS
 date: 2026-09-27
 ctf: NNS CTF
 category: web
-difficulty: easy
+difficulty: medium
+tags:
+  - PKI
+  - Certificate
+  - Ed25519
+  - ASN.1
 ---
 
 ## Đề bài 

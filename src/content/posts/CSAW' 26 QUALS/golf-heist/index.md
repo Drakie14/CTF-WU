@@ -4,6 +4,11 @@ date: 2026-09-27
 ctf: CSAW' 26 QUALS
 category: web
 difficulty: hard
+tags:
+  - FastAPI
+  - Header Injection
+  - CVE
+  - Enigma
 ---
 
 ## Đề bài

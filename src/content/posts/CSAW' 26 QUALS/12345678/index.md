@@ -3,9 +3,11 @@ title: 12345678!
 date: 2026-09-27
 ctf: CSAW' 26 QUALS
 category: misc
-difficulty: hard
+difficulty: easy
 tags:
-  - Misc
+  - Steganography
+  - Audio
+  - Spectrogram
 ---
 
 ## Đề bài 

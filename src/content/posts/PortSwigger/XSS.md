@@ -3,6 +3,10 @@ title: XSS
 category: web
 tags:
   - XSS
+  - Reflected XSS
+  - Stored XSS
+  - DOM XSS
+  - PortSwigger
 ---
 
 # Introduction

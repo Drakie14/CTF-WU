@@ -3,7 +3,13 @@ title: perchance
 date: 2026-09-27
 ctf: NNS CTF
 category: web
-difficulty: easy
+difficulty: hard
+tags:
+  - Client-Side
+  - XSS
+  - Browser Extension
+  - postMessage
+  - Import Map
 ---
 
 ## Đề bài 

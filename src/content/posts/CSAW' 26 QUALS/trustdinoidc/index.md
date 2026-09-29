@@ -6,7 +6,9 @@ category: web
 difficulty: hard
 tags:
   - JWT
-  - leaf certificate
+  - OIDC
+  - x5c
+  - Leaf Certificate
 ---
 
 ## Đề bài

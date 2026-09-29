@@ -39,6 +39,7 @@ const hasMore = shown < total;
     <nav class="sb-nav" aria-label="Trang">
       <a href="/about/">About</a>
       <a href="/archive/">Archive</a>
+      <a class="sb-admin" href="/admin/" title="Mở trang quản trị (Sveltia CMS)">Admin</a>
     </nav>
   </header>
 
@@ -193,6 +194,15 @@ const hasMore = shown < total;
   .sb-nav a:hover {
     color: var(--text);
     background: rgb(48 30 64 / 0.8);
+  }
+  .sb-nav a.sb-admin {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .sb-nav a.sb-admin:hover {
+    color: #fff;
+    background: var(--accent);
   }
 
   .sb-stats {

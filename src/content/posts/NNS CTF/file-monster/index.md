@@ -3,10 +3,11 @@ title: File monster
 date: 2026-09-27
 ctf: NNS CTF
 category: misc
-difficulty: easy
+difficulty: hard
 tags:
   - MongoDB
   - SSJI
+  - NoSQL
 ---
 
 ## Đề bài

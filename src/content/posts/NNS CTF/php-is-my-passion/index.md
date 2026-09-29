@@ -3,9 +3,12 @@ title: PHP is my passion
 date: 2026-09-27
 ctf: NNS CTF
 category: web
-difficulty: easy
+difficulty: medium
 tags:
   - phpBB
+  - CVE-2026-48611
+  - Auth Bypass
+  - OAuth
 ---
 
 ## Đề bài
