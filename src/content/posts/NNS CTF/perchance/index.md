@@ -19,7 +19,13 @@ File: [web_perchance.tar.gz](https://github.com/Drakie14/Challenges/blob/NNS-CTF
 >Hint: `doc.rust-lang.org` itself is out of scope!
 
 ## Solution
+Trang chủ chỉ có đúng một ô nhập URL để gửi cho bot ghé thăm — đây là điểm vào của bài:
+
+![image](./01-site.png)
+
 Đây là challenge **client-side / browser-extension XSS**. Bot (Playwright + Firefox) mang sẵn cookie `flag` gắn với `doc.rust-lang.org` (path `/stable/std/`, **không** `httpOnly`). Ta phải chạy JS trong ngữ cảnh `doc.rust-lang.org` để đọc `document.cookie` rồi exfil. Chuỗi khai thác ghép **4 bug**.
+
+> Vì flag được **exfil về webhook của attacker** (bot chạy phía server, không phải trình duyệt của ta), bước lấy flag không hiện trên màn hình — ta gửi URL trang khai thác vào ô trên rồi đọc cookie `flag` ở webhook sau ~40s.
 
 ### Bug 1 — Domain-prefix confusion (server)
 
