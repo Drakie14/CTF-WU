@@ -46,9 +46,20 @@ const aes256CipherValues = {
 
 Vậy `security phía client` là gì? Về cơ bản, nó **không tồn tại**: mọi thứ gửi tới trình duyệt (JS, key, ciphertext) thì ta đều đọc và chạy lại được. Việc không in flag ra không làm nó an toàn hơn.
 
--> Cách nhanh nhất ngay trên trình duyệt là mở DevTools -> Console, gọi lại chính hàm `decryptFlag()` của trang (sửa để `return`/`console.log` kết quả). Flag hiện ra:
+Lưu ý: gọi thẳng `decryptFlag()` **không** ra flag vì hàm này cố tình không `return`/`log`, và cú pháp kiểu `decryptFlag() return` sẽ báo `SyntaxError`. Ta mở DevTools -> Console rồi **tự chạy lại đúng phần giải mã** (các biến `aes256CipherValues` là global nên gọi trực tiếp được), hàm trả về flag:
 
-![image](./03-flag-revealed.png)
+```javascript!
+(async () => {
+  const v = aes256CipherValues;
+  const keyMat = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v.key));
+  const key = await crypto.subtle.importKey("raw", keyMat, { name: "AES-GCM" }, false, ["decrypt"]);
+  const b = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const ct = b(v.ciphertext), tag = b(v.tag);
+  const data = new Uint8Array(ct.length + tag.length); data.set(ct); data.set(tag, ct.length);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b(v.iv) }, key, data);
+  return new TextDecoder().decode(pt);   // -> "FirstFlag{theQuickBrownFoxIsTired}"
+})();
+```
 
 Hoặc ta tự giải bằng Python, lưu ý `GCM` cần `tag` để verify:
 ```python!
