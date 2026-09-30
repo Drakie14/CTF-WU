@@ -59,9 +59,19 @@ Hai bước đăng ký làm thẳng bằng **form trên trang**.
 
 ![image](./03-form-client.png)
 
-**Bước 3 — Ký & lấy flag.** Còn lại là phần script: xin `nonce`, ký bằng private key CLIENT (Ed25519), rồi `POST /admin` bằng cert CLIENT. Server chuẩn hoá subject thấy khớp cert ADMIN -> trả flag:
+Ba bước xác thực còn lại làm ngay trong **DevTools Console** — không cần ký ở ngoài, vì WebCrypto có sẵn `Ed25519`.
 
-![image](./04-terminal-flag.png)
+**Bước 3 — Xin nonce.** `GET /auth/nonce` trả một chuỗi ngẫu nhiên (dùng một lần) mà ta phải ký:
+
+![image](./05-step-nonce.png)
+
+**Bước 4 — Ký nonce.** Import `private_key` của CLIENT thành khoá `Ed25519` rồi ký chuỗi `nonce`, lấy chữ ký dạng base64. Toàn bộ chạy bằng `crypto.subtle.sign` **ngay trong trình duyệt**:
+
+![image](./06-step-sign.png)
+
+**Bước 5 — Nộp /admin.** `POST /admin` với **cert CLIENT** + `nonce` + `signature`. Chữ ký hợp lệ (đúng khoá CLIENT), và khi server chuẩn hoá subject thì cert CLIENT (`MAẞA`) **khớp** cert ADMIN (`MASSA`) -> trả flag:
+
+![image](./07-step-admin.png)
 
 -> Flag: `NNS{unic0de_subject_c0llisi0n_pwn}`
 
