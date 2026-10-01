@@ -19,7 +19,11 @@ What's your forecast looking like?
 http://34.116.80.78:9143/
 
 ## Solution
-Truy cập vào lab, ta thấy một trang SvelteKit cho xem "nhiệt độ vỏ tàu" (hull temperature) của một hạm đội tàu vũ trụ. Bấm vào tên một con tàu thì trang hiện ra nhiệt độ của nó:
+Truy cập vào lab, ta thấy:
+
+![image](./01-home.png)
+
+Một trang SvelteKit cho xem "nhiệt độ vỏ tàu" (hull temperature) của một hạm đội tàu vũ trụ. Bấm vào tên một con tàu thì trang hiện ra nhiệt độ của nó:
 
 > *The fleet lives in the cloud now. Every craft phones home to the ground station to report how it's doing.*
 
@@ -57,7 +61,9 @@ Nghĩa là backend sẽ **đi fetch cái URL nằm trong field `resolver`** mà 
 
 ### "Nhiệt độ" thật ra là length oracle
 
-Vấn đề: server fetch URL của ta nhưng **không trả về nội dung** — nó chỉ trả về một con số "nhiệt độ". Vậy con số đó từ đâu ra? Ta thử trỏ `resolver` vào vài URL có độ dài body biết trước:
+![image](./02-reading.png)
+
+Vấn đề: server fetch URL của ta nhưng **không trả về nội dung** — nó chỉ trả về một con số "nhiệt độ" như `3604.5°C` ở trên. Vậy con số đó từ đâu ra? Ta thử trỏ `resolver` vào vài URL có độ dài body biết trước:
 
 | resolver | trả về |
 |---|---|
