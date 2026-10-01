@@ -15,7 +15,7 @@ tags:
 ## Đề bài
 A collaborative research portal where every team keeps its own private notes. You are just an ordinary member — but the admin's notes are the ones worth reading.
 
-`https://shape-of-query.pointeroverflowctf.com/`
+https://shape-of-query.pointeroverflowctf.com/
 
 Flag Format: `POCTF{...}`
 
