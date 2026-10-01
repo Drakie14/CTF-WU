@@ -16,7 +16,7 @@ Nothing about this place screams importance. And yet... it's exactly where the t
 
 Flag Format: `FirstFlag{city_country}` — ví dụ `FirstFlag{newyork_unitedstates}`
 ## Solution
-Truy cập vào lab, ta được cho một tấm ảnh chụp góc phố và cần xác định `city_country` nơi ảnh được chụp. Đây là dạng `geolocation` nên không có payload hay script để "giải" — ta phải **quan sát các manh mối trong ảnh** rồi suy luận.
+Truy cập vào challenge, ta được cho một tấm ảnh chụp góc phố và cần xác định `city_country` nơi ảnh được chụp. Đây là dạng `geolocation` nên không có payload hay script để "giải" — ta phải **quan sát các manh mối trong ảnh** rồi suy luận.
 
 ![image](./original.png)
 

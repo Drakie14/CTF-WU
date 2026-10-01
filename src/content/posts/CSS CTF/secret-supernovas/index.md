@@ -19,7 +19,7 @@ http://34.116.80.78:9982/
 
 Flag Format: `CSSCTF{...}`
 ## Solution
-Truy cập vào lab, ta thấy một ứng dụng `SvelteKit` tên **Star City Observatory**, vào `/login` thì trang còn "tốt bụng" cho luôn tài khoản mặc định `cadet/star`:
+Truy cập vào challenge, ta thấy một ứng dụng `SvelteKit` tên **Star City Observatory**, vào `/login` thì trang còn "tốt bụng" cho luôn tài khoản mặc định `cadet/star`:
 
 ![image](./01-login.png)
 

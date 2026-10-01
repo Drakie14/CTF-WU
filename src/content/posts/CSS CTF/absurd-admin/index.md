@@ -17,7 +17,7 @@ https://first-flag-absurd-admin.netlify.app/
 
 Flag Format: `FirstFlag{<flag>}`
 ## Solution
-Truy cập vào lab, ta thấy trang chủ yêu cầu đăng nhập để xem thông tin tài khoản:
+Truy cập vào challenge, ta thấy trang chủ yêu cầu đăng nhập để xem thông tin tài khoản:
 
 ![image](./01-home.png)
 

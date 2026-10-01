@@ -17,7 +17,7 @@ https://first-flag-secret-sentences.netlify.app/
 
 Flag Format: `FirstFlag{<flag>}`
 ## Solution
-Truy cập vào lab, ta thấy trang chỉ hiện đúng một dòng `nothing to see here`:
+Truy cập vào challenge, ta thấy trang chỉ hiện đúng một dòng `nothing to see here`:
 
 ![image](./01-empty-page.png)
 

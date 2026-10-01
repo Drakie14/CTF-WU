@@ -17,7 +17,7 @@ Find the Tresure!
 
 Flag Format: `FirstFlag{flag}`
 ## Solution
-Truy cập vào lab, ta được cho một tấm ảnh `1.jpg`:
+Truy cập vào challenge, ta được cho một tấm ảnh `1.jpg`:
 
 ![image](./original.jpg)
 

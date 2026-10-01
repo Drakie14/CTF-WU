@@ -18,7 +18,7 @@ http://34.116.80.78:9981/
 
 Flag Format: `CSSCTF{...}`
 ## Solution
-Truy cập vào lab, ta thấy một trang tĩnh rất "hào nhoáng": tên `STAR1001`, một dòng chữ `Welcome to Star City` nhấp nháy với hiệu ứng glitch, phía dưới là đường chân trời thành phố đầy sao.
+Truy cập vào challenge, ta thấy một trang tĩnh rất "hào nhoáng": tên `STAR1001`, một dòng chữ `Welcome to Star City` nhấp nháy với hiệu ứng glitch, phía dưới là đường chân trời thành phố đầy sao.
 
 ![image](./01-home.png)
 
