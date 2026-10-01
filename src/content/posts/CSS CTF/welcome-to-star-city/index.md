@@ -20,6 +20,8 @@ Flag Format: `CSSCTF{...}`
 ## Solution
 Truy cập vào lab, ta thấy một trang tĩnh rất "hào nhoáng": tên `STAR1001`, một dòng chữ `Welcome to Star City` nhấp nháy với hiệu ứng glitch, phía dưới là đường chân trời thành phố đầy sao.
 
+![image](./01-home.png)
+
 Đề bài nhấn mạnh *"more to be seen than meets the eye"* — tức là thứ ta **nhìn thấy** trên màn hình không phải tất cả. Đây là dấu hiệu kinh điển của một bài `source code review`: bí mật nằm trong chính những file mà trình duyệt tải về. Ta xem source HTML thì thấy trang chỉ có đúng một `element` nội dung và nạp thêm một file CSS, đoạn cần lưu ý:
 ```html!
 <h1 data-text="Welcome to Star City">Welcome to Star City</h1>

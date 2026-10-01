@@ -20,12 +20,19 @@ http://34.116.80.78:9982/
 Flag Format: `CSSCTF{...}`
 ## Solution
 Truy cập vào lab, ta thấy một ứng dụng `SvelteKit` tên **Star City Observatory**, vào `/login` thì trang còn "tốt bụng" cho luôn tài khoản mặc định `cadet/star`:
+
+![image](./01-login.png)
+
 ```html!
 <title>Log in · Star City Observatory</title>
 ...
 <p class="hint">Need an account? <code>cadet/star</code>.</p>
 ```
-Đăng nhập xong ta được cấp một cookie `session`. Mò quanh site thì thấy mọi dữ liệu (stars, galaxies, người sở hữu) đều được lấy về qua một endpoint `/graphql`. Thử `GET` thẳng vào đó:
+Đăng nhập xong ta được cấp một cookie `session`, vào trong là một danh mục các ngôi sao — mỗi `Star` có tên, galaxy, class, magnitude:
+
+![image](./02-app.png)
+
+Mò quanh site thì thấy mọi dữ liệu (stars, galaxies, người sở hữu) đều được lấy về qua một endpoint `/graphql`. Thử `GET` thẳng vào đó:
 ```bash!
 curl http://34.116.80.78:9982/graphql
 # -> {"errors":[{"message":"Must provide query string." ...}]}
