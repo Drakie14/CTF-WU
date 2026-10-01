@@ -25,7 +25,6 @@ const pageHref = (n: number) => (n === 1 ? '/archive/' : `/archive/page/${n}/`);
         <th scope="col">Write-up</th>
         <th scope="col">CTF</th>
         <th scope="col">Category</th>
-        <th scope="col" class="num">Points</th>
       </tr>
     </thead>
     <tbody>
@@ -40,7 +39,6 @@ const pageHref = (n: number) => (n === 1 ? '/archive/' : `/archive/page/${n}/`);
             </td>
             <td>{p.data.ctf || '—'}</td>
             <td>{categoryLabel(p.data.category) || '—'}</td>
-            <td class="num">{p.data.points ?? '—'}</td>
           </tr>
         ))
       }
@@ -117,11 +115,6 @@ const pageHref = (n: number) => (n === 1 ? '/archive/' : `/archive/page/${n}/`);
     font-family: var(--font-mono);
     font-size: 0.8rem;
     white-space: nowrap;
-  }
-  .num {
-    text-align: right;
-    color: var(--points);
-    font-family: var(--font-mono);
   }
   .pager {
     display: flex;
