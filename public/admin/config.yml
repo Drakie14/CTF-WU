@@ -39,7 +39,7 @@ slug:
   sanitize_replacement: '-'
 
 output:
-  # Không ghi field trống (ctf: '', points: null...) vào frontmatter.
+  # Không ghi field trống (ctf: '', cover: null...) vào frontmatter.
   omit_empty_optional_fields: true
   yaml:
     indent_size: 2
@@ -72,7 +72,7 @@ collections:
     identifier_field: title
     summary: '{{title}}'
     sortable_fields:
-      fields: [date, title, ctf, category, difficulty, points]
+      fields: [date, title, ctf, category, difficulty]
       default:
         field: date
         direction: descending
@@ -125,12 +125,6 @@ collections:
         required: false
         dropdown_threshold: 0
         options: [easy, medium, hard, insane]
-      - name: points
-        label: Points
-        widget: number
-        value_type: int
-        min: 0
-        required: false
       - name: tags
         label: Tags
         label_singular: tag

@@ -19,7 +19,7 @@ export function rowHtml(item: SidebarItem, excerpt?: string): string {
     `<span class="row-sub">${sub}</span>` +
     // Excerpt của Pagefind đã escape sẵn, chỉ chứa <mark> quanh từ khóa.
     (excerpt ? `<span class="row-excerpt">${excerpt}</span>` : '') +
-    `</span><span class="row-side">${item.points !== null ? `<span class="pts"><b>${item.points}</b> pts</span>` : ''}` +
+    `</span><span class="row-side">` +
     `<span class="row-meta"><time datetime="${esc(item.iso)}">${esc(item.date)}</time>${item.difficulty ? ` · ${esc(item.difficulty)}` : ''}</span>` +
     `</span></a></li>`
   );

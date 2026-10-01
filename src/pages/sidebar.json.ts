@@ -15,7 +15,6 @@ export interface SidebarItem {
   category: string;
   color: string;
   tags: string[];
-  points: number | null;
   date: string;
   iso: string;
   difficulty: string;
@@ -32,7 +31,6 @@ export const GET: APIRoute = async () => {
     category: p.data.category,
     color: categoryColor(p.data.category),
     tags: p.data.tags.slice(0, 3),
-    points: p.data.points,
     date: formatDisplayDate(p.data.date),
     iso: formatIsoDate(p.data.date),
     difficulty: p.data.difficulty,

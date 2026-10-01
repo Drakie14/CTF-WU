@@ -9,7 +9,7 @@ interface Props {
 }
 
 const { post, current = false } = Astro.props;
-const { title, ctf, tags, points, date, difficulty, category } = post.data;
+const { title, ctf, tags, date, difficulty, category } = post.data;
 const unsorted = isUnsorted(post);
 const color = categoryColor(category);
 ---
@@ -33,7 +33,6 @@ const color = categoryColor(category);
       </span>
     </span>
     <span class="row-side">
-      {points !== null && <span class="pts"><b>{points}</b> pts</span>}
       <span class="row-meta">
         <time datetime={formatIsoDate(date)}>{formatDisplayDate(date)}</time>{difficulty && <> · {difficulty}</>}
       </span>

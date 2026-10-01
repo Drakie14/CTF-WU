@@ -12,13 +12,12 @@ interface Props {
 }
 
 const { post, tags, ctfs } = Astro.props;
-const { title, ctf, category, difficulty, points, date, readingTime } = post.data;
+const { title, ctf, category, difficulty, date, readingTime } = post.data;
 ---
 
 <header class="art-head">
   <div class="art-title-row">
     <h1 class="art-title" data-pagefind-meta="title">{title}</h1>
-    {points !== null && <p class="art-points" data-pagefind-ignore><b>{points}</b> pts</p>}
   </div>
   <div class="art-meta" data-pagefind-ignore>
     {ctf && <a class="art-ctf" href={`/ctf/${ctfs.slugOf(ctf)}/`}>{ctf}</a>}
@@ -68,18 +67,6 @@ const { title, ctf, category, difficulty, points, date, readingTime } = post.dat
     line-height: 1.25;
     color: var(--text);
     overflow-wrap: anywhere;
-  }
-  .art-points {
-    flex: none;
-    margin: 0.2rem 0 0;
-    font-size: 1.05rem;
-    color: var(--text-soft);
-    white-space: nowrap;
-  }
-  .art-points b {
-    font-size: 1.7rem;
-    font-weight: 600;
-    color: var(--points);
   }
   .art-meta {
     display: flex;
