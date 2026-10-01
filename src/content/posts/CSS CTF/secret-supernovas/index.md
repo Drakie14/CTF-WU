@@ -15,7 +15,7 @@ tags:
 ## Đề bài
 The Star City Observatory keeps a catalogue of stars, their galaxies, and their owners. Some records are more private than others.
 
-`http://34.116.80.78:9982/`
+http://34.116.80.78:9982/
 
 Flag Format: `CSSCTF{...}`
 ## Solution
