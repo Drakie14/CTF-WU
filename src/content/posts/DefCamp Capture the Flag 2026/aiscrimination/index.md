@@ -1,5 +1,5 @@
 ---
-title: AIscrimination - Inclusion Design System
+title: AIscrimination
 date: 2026-09-19
 ctf: DefCamp Capture the Flag 2026
 category: web
@@ -8,7 +8,7 @@ tags:
   - Web
   - CSS Injection
   - LFI
-  - "@import"
+  - '@import'
 ---
 
 ## Đề bài
