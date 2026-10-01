@@ -14,7 +14,7 @@ tags:
 ## Đề bài
 Welcome to Star City. Home of stars galore. But is there more to be seen than meets the eye?
 
-`http://34.116.80.78:9981/`
+http://34.116.80.78:9981/
 
 Flag Format: `CSSCTF{...}`
 ## Solution
