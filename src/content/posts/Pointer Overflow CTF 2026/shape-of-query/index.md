@@ -19,7 +19,7 @@ A collaborative research portal where every team keeps its own private notes. Yo
 
 Flag Format: `POCTF{...}`
 
-> Flag của bài này **gắn theo team/session**: nó nhúng `cid`, `team_id` và `nonce` của token ta dùng. Token khác → flag khác. Flag dưới đây là kết quả thật lấy từ server với token `SHAPE1.454.81.JCLO26Y346U52HPX.1790536083.NONG6D72XUWHJOTVT5JKOI5GQR`.
+> Flag của bài này **gắn theo team/session**: nó nhúng `cid`, `team_id` và `nonce` của token ta dùng. Token khác → flag khác. Flag dưới đây là kết quả thật lấy từ server với token `SHAPE1.454.81.JCLO26Y346U52HPX.1790837303.J6V5R3WPZTOJ5ZQ43Z6GBBXTQK`.
 
 ## Solution
 Truy cập vào lab, ta thấy một API **GraphQL** với chủ đề *"Collaborative Research Portal"*. Ngay cái tên challenge — **"Shape of Query"** — đã là một gợi ý khá lộ liễu: *hình dạng của truy vấn quyết định dữ liệu mà ta chạm tới được*. Cứ ghi nhớ câu này, nó chính là chìa khoá.
@@ -40,9 +40,12 @@ JAR="$(mktemp)"
 
 curl -s -c "$JAR" -X POST "$BASE/session/exchange" \
      -H "Content-Type: application/json" \
-     --data '{"token":"SHAPE1.454.81.JCLO26Y346U52HPX.1790536083.NONG6D72XUWHJOTVT5JKOI5GQR"}'
+     --data '{"token":"SHAPE1.454.81.JCLO26Y346U52HPX.1790837303.J6V5R3WPZTOJ5ZQ43Z6GBBXTQK"}'
 ```
-Server set cho ta một cookie `session` (Flask signed cookie). Decode phần base64 ra thì thấy:
+Server trả `{"ok":true,"team_id":454}` và set cho ta một cookie `session` (Flask signed cookie):
+
+![image](./terminal-exchange.png)
+ Decode phần base64 ra thì thấy:
 ```json!
 {"cid":81,"nonce":"JCLO26Y346U52HPX","team_id":454}
 ```
@@ -163,6 +166,9 @@ curl -s -b "$JAR" -X POST "$BASE/graphql" \
   ]}}
 }
 ```
+
+![image](./terminal-flag.png)
+
 Lần này lớp phân quyền **không tồn tại** trên con đường vòng. Danh sách `members` hiện ra đầy đủ, và `privateNotes` của phần tử có role `ADMIN` (`admin_454`) chính là flag — đúng field mà cửa chính `user(id:"admin_454")` vừa phũ phàng trả về `null`, nay ta đọc được chỉ bằng cách đi qua `team { members }`.
 
 Đây chính là phiên bản GraphQL của [Broken Object/Field Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/) (BOLA/BFLA, thuộc OWASP API Security Top 10): cùng một field `privateNotes`, nhưng có **hai con đường** tới nó (`Query.user` và `Team.members`), tác giả chỉ vá đúng một cửa.
