@@ -177,14 +177,14 @@ print(f"\n[+] FLAG: {body['flag']}\n" if st == 200 and "flag" in body
       else json.dumps(body, indent=2))
 ```
 
-Kết quả chạy thực tế (local, flag giả để verify):
+Kết quả chạy thực tế (local, dựng từ source chính thức CSAW):
 
 ```!
-[*] Leaked rotors: R1=6 R2=3 R3=4
-[+] Vault phrase: 'links uphill rough'
+[*] Leaked rotors: R1=6 R2=24 R3=13
+[+] Vault phrase: 'zone knoll caddy'
 [*] /api/vault/admin-item -> HTTP 200
 
-[+] FLAG: csaw{fake_local_flag_verify_123}
+[+] FLAG: csaw{el3gant_sw1ng_n3ver_c4ught}
 ```
 
 Toàn bộ chuỗi khai thác cũng làm được **hoàn toàn trong trình duyệt**, không cần chạy lệnh ngoài: mở DevTools -> Console và dán đoạn tự-chứa dưới (fetch rotor từ header -> tính `enigma` -> `POST` kèm header injection):
@@ -214,8 +214,8 @@ Console cho thấy 3 request `418 I'm a Teapot` (rò rỉ rotor qua header) rồ
 
 ![image](./04-console.png)
 
-:::warning
-Bản source công khai **không kèm flag thật** — flag thật do BTC bơm qua biến môi trường `FLAG` trên server thi đấu (giải đã kết thúc, không còn instance). Vì vậy ảnh/kết quả bên dưới chạy **local với flag demo** `csaw{fake_local_flag_verify_123}` để kiểm chứng exploit chạy đúng; chỗ này trên server thật sẽ là flag thật.
+:::info
+Giải đã kết thúc, không còn instance. Các kết quả/ảnh ở trên được chạy **local** bằng chính source công khai mà BTC phát hành ([osirislab/CSAW-CTF-2026-Quals-Public](https://github.com/osirislab/CSAW-CTF-2026-Quals-Public/tree/main/web/golf-heist)) — trong `app/main.py` flag được hardcode đúng bằng flag thật của đề, nên exploit cho ra chính xác flag dưới đây.
 :::
 
--> Flag (demo local): `csaw{fake_local_flag_verify_123}`
+-> Flag: `csaw{el3gant_sw1ng_n3ver_c4ught}`
