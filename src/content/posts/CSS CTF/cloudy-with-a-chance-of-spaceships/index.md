@@ -19,11 +19,11 @@ What's your forecast looking like?
 http://34.116.80.78:9143/
 
 ## Solution
-Truy cập vào lab, ta thấy:
+Truy cập vào challenge, ta thấy một trang SvelteKit cho xem "nhiệt độ vỏ tàu" (hull temperature) của một hạm đội tàu vũ trụ:
 
 ![image](./01-home.png)
 
-Một trang SvelteKit cho xem "nhiệt độ vỏ tàu" (hull temperature) của một hạm đội tàu vũ trụ. Bấm vào tên một con tàu thì trang hiện ra nhiệt độ của nó:
+Bấm vào tên một con tàu thì trang hiện ra nhiệt độ của nó:
 
 > *The fleet lives in the cloud now. Every craft phones home to the ground station to report how it's doing.*
 
