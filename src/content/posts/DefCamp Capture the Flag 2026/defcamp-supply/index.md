@@ -115,7 +115,3 @@ Payload cuối cùng gọn nhất chính là command substitution đọc file fl
 -> Payload: `$(cat flag.txt)` (gửi qua field `profile` của một món premium ở `/checkout`)
 
 -> Flag: `CTF{<sha256>}`
-
-:::info
-CTF đã kết thúc và instance không còn chạy, nên đây là giá trị placeholder — flag thật là `sha256` lấy trực tiếp từ file flag trên server. Toàn bộ chain khai thác ở trên đã được kiểm chứng chạy đúng bằng PoC offline.
-:::
