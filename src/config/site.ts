@@ -6,12 +6,17 @@ export const SITE = {
   name: 'CTF Write-ups',
   shortName: 'CTF//WU',
   description: 'CTF Write-up của Drakie14 // Chuyên về web',
-  motto: 'Shooting for the star',
+  motto: 'Shoot for the stars',
   school: 'UIT — Trường ĐH Công nghệ Thông tin, ĐHQG-HCM',
   schoolUrl: 'https://www.uit.edu.vn/',
   author: 'Drakie14',
   locale: 'vi_VN',
   lang: 'vi',
+  /**
+   * Mã xác minh Google Search Console (phương thức "HTML tag"): chỉ dán phần `content`,
+   * VD 'AbC123...'. Để trống ('') thì không chèn thẻ meta.
+   */
+  googleSiteVerification: '',
 } as const;
 
 /**
