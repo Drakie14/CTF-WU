@@ -22,7 +22,11 @@ Flag Format: `POCTF{...}`
 > Flag của bài này **gắn theo team/session**: nó nhúng `cid`, `team_id` và `nonce` của token ta dùng. Token khác → flag khác. Flag dưới đây là kết quả thật lấy từ server với token `SHAPE1.454.81.JCLO26Y346U52HPX.1790837303.J6V5R3WPZTOJ5ZQ43Z6GBBXTQK`.
 
 ## Solution
-Truy cập vào lab, ta thấy một API **GraphQL** với chủ đề *"Collaborative Research Portal"*. Ngay cái tên challenge — **"Shape of Query"** — đã là một gợi ý khá lộ liễu: *hình dạng của truy vấn quyết định dữ liệu mà ta chạm tới được*. Cứ ghi nhớ câu này, nó chính là chìa khoá.
+Truy cập vào lab, ta thấy một portal **"Collaborative Research Portal"** — một ô nhập *team session token* để đăng nhập, và lời nhắc *"After signing in, explore the GraphQL API at `/graphql`"*. Vậy đây là một bài **GraphQL**:
+
+![image](./web-landing.png)
+
+Ngay cái tên challenge — **"Shape of Query"** — đã là một gợi ý khá lộ liễu: *hình dạng của truy vấn quyết định dữ liệu mà ta chạm tới được*. Cứ ghi nhớ câu này, nó chính là chìa khoá.
 
 Trước khi nói chuyện với API, ta phải có phiên đăng nhập. Ta mint một **session token** ở trang chủ `pointeroverflowctf.com`, token trông như này:
 ```
@@ -52,7 +56,7 @@ Server trả `{"ok":true,"team_id":454}` và set cho ta một cookie `session` (
 Để ý: cookie **không chứa `role`**. Nghĩa là server phải tự tra role của ta từ DB dựa trên `cid`/`team_id`, và vì cookie đã được ký nên ta cũng không sửa được để tự phong mình làm admin. Đích ngắm vì thế chuyển hướng: thay vì *trở thành* admin, ta sẽ tìm cách **đọc dữ liệu của admin mà không cần là admin** — mẫu hình kinh điển của lỗi phân quyền theo object/field.
 
 ### Introspection — dựng lại tấm bản đồ
-Từ đây mọi request kèm cookie đều được coi là đã đăng nhập, và ta nói chuyện được với **GraphQL API tại `/graphql`**. Với GraphQL, câu hỏi đầu tiên của ta luôn là: *schema trông như thế nào?* May mắn thay, server **bật introspection**.
+Từ đây mọi request kèm cookie đều được coi là đã đăng nhập, và ta nói chuyện được với **GraphQL API tại `/graphql`**. Mở thẳng đường dẫn này trên trình duyệt, server còn phục vụ sẵn một **GraphiQL** IDE để ta gõ và chạy query trực quan (các đoạn `curl` phía dưới ta cũng có thể bắn thẳng ở đây). Với GraphQL, câu hỏi đầu tiên của ta luôn là: *schema trông như thế nào?* May mắn thay, server **bật introspection**.
 
 > `introspection` là cơ chế "tự khai báo" của GraphQL: ta gửi một query đặc biệt (`__schema`, `__type`) và server trả về toàn bộ danh sách type, field, argument. Với người phòng thủ nó tiện cho tài liệu; với ta nó là tấm bản đồ kho báu. Mà ở bài này lời giải nằm ở **"đường đi" giữa các type**, nên tấm bản đồ ấy là bắt buộc phải có.
 
@@ -113,6 +117,11 @@ Trước khi khai thác, phải biết **chính xác** cái gì bị chặn, cá
   }
 }
 ```
+
+Chạy ngay trên GraphiQL cho trực quan — ta là `researcher_454`, role `MEMBER`:
+
+![image](./web-graphiql-me.png)
+
 Ba điều rút ra:
 
 1. Ta là `MEMBER`, không phải admin → đừng mong đặc quyền.
@@ -166,6 +175,12 @@ curl -s -b "$JAR" -X POST "$BASE/graphql" \
   ]}}
 }
 ```
+
+Chạy thẳng trên GraphiQL, response bên phải hiện luôn flag ở `privateNotes` của `admin_454`:
+
+![image](./web-graphiql-flag.png)
+
+Và đây là bản chạy bằng `curl`/script cho ra đúng kết quả đó:
 
 ![image](./terminal-flag.png)
 
