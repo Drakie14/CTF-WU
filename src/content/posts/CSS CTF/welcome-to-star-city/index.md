@@ -34,17 +34,21 @@ Trang gần như trống trơn, JavaScript cũng không có. Vậy chỗ duy nh�
 ```css!
 @keyframes shimmer { to { background-position: -300% 0; } } /*Q1NTQ1RGJTdCd2VfQlUxTFRfdGhpc19jaXR5X2Zyb21fcjBja19hbmRfUjAxMSU3RA*/
 ```
-Chuỗi trong comment chỉ gồm `[A-Za-z0-9]`, không có ký tự lạ, độ dài là bội số quen thuộc — đúng dáng của [Base64](https://developer.mozilla.org/en-US/docs/Glossary/Base64). Ta thử `base64 -d`:
-```bash!
-echo 'Q1NTQ1RGJTdCd2VfQlUxTFRfdGhpc19jaXR5X2Zyb21fcjBja19hbmRfUjAxMSU3RA' | base64 -d
-# -> CSSCTF%7Bwe_BU1LT_this_city_from_r0ck_and_R011%7D
-```
-Kết quả vẫn chưa "sạch": còn `%7B` và `%7D` — đó là [URL-encode](https://developer.mozilla.org/en-US/docs/Glossary/Percent-encoding) của `{` và `}`. Vậy chuỗi đã bị bọc **hai lớp**: `URL-encode` rồi tới `Base64`. Ta bóc nốt lớp ngoài:
+Chuỗi trong comment chỉ gồm `[A-Za-z0-9]`, không có ký tự lạ, độ dài là bội số quen thuộc — đúng dáng của [Base64](https://developer.mozilla.org/en-US/docs/Glossary/Base64). Thử Base64-decode thì ra `CSSCTF%7Bwe_BU1LT_this_city_from_r0ck_and_R011%7D` — gần đúng rồi, nhưng còn `%7B` và `%7D`, đó là [URL-encode](https://developer.mozilla.org/en-US/docs/Glossary/Percent-encoding) của `{` và `}`. Vậy chuỗi bị bọc **hai lớp**: `URL-encode` nằm trong, `Base64` bọc ngoài — ta bóc ngược lại: **From Base64 → URL Decode**.
 
-1. `base64 -d` để lấy lại chuỗi gốc bị percent-encode
-2. `urldecode`: `%7B` -> `{`, `%7D` -> `}`
+Không cần gõ lệnh gì cả, [**CyberChef**](https://gchq.github.io/CyberChef/) làm trọn vẹn ngay trên trình duyệt. Các bước:
 
--> Flag hiện ra:
+1. Mở [CyberChef](https://gchq.github.io/CyberChef/).
+2. Trong cột **Operations** (trái), gõ tìm rồi kéo **`From Base64`**, tiếp đó **`URL Decode`** sang cột **Recipe** (giữa) — đúng thứ tự trên-dưới đó.
+3. Dán chuỗi trong comment vào ô **Input** (phải). CyberChef tự "bake" và flag hiện ngay ở ô **Output** bên dưới.
+
+-> Flag hiện ra ở Output:
+
+![image](./cyberchef.png)
+
+> Mẹo: có thể bấm thẳng [link CyberChef đã nạp sẵn recipe + input này](https://gchq.github.io/CyberChef/#recipe=From_Base64('A-Za-z0-9%2B%2F%3D',true,false)URL_Decode()&input=UTFOVFExUkdKVGRDZDJWZlFsVXhURlJmZEdocGMxOWphWFI1WDJaeWIyMWZjakJqYTE5aGJtUmZVakF4TVNVM1JB) để thấy kết quả luôn.
+
+Nếu thích tự động bằng code thì một dòng Python cũng xong:
 ```python!
 import base64, urllib.parse
 s = "Q1NTQ1RGJTdCd2VfQlUxTFRfdGhpc19jaXR5X2Zyb21fcjBja19hbmRfUjAxMSU3RA"

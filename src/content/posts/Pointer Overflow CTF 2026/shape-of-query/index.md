@@ -37,37 +37,22 @@ Thử nhập token `1` để xem token được "mổ" ra sao thì thấy nó c�
 
 > Đây là tín hiệu sớm cần đọc được: lỗ hổng **không** nằm ở việc giả mạo token. Đập đầu vào MAC là ngõ cụt. Lỗ hổng (nếu có) sẽ nằm ở tầng ứng dụng, *sau khi* ta đã đăng nhập hợp lệ.
 
-Đổi token lấy cookie phiên bằng endpoint `/session/exchange`:
-```bash!
-BASE="https://shape-of-query.pointeroverflowctf.com"
-JAR="$(mktemp)"
+Dán token vào ô và bấm **Sign in**. Phía sau, portal gọi `/session/exchange` để đổi token lấy một cookie `session` (Flask signed cookie), rồi đưa ta thẳng vào **GraphiQL** — một IDE GraphQL ngay trong trình duyệt để gõ và chạy query, không cần công cụ dòng lệnh nào cả.
 
-curl -s -c "$JAR" -X POST "$BASE/session/exchange" \
-     -H "Content-Type: application/json" \
-     --data '{"token":"SHAPE1.454.81.JCLO26Y346U52HPX.1790837303.J6V5R3WPZTOJ5ZQ43Z6GBBXTQK"}'
-```
-Server trả `{"ok":true,"team_id":454}` và set cho ta một cookie `session` (Flask signed cookie):
-
-![image](./terminal-exchange.png)
- Decode phần base64 ra thì thấy:
+Tò mò thì mở **DevTools → tab Application → Cookies** soi cookie `session`, decode phần base64 ra thấy:
 ```json!
 {"cid":81,"nonce":"JCLO26Y346U52HPX","team_id":454}
 ```
 Để ý: cookie **không chứa `role`**. Nghĩa là server phải tự tra role của ta từ DB dựa trên `cid`/`team_id`, và vì cookie đã được ký nên ta cũng không sửa được để tự phong mình làm admin. Đích ngắm vì thế chuyển hướng: thay vì *trở thành* admin, ta sẽ tìm cách **đọc dữ liệu của admin mà không cần là admin** — mẫu hình kinh điển của lỗi phân quyền theo object/field.
 
 ### Introspection — dựng lại tấm bản đồ
-Từ đây mọi request kèm cookie đều được coi là đã đăng nhập, và ta nói chuyện được với **GraphQL API tại `/graphql`**. Mở thẳng đường dẫn này trên trình duyệt, server còn phục vụ sẵn một **GraphiQL** IDE để ta gõ và chạy query trực quan (các đoạn `curl` phía dưới ta cũng có thể bắn thẳng ở đây). Với GraphQL, câu hỏi đầu tiên của ta luôn là: *schema trông như thế nào?* May mắn thay, server **bật introspection**.
+Ở khung bên trái của GraphiQL ta gõ query, bấm nút ▶ (hoặc `Ctrl/Cmd + Enter`) để chạy, kết quả hiện ở khung bên phải. Với GraphQL, câu hỏi đầu tiên của ta luôn là: *schema trông như thế nào?* May mắn thay, server **bật introspection**.
 
 > `introspection` là cơ chế "tự khai báo" của GraphQL: ta gửi một query đặc biệt (`__schema`, `__type`) và server trả về toàn bộ danh sách type, field, argument. Với người phòng thủ nó tiện cho tài liệu; với ta nó là tấm bản đồ kho báu. Mà ở bài này lời giải nằm ở **"đường đi" giữa các type**, nên tấm bản đồ ấy là bắt buộc phải có.
 
 Hỏi danh sách type:
 ```graphql!
 { __schema { types { name kind } } }
-```
-```bash!
-curl -s -b "$JAR" -X POST "$BASE/graphql" \
-     -H "Content-Type: application/json" \
-     --data '{"query":"{ __schema { types { name kind } } }"}' | python3 -m json.tool
 ```
 Bỏ qua các type built-in (`__*`, `String`, `Boolean`...), còn lại đáng chú ý: `Query`, `User`, `Team`, `UserRoleEnum`. Đào tiếp từng type bằng `__type(name:"...")` rồi ghép lại, ta được schema rút gọn:
 ```graphql!
@@ -156,33 +141,13 @@ Bản chất GraphQL: quyền đọc một field phụ thuộc vào **ĐƯỜNG 
 
 `me.team.members` trả về `[User]` gồm cả admin. Resolver `members` chỉ lo trả danh sách member, nó không gọi lại logic *"user này có được xem privateNotes của user kia không"*. Mà `privateNotes` thì được resolve mặc định (đọc thẳng từ object), nên chỉ cần **yêu cầu field đó trong nhánh nested** là server ngoan ngoãn trả về.
 
--> Payload: tận dụng đúng quan hệ vòng `Team.members` để men tới object admin:
+-> Payload: tận dụng đúng quan hệ vòng `Team.members` để men tới object admin. Gõ query này vào GraphiQL rồi bấm ▶:
 ```graphql!
 { me { team { members { id username role privateNotes } } } }
 ```
-```bash!
-curl -s -b "$JAR" -X POST "$BASE/graphql" \
-     -H "Content-Type: application/json" \
-     --data '{"query":"{ me { team { members { id username role privateNotes } } } }"}' \
-  | python3 -m json.tool
-```
-```json!
-{
-  "me": { "team": { "members": [
-    {"id":"user_454","role":"MEMBER","privateNotes":"Grocery list..."},
-    {"id":"admin_454","role":"ADMIN",
-     "privateNotes":"POCTF{81.454.JCLO26Y346U52HPX.Q3DYMABQPEVVLI5ZZN2WIVVAL4}"}
-  ]}}
-}
-```
-
-Chạy thẳng trên GraphiQL, response bên phải hiện luôn flag ở `privateNotes` của `admin_454`:
+Khung response bên phải hiện luôn flag ở `privateNotes` của phần tử role `ADMIN`:
 
 ![image](./web-graphiql-flag.png)
-
-Và đây là bản chạy bằng `curl`/script cho ra đúng kết quả đó:
-
-![image](./terminal-flag.png)
 
 Lần này lớp phân quyền **không tồn tại** trên con đường vòng. Danh sách `members` hiện ra đầy đủ, và `privateNotes` của phần tử có role `ADMIN` (`admin_454`) chính là flag — đúng field mà cửa chính `user(id:"admin_454")` vừa phũ phàng trả về `null`, nay ta đọc được chỉ bằng cách đi qua `team { members }`.
 
