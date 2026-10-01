@@ -63,7 +63,7 @@ npm run verify    # quét dist/: XSS, ảnh remote, link hỏng, SEO/RSS/sitemap
 
 | Biến | Mặc định | Dùng cho |
 | --- | --- | --- |
-| `SITE_URL` | `https://ctf-writeups.pages.dev` | canonical URL, Open Graph, RSS, sitemap, `robots.txt` |
+| `SITE_URL` | `https://drakie14-ctf-wu.pages.dev` | canonical URL, Open Graph, RSS, sitemap, `robots.txt` |
 
 Đặt trên Cloudflare Pages (xem bên dưới). Không có secret nào cần đặt.
 

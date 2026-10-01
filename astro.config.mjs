@@ -9,7 +9,7 @@ import { markdownOptions } from './src/lib/markdown/index.ts';
 import attachments from './src/integrations/attachments.ts';
 
 // Đổi thành domain thật khi deploy (dùng cho canonical URL, RSS, sitemap).
-const SITE = process.env.SITE_URL ?? 'https://ctf-writeups.pages.dev';
+const SITE = process.env.SITE_URL ?? 'https://drakie14-ctf-wu.pages.dev';
 
 /** Thư mục output thực tế (dist/ hoặc dist-fixtures/), lấy từ config sau khi resolve. */
 let outDir = fileURLToPath(new URL('./dist/', import.meta.url));
