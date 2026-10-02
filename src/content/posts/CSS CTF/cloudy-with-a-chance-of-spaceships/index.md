@@ -230,8 +230,8 @@ Liệt kê secret trong Secret Manager -> trúng
 =>`secrets/goog_encryption_secret` chỉ là cái vỏ chứa các versions của secrets
 Khi bạn GET lên đúng đường dẫn này, GCP trả về metadata của cái két, không phải ruột
 
-2. `:access ` là hành động, không phải đường dẫn.
-Đây là mảnh dễ gây rối nhất. `:access `không phải một thư mục con trong URL mà là cú pháp "custom method" của Google API: phần trước dấu `:` là tài nguyên (version latest của secret này), phần sau là hành động bạn muốn làm lên tài nguyên đó. `:access `nghĩa là "trả về payload" của version này.
+2. `:access` là hành động, không phải đường dẫn.
+Đây là mảnh dễ gây rối nhất. `:access` không phải một thư mục con trong URL mà là cú pháp "custom method" của Google API: phần trước dấu `:` là tài nguyên (version latest của secret này), phần sau là hành động bạn muốn làm lên tài nguyên đó. `:access` nghĩa là "trả về payload" của version này.
 :::
 ![image](https://hackmd.io/_uploads/BykCPHa9zx.png)
 
