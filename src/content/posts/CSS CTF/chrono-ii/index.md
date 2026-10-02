@@ -28,6 +28,8 @@ Flag Format: `CSSCTF{...}`
 
 Mở `http://34.116.80.78:8001` là một chiếc đồng hồ, bên cạnh là log `/api/feed`: mỗi giây thêm một bản ghi `{timestamp, ciphertext}`, cửa sổ luôn giữ **60 bản ghi / 60 giây liên tiếp**. Ciphertext đổi liên tục nên nhìn như "không thể giải".
 
+![image](./01-home.jpg)
+
 Hai nhận xét then chốt:
 
 1. **Plaintext là cố định.** Mọi ciphertext đều có dạng `CSSCTF{3_5_9_5_6}` (độ dài các nhóm giống hệt nhau). Đây chính là **một flag duy nhất** bị mã hóa bằng nhiều key khác nhau — key mới đổi mỗi giây, còn flag thì không.
