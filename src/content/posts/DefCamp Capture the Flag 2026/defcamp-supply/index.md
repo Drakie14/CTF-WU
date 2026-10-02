@@ -13,9 +13,11 @@ tags:
 ---
 
 ## Đề bài
-Magazin web de echipamente pentru laboratoare de securitate. Instanța de challenge este furnizată de platformă.
+Web store for security laboratory equipment. The challenge instance is provided by the platform.
 
-Este inclusă o componentă backend relevantă pentru verificarea profilului personalizat. Restul logicii aplicației rulează pe serviciul remote.
+A backend component relevant to custom profile verification is included. The rest of the application logic runs on the remote service.
+
+[Defcamp-supply.zip](https://github.com/Drakie14/Challenges/blob/DefCamp-Capture-the-Flag-2026/Defcamp-supply.zip)
 
 Flag Format: `CTF{sha256}`
 
