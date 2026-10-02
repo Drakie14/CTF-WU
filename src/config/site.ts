@@ -7,7 +7,7 @@ export const SITE = {
   shortName: 'CTF//WU',
   description: 'CTF Write-up của Drakie14 // Chuyên về web',
   motto: 'Shoot for the stars',
-  school: 'UIT — Trường ĐH Công nghệ Thông tin, ĐHQG-HCM',
+  school: 'UIT - Trường ĐH Công nghệ Thông tin, ĐHQG-HCM',
   schoolUrl: 'https://www.uit.edu.vn/',
   author: 'Drakie14',
   locale: 'vi_VN',

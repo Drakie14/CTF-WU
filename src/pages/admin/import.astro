@@ -269,7 +269,7 @@ import { CATEGORIES } from '../../lib/content/constants';
         const dupSlug = chosen.map((r) => r.slug).find((s, i, all) => all.indexOf(s) !== i);
         if (dupSlug) warnings.push(`Slug "${dupSlug}" bị trùng giữa các bài.`);
         const clash = chosen.find((r) => existing?.slugs.has(r.slug));
-        if (clash) warnings.push(`Slug "${clash.slug}" đã có trong repo — đổi slug khác (trùng slug làm build lỗi).`);
+        if (clash) warnings.push(`Slug "${clash.slug}" đã có trong repo - đổi slug khác (trùng slug làm build lỗi).`);
         const folder = `src/content/posts/${ctfFolderName(ctfInput.value || 'ctf')}/`;
         const imported = chosen.filter((r) => existing?.paths.has(`${folder}${slugifyOrHash(r.title, 'post')}/index.md`)).map((r) => r.title);
         if (imported.length && !done) warnings.push(`Có vẻ đã import rồi (CTF này đã có bài cùng tên): ${imported.join(', ')}.`);
@@ -298,7 +298,7 @@ import { CATEGORIES } from '../../lib/content/constants';
           const shown = rows.map((r) => r.slug).join('\n');
           recomputeSlugs();
           if (rows.map((r) => r.slug).join('\n') !== shown) {
-            throw new Error('Repo vừa có bài trùng slug nên slug đã được đổi — kiểm tra lại bảng rồi bấm Commit lần nữa.');
+            throw new Error('Repo vừa có bài trùng slug nên slug đã được đổi, kiểm tra lại bảng rồi bấm Commit lần nữa.');
           }
           const ctf = ctfInput.value.trim();
           const files = chosen.map((r) => buildPostFile({ ...r, ctf, date: dateInput.value, tags }));

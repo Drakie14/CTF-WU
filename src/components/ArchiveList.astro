@@ -37,8 +37,8 @@ const pageHref = (n: number) => (n === 1 ? '/archive/' : `/archive/page/${n}/`);
             <td>
               <a href={postUrl(p)}>{p.data.title}</a>
             </td>
-            <td>{p.data.ctf || '—'}</td>
-            <td>{categoryLabel(p.data.category) || '—'}</td>
+            <td>{p.data.ctf || '-'}</td>
+            <td>{categoryLabel(p.data.category) || '-'}</td>
           </tr>
         ))
       }

@@ -19,6 +19,11 @@ const { view, currentSlug, sidebarPosts, filter, ...seo } = Astro.props;
 const { posts, ctfs } = await getSiteContent();
 const groups = groupPosts(sidebarPosts ?? posts, ctfs);
 // Sidebar được giữ nguyên khi chuyển trang (View Transitions) nếu cùng danh sách.
+const panelSwap = {
+  old: { name: 'panel-out', duration: '0.15s', easing: 'ease-out', fillMode: 'forwards' },
+  new: { name: 'panel-in', duration: '0.4s', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fillMode: 'backwards' },
+};
+const panelTransition = { forwards: panelSwap, backwards: panelSwap };
 const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
 ---
 
@@ -27,7 +32,8 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
     <div class="shell-side" transition:persist={persistKey} data-persist-key={persistKey}>
       <Sidebar groups={groups} stats={{ posts: posts.length, ctfs: ctfs.terms.length }} currentSlug={currentSlug} filter={filter} />
     </div>
-    <main id="main" class="panel" tabindex="-1" data-panel transition:animate="fade">
+    <main id="main" class="panel" tabindex="-1" data-panel transition:animate={panelTransition}>
+      {view === 'post' && <div class="read-progress" aria-hidden="true" />}
       <div class="side-toggle-wrap">
         <button class="side-toggle" type="button" aria-pressed="false" title="Thu gọn danh sách write-up" data-side-toggle>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3V4Zm2 2v12h4V6H5Zm6 0v12h8V6h-8Z"></path></svg>
@@ -50,6 +56,7 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
   import '../scripts/sidebar';
   import '../scripts/panel';
   import '../scripts/side-toggle';
+  import '../scripts/parallax';
 </script>
 
 <style>
@@ -72,7 +79,7 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
     overscroll-behavior: contain;
     background: var(--panel);
     border-radius: var(--radius-panel);
-    box-shadow: 0 20px 60px rgb(0 0 0 / 0.45);
+    box-shadow: 0 20px 60px rgb(10 4 20 / 0.5);
     scrollbar-width: thin;
     scrollbar-color: #3a3a44 transparent;
   }

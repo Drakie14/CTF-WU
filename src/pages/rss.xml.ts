@@ -17,7 +17,7 @@ export const GET: APIRoute = async (context) => {
     site: context.site ?? context.url.origin,
     trailingSlash: true,
     items: posts.map((post) => ({
-      title: post.data.ctf ? `${post.data.title} — ${post.data.ctf}` : post.data.title,
+      title: post.data.ctf ? `${post.data.title} - ${post.data.ctf}` : post.data.title,
       link: postUrl(post),
       pubDate: post.data.date,
       description: post.data.summary,

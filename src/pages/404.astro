@@ -3,14 +3,18 @@ import EmptyState from '../components/EmptyState.astro';
 import AppLayout from '../layouts/AppLayout.astro';
 ---
 
-<AppLayout view="page" title="404 — Không tìm thấy" description="Trang không tồn tại." noindex canonical={false}>
-  <EmptyState title="404 · Không tìm thấy trang" description="Write-up này không tồn tại hoặc đã được đổi đường dẫn.">
-    <p class="links"><a href="/">← Về trang chủ</a> · <a href="/archive/">Archive</a> · <a href="/search/">Search</a></p>
+<AppLayout view="page" title="404: Không tìm thấy" description="Trang không tồn tại." noindex canonical={false}>
+  <EmptyState title="404, không tìm thấy trang" description="Write-up này không tồn tại hoặc đã được đổi đường dẫn.">
+    <p class="links"><a href="/">← Về trang chủ</a><a href="/archive/">Archive</a><a href="/search/">Search</a></p>
   </EmptyState>
 </AppLayout>
 
 <style>
   .links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.5rem;
     margin-top: 1.5rem;
     color: var(--muted);
   }

@@ -156,9 +156,16 @@ a {
 .prose {
   font-family: var(--font-sans);
   font-size: 1rem;
-  line-height: 1.75;
+  line-height: 1.8;
   color: var(--text-soft);
   overflow-wrap: break-word;
+}
+/* Giới hạn độ rộng dòng chữ cho dễ đọc; code, bảng, ảnh vẫn chiếm hết panel. */
+.prose > p,
+.prose > ul,
+.prose > ol,
+.prose > blockquote {
+  max-width: 68ch;
 }
 .prose > * + * {
   margin-top: 1.1em;
@@ -172,6 +179,7 @@ a {
   color: var(--text);
   font-weight: 600;
   line-height: 1.3;
+  letter-spacing: -0.01em;
   scroll-margin-top: 1.5rem;
 }
 .prose h1 {
@@ -180,7 +188,7 @@ a {
 }
 .prose h2 {
   font-size: 1.4rem;
-  margin-top: 2em;
+  margin-top: 2.4em;
   padding-bottom: 0.35em;
   border-bottom: 1px solid var(--panel-border);
 }
@@ -484,4 +492,191 @@ a {
   color: var(--muted);
   border-top: 1px solid var(--panel-border);
   padding-top: 1em;
+}
+
+/* ==========================================================================
+   Motion layer (MOTION_INTENSITY 5). Chỉ animate transform + opacity, mỗi
+   hiệu ứng có một lý do: dẫn mắt (rise), phản hồi (hover/active/pop),
+   trạng thái (progress, reveal khi đọc, chuyển trang).
+   ========================================================================== */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes pop {
+  50% {
+    transform: scale(1.08);
+  }
+}
+@keyframes diamond-in {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.5);
+  }
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+@keyframes read-progress {
+  to {
+    transform: scaleX(1);
+  }
+}
+/* View Transitions: panel cũ mờ nhanh, panel mới trượt nhẹ từ dưới lên. */
+@keyframes panel-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 1. Sidebar vào lần lượt: brand/nav, thống kê, ô tìm kiếm, rồi các hàng. */
+  .sb-header,
+  .sb-stats,
+  .sb-tools,
+  .sb-filter {
+    animation: rise 0.6s var(--ease-out) backwards;
+  }
+  .sb-stats {
+    animation-delay: 0.06s;
+  }
+  .sb-tools {
+    animation-delay: 0.12s;
+  }
+  .sb-filter {
+    animation-delay: 0.16s;
+  }
+  .sb-list .row-item {
+    animation: rise 0.55s var(--ease-out) backwards;
+    animation-delay: 0.3s;
+  }
+  .sb-list .row-item:nth-child(1) { animation-delay: 0.18s; }
+  .sb-list .row-item:nth-child(2) { animation-delay: 0.22s; }
+  .sb-list .row-item:nth-child(3) { animation-delay: 0.26s; }
+  .sb-list .row-item:nth-child(4) { animation-delay: 0.3s; }
+  .sb-list .row-item:nth-child(5) { animation-delay: 0.34s; }
+  .sb-list .row-item:nth-child(6) { animation-delay: 0.38s; }
+  .sb-list .row-item:nth-child(7) { animation-delay: 0.42s; }
+  .sb-list .row-item:nth-child(8) { animation-delay: 0.46s; }
+
+  /* 3. Hover hàng danh sách: kim cương xoay + nội dung nhích phải (phản hồi). */
+  .row .diamond,
+  .row .row-main {
+    transition:
+      transform 0.35s var(--ease-out),
+      border-color 0.2s;
+  }
+  .row:hover .diamond {
+    transform: rotate(225deg) scale(1.15);
+    border-color: var(--accent);
+  }
+  .row:hover .row-main {
+    transform: translateX(4px);
+  }
+  .row[aria-current='page']:hover .diamond {
+    transform: rotate(225deg);
+  }
+
+  /* 4. Nhấn nút: lún xuống như nút vật lý; Copy báo thành công bằng một nhịp pop. */
+  .sb-nav a,
+  .tool-btn,
+  .side-toggle,
+  .back-btn,
+  .prose .copy-btn {
+    transition:
+      transform 0.15s var(--ease-out),
+      background-color 0.15s,
+      color 0.15s,
+      opacity 0.15s;
+  }
+  .sb-nav a:active,
+  .tool-btn:active,
+  .side-toggle:active,
+  .back-btn:active,
+  .prose .copy-btn:active {
+    transform: scale(0.97);
+  }
+  .prose .copy-btn[data-copied] {
+    animation: pop 0.35s var(--ease-out);
+  }
+
+  /* Hạt nền nghiêng nhẹ theo con trỏ (--px/--py do src/scripts/parallax.ts ghi). */
+  .particles {
+    transform: translate3d(calc(var(--px, 0) * -14px), calc(var(--py, 0) * -10px), 0);
+    transition: transform 0.6s var(--ease-out);
+  }
+}
+
+/* 5. Thanh tiến độ đọc bài: bám theo vị trí cuộn của panel (không dùng scroll event). */
+.read-progress {
+  display: none;
+}
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .read-progress {
+      display: block;
+      position: sticky;
+      top: 0;
+      z-index: 25;
+      height: 0;
+    }
+    .read-progress::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-2), var(--accent));
+      transform: scaleX(0);
+      transform-origin: 0 50%;
+      animation: read-progress linear both;
+    }
+    /* Tách riêng: minifier gộp `animation-timeline` vào shorthand `animation` sai cú pháp. */
+    .read-progress[aria-hidden]::before {
+      animation-timeline: scroll(nearest);
+    }
+
+    /* 6. Khối nội dung chính của bài hiện dần khi cuộn tới (nhịp đọc). */
+    .prose > h2,
+    .prose > h3,
+    .prose > .code-block,
+    .prose > .callout,
+    .prose > .table-wrap,
+    .prose > details {
+      animation: reveal linear both;
+    }
+    .prose[data-article-body] > h2,
+    .prose[data-article-body] > h3,
+    .prose[data-article-body] > .code-block,
+    .prose[data-article-body] > .callout,
+    .prose[data-article-body] > .table-wrap,
+    .prose[data-article-body] > details {
+      animation-timeline: view();
+      animation-range: entry 0% entry 30%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
 }

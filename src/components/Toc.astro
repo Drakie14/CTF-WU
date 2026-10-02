@@ -76,6 +76,10 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
     height: 2px;
     border-radius: 1px;
     background: var(--muted);
+    transform-origin: right center;
+    transition:
+      background-color 0.2s,
+      transform 0.25s var(--ease-out);
   }
   .toc-bar.toc-l1 {
     width: 78%;
@@ -85,6 +89,7 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
   }
   .toc-bar[data-active] {
     background: var(--accent);
+    transform: scaleY(2);
   }
 
   .toc-pop {
@@ -159,6 +164,9 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
     color: var(--text-soft);
     text-decoration: none;
     line-height: 1.4;
+    transition:
+      color 0.2s,
+      border-color 0.2s;
   }
   .toc a:hover {
     color: var(--text);
