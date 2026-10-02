@@ -18,6 +18,8 @@ We have again intercepted their talk and the cipher text, but this time it seems
 
 http://34.116.80.78:8001
 
+[chrono-ii-capture.json](https://github.com/Drakie14/Challenges/blob/CSS_CTF/chrono-ii-capture.json)
+
 Flag Format: `CSSCTF{...}`
 
 ## Solution
