@@ -7,8 +7,8 @@
       "url": [
         "http://localhost:4321/",
         "http://localhost:4321/archive/",
-        "http://localhost:4321/posts/dino2auth/",
-        "http://localhost:4321/posts/hackmd-dom-xss/"
+        "http://localhost:4321/posts/xss/",
+        "http://localhost:4321/posts/welcome-to-star-city/"
       ],
       "numberOfRuns": 3,
       "settings": {

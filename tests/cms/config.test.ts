@@ -52,7 +52,7 @@ describe('Sveltia CMS config.yml', () => {
 
   it('form có đủ field; title chỉ required trên CMS', () => {
     const names = posts.fields.map((f) => f.name);
-    expect(names).toEqual(['title', 'date', 'ctf', 'category', 'difficulty', 'points', 'tags', 'summary', 'cover', 'images', 'body']);
+    expect(names).toEqual(['title', 'date', 'ctf', 'category', 'difficulty', 'tags', 'summary', 'cover', 'images', 'body']);
     expect(field('title').required).toBe(true);
     for (const f of posts.fields.filter((x) => x.name !== 'title')) expect(f.required, f.name).toBe(false);
   });

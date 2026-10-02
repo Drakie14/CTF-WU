@@ -61,8 +61,8 @@ for (const file of files) {
   const rel = path.relative(dist, file).split(path.sep).join('/');
   const html = readFileSync(file, 'utf8');
 
-  // SEO metadata (bỏ qua /admin: trang CMS, noindex).
-  if (!rel.startsWith('admin/')) {
+  // SEO metadata (bỏ qua /admin: trang CMS, noindex; và file xác minh Google: phải giữ nguyên nội dung).
+  if (!rel.startsWith('admin/') && !/^google[0-9a-f]+\.html$/.test(rel)) {
     const noindex = /<meta name="robots" content="noindex/.test(html);
     if (noindex) noindexPages.add(`/${rel.replace(/(^|\/)index\.html$/, '$1')}`);
     const need = [
