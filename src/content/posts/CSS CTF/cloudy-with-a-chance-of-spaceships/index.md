@@ -172,6 +172,8 @@ Google có endpoint công khai [`oauth2.googleapis.com/tokeninfo`](https://cloud
 curl -s "https://oauth2.googleapis.com/tokeninfo?access_token=$TOKEN"
 ```
 
+![](./tokeninfo_result.png)
+
 ```json!
 {
   "azp": "113330607461496374286",
