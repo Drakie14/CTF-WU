@@ -166,7 +166,7 @@ Trong request bắt được có:
 "authorization": "Bearer ya29.c.c0AZ4bNp..."
 ```
 
-Google có endpoint công khai [`oauth2.googleapis.com/tokeninfo`](https://cloud.google.com/docs/authentication/token-types#access) nhận access token qua query param và trả lại metadata của nó mà không cần header `Authorization` — rất tiện để soi nhanh một token lạ trước khi dùng:
+Google có endpoint công khai [`oauth2.googleapis.com/tokeninfo`](https://developers.google.com/identity/protocols/oauth2#validatetoken) nhận access token qua query param và trả lại metadata của nó mà không cần header `Authorization` — rất tiện để soi nhanh một token lạ trước khi dùng:
 
 ```bash!
 curl -s "https://oauth2.googleapis.com/tokeninfo?access_token=$TOKEN"
