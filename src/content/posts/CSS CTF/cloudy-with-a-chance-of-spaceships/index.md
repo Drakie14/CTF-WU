@@ -109,7 +109,7 @@ Nhưng path thật sự đáng giá không phải `project-id`. Metadata server 
 GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
 ```
 
-Gọi được endpoint này nghĩa là lấy được một ==[Authorization: Bearer <token>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
+Gọi được endpoint này nghĩa là lấy được một ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
 
 Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối . 
 
@@ -122,7 +122,7 @@ Dù vậy, kể cả khi có header `Metadata-Flavor: Google`, bạn vẫn khôn
 
 ### Twist: backend tự đính kèm credential của chính nó
 Ta không kiểm soát được header nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính 
-    ==[Authorization: Bearer <token>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
+    ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
 
 Token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
 
@@ -139,7 +139,7 @@ Ta có `https://httpbin.org/bearer`:
 ![](./bearer_result.jpg)
 
 Backend nhận về **1068 byte** (nhiệt độ ~`106.8`) — tức là có body JSON dài. 
-Vậy **backend tự nó đã đính kèm `Authorization: Bearer <token>`** vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token — server tự "khoe" nó ra rồi!
+Vậy **backend tự nó đã đính kèm ==Authorization: Bearer `<token>`== vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token — server tự "khoe" nó ra rồi!
 
 ### Vậy đọc nội dung qua SSRF bằng cách nào
 
