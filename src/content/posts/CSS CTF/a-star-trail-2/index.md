@@ -19,6 +19,7 @@ Report to command your flightpath by taking the first letter of the ID of your f
 
 \- Polaris Logistics.
 
+[map.zip](https://github.com/Drakie14/Challenges/blob/CSS_CTF/map.zip)
 ## Solution
 Bài này là phiên bản "phóng to" của [A Star Trail 1](/posts/a-star-trail-1/): vẫn là `shortest path`, nhưng lần này đồ thị không nằm trong một tấm ảnh nữa mà được giấu trong một `map.zip`. Giải nén ra, ta có nguyên một **vault Obsidian** gồm `10000` file Markdown — mỗi file là một hành tinh:
 
