@@ -166,7 +166,24 @@ Trong request bắt được có:
 "authorization": "Bearer ya29.c.c0AZ4bNp..."
 ```
 
-Kiểm tra `tokeninfo` xác nhận token này có scope `cloud-platform` — tức là một chiếc chìa khoá vạn năng cho cả project GCP.
+Google có endpoint công khai [`oauth2.googleapis.com/tokeninfo`](https://cloud.google.com/docs/authentication/token-types#access) nhận access token qua query param và trả lại metadata của nó mà không cần header `Authorization` — rất tiện để soi nhanh một token lạ trước khi dùng:
+
+```bash!
+curl -s "https://oauth2.googleapis.com/tokeninfo?access_token=$TOKEN"
+```
+
+```json!
+{
+  "azp": "113330607461496374286",
+  "aud": "113330607461496374286",
+  "scope": "https://www.googleapis.com/auth/cloud-platform",
+  "exp": "1790939399",
+  "expires_in": "2398",
+  "access_type": "online"
+}
+```
+
+Field quan trọng nhất là `scope`: `https://www.googleapis.com/auth/cloud-platform` là scope rộng nhất GCP có — nó không giới hạn token vào một API cụ thể (như `devstorage.read_only` chỉ đọc được Storage), mà cho phép gọi **bất kỳ** API nào mà IAM role của service account cho phép. Kiểm tra `tokeninfo` xác nhận token này có scope `cloud-platform` — tức là một chiếc chìa khoá vạn năng cho cả project GCP.
 
 Bash payload:
 ```bash!
