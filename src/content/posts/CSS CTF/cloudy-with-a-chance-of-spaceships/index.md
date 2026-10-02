@@ -83,7 +83,14 @@ Vấn đề: server fetch URL của ta nhưng **không trả về nội dung** �
 
 ### Vậy SSRF này trỏ đi đâu được?
 
-Gợi ý "cloud" + server chạy trên GCP (IP `34.116.80.78` thuộc dải Google Cloud) khiến ta nghĩ ngay tới [GCP metadata server](https://cloud.google.com/compute/docs/metadata/overview). Ta thử:
+Kiểm tra IP `http://34.116.80.78/` thuộc dải nào:
+```bash!
+dig -x 34.116.80.78
+```
+-> `78.80.116.34.bc.googleusercontent.com.`
+-> server chạy trên GCP 
+
+Gợi ý "cloud" + server chạy trên GCP khiến ta nghĩ ngay tới [GCP metadata server](https://cloud.google.com/compute/docs/metadata/overview). Ta thử:
 
 ```json!
 {"resolver":"http://metadata.google.internal/computeMetadata/v1/project/project-id"}
