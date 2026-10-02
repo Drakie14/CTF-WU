@@ -96,8 +96,10 @@ Gợi ý "cloud" + server chạy trên GCP khiến ta nghĩ ngay tới [GCP meta
 ```json!
 {"resolver":"http://metadata.google.internal/computeMetadata/v1/project/project-id"}
 ```
+![image](https://hackmd.io/_uploads/rJYNLUTqzx.png)
 
 May mắn thay, request `200 OK` — SSRF **chạm được** vào metadata nội bộ.
+![image](https://hackmd.io/_uploads/S1EPIU6qGe.png)
 
 ### Nhắm tới token của service account
 
@@ -107,7 +109,7 @@ Nhưng path thật sự đáng giá không phải `project-id`. Metadata server 
 GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
 ```
 
-Gọi được endpoint này nghĩa là lấy được một `Authorization: Bearer <token>` hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
+Gọi được endpoint này nghĩa là lấy được một ==[Authorization: Bearer <token>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
 
 Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối . 
 
@@ -115,15 +117,24 @@ Ta thử nhét thêm field `headers` vào JSON `X-Resolver` để tự chèn hea
 -> Độ dài response **không đổi**
 -> Nghĩa là backend không forward field `headers` ta khai báo. 
 
-CRLF-inject hay đổi qua path legacy `/v1beta1`, `/0.1` cũng không ăn. Những path không cần header như `/`, `/computeMetadata/` thì đọc được nhưng vô dụng, không chứa token.
+### 2 bức tường bảo mật tách biệt
+
+Dù vậy, kể cả khi có header `Metadata-Flavor: Google`, bạn vẫn không đọc được token vì ở đây có hai bức tường chứ không phải một.
+
+1. Bức tường thứ nhất là header `Metadata-Flavor: Google`: nó chặn bạn chạm tới endpoint /token. 
+2. Bức tường thứ hai là `length oracle`: nó chặn bạn đọc bất cứ thứ gì, kể cả khi đã chạm tớ
+
+### Vậy đọc nội dung qua SSRF bằng cách nào
+
+Nguyên tắc chung: muốn đọc được nội dung qua SSRF, bạn phải làm cho dữ liệu nhạy cảm chảy về một nơi bạn kiểm soát, chứ không phải về backend. 
+
+Exfil về server của mình: trỏ resolver thẳng vào một request-logger bạn dựng (như `postb.in`). Khi backend fetch URL đó, toàn bộ request được lấy về server của bạn, và bạn đọc được nguyên văn.
 
 ### Twist: backend tự đính kèm credential của chính nó
+Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính 
+    ==[Authorization: Bearer <token>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
 
-Vậy bài toán chốt lại là ta cần header `Metadata-Flavor: Google` trên request đi tới metadata server, nhưng không có cách nào tự chèn header vào request mà backend gửi đi. 
-
-Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính **[Authorization: Bearer <access-token-của-service-account>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)** vào *mọi* request outbound. 
-
-Nếu đúng vậy, ta không cần tự lấy token qua đường `/service-accounts/default/token` nữa — token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
+Token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
 
 Để kiểm chứng giả thuyết này mà không đọc được nội dung response (chỉ có length oracle), ta cần một endpoint phản ứng khác nhau rõ rệt tùy có hay không có header `Authorization`. 
 
@@ -173,17 +184,6 @@ curl -s "https://oauth2.googleapis.com/tokeninfo?access_token=$TOKEN"
 ```
 ![image](https://hackmd.io/_uploads/r14TNBT9fe.png)
 
-```json!
-{
-  "azp": "113330607461496374286",
-  "aud": "113330607461496374286",
-  "scope": "https://www.googleapis.com/auth/cloud-platform",
-  "exp": "1790956078",
-  "expires_in": "3525",
-  "access_type": "online"
-}
-```
-
 Field quan trọng nhất là `scope`: `https://www.googleapis.com/auth/cloud-platform` là scope rộng nhất GCP có — nó không giới hạn token vào một API cụ thể (như `devstorage.read_only` chỉ đọc được Storage), mà cho phép gọi **bất kỳ** API nào mà IAM role của service account cho phép. 
 -> Ta đã có thể truy cập vào bất cứ đâu ta muốn
 
@@ -220,17 +220,19 @@ Dùng token như một client GCP bình thường:
 
 3. `Resource Manager` bị disable, `GCS` thì thiếu quyền -> ta không biết chắc token này đụng được gì. Cách hợp lý là đi theo checklist enumerate các API phổ biến của GCP mà một service account dạng này hay được gán quyền (Compute, Storage, Secret Manager, Pub/Sub, ...) 
 4. Gợi ý: "cloud" + backend tự host credential
--> Secret Manager đáng nghi nhất
+-> Secret Manager đáng nghi nhất vì là nơi cất thứ giá trị nhất
+![image](https://hackmd.io/_uploads/r1RN_I6czg.png)
+
 Liệt kê secret trong Secret Manager -> trúng
 ![image](https://hackmd.io/_uploads/rJ9vvHT5fx.png)
-```javascript!
+```json!
  "name": "projects/613713115850/secrets/goog_encryption_secret"
 ```
 5. Từ đó ta vào `/v1/projects/613713115850/secrets/goog_encryption_secret/versions/latest:access` để lấy flag
 
 ![image](https://hackmd.io/_uploads/BykCPHa9zx.png)
 
-```javascript!
+```json!
 {
   "name": "projects/613713115850/secrets/goog_encryption_secret/versions/1",
   "payload": {
