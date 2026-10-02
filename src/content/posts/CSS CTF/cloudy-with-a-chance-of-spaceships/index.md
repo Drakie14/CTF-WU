@@ -109,13 +109,9 @@ Nhưng path thật sự đáng giá không phải `project-id`. Metadata server 
 GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
 ```
 
-Gọi được endpoint này nghĩa là lấy được một ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
+Gọi được endpoint này nghĩa là lấy được một ==[Authorization: Bearer <token>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
 
 Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối . 
-
-Ta thử nhét thêm field `headers` vào JSON `X-Resolver` để tự chèn header đó vào request outbound, kiểm bằng `httpbin.org/headers` (echo lại header nhận được) 
--> Độ dài response **không đổi**
--> Nghĩa là backend không forward field `headers` ta khai báo. 
 
 ### 2 bức tường bảo mật tách biệt
 
@@ -131,7 +127,8 @@ Nguyên tắc chung: muốn đọc được nội dung qua SSRF, bạn phải l�
 Exfil về server của mình: trỏ resolver thẳng vào một request-logger bạn dựng (như `postb.in`). Khi backend fetch URL đó, toàn bộ request được lấy về server của bạn, và bạn đọc được nguyên văn.
 
 ### Twist: backend tự đính kèm credential của chính nó
-Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
+Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính 
+    ==[Authorization: Bearer <token>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
 
 Token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
 
