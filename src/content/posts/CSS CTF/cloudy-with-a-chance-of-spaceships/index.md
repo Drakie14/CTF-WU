@@ -118,16 +118,10 @@ Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm h
 Dù vậy, kể cả khi có header `Metadata-Flavor: Google`, bạn vẫn không đọc được token vì ở đây có hai bức tường chứ không phải một.
 
 1. Bức tường thứ nhất là header `Metadata-Flavor: Google`: nó chặn bạn chạm tới endpoint /token. 
-2. Bức tường thứ hai là `length oracle`: nó chặn bạn đọc bất cứ thứ gì, kể cả khi đã chạm tớ
-
-### Vậy đọc nội dung qua SSRF bằng cách nào
-
-Nguyên tắc chung: muốn đọc được nội dung qua SSRF, bạn phải làm cho dữ liệu nhạy cảm chảy về một nơi bạn kiểm soát, chứ không phải về backend. 
-
-Exfil về server của mình: trỏ resolver thẳng vào một request-logger bạn dựng (như `postb.in`). Khi backend fetch URL đó, toàn bộ request được lấy về server của bạn, và bạn đọc được nguyên văn.
+2. Bức tường thứ hai là `length oracle`: nó chặn bạn đọc bất cứ thứ gì, kể cả khi đã chạm tới
 
 ### Twist: backend tự đính kèm credential của chính nó
-Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính 
+Ta không kiểm soát được header nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính 
     ==[Authorization: Bearer <token>](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
 
 Token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
@@ -147,7 +141,14 @@ Ta có `https://httpbin.org/bearer`:
 Backend nhận về **1068 byte** (nhiệt độ ~`106.8`) — tức là có body JSON dài. 
 Vậy **backend tự nó đã đính kèm `Authorization: Bearer <token>`** vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token — server tự "khoe" nó ra rồi!
 
+### Vậy đọc nội dung qua SSRF bằng cách nào
+
+Nguyên tắc chung: muốn đọc được nội dung qua SSRF, bạn phải làm cho dữ liệu nhạy cảm chảy về một nơi bạn kiểm soát, chứ không phải về backend. 
 -> Giờ chỉ cần làm server fetch tới **máy chủ của ta** để bắt lại cái token đó.
+
+Exfil về server của mình: trỏ resolver thẳng vào một request-logger bạn dựng. Khi backend fetch URL đó, toàn bộ request được lấy về server của bạn, và bạn đọc được nguyên văn.
+
+
 
 ### Exfil token qua request-logger
 
