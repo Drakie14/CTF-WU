@@ -11,7 +11,6 @@ tags:
   - GCP
   - Metadata
   - Secret Manager
-cover: 01-home.png
 ---
 
 ## Đề bài
@@ -88,6 +87,7 @@ Kiểm tra IP `http://34.116.80.78/` thuộc dải nào:
 ```bash!
 dig -x 34.116.80.78
 ```
+![image](https://hackmd.io/_uploads/H1Cxl-aqfg.png)
 -> `78.80.116.34.bc.googleusercontent.com.`
 -> server chạy trên GCP 
 
@@ -114,6 +114,7 @@ Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm h
 Ta thử nhét thêm field `headers` vào JSON `X-Resolver` để tự chèn header đó vào request outbound, kiểm bằng `httpbin.org/headers` (echo lại header nhận được) 
 -> Độ dài response **không đổi**
 -> Nghĩa là backend không forward field `headers` ta khai báo. 
+
 CRLF-inject hay đổi qua path legacy `/v1beta1`, `/0.1` cũng không ăn. Những path không cần header như `/`, `/computeMetadata/` thì đọc được nhưng vô dụng, không chứa token.
 
 ### Twist: backend tự đính kèm credential của chính nó
