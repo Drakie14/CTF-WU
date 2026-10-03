@@ -27,7 +27,7 @@ Bấm vào tên một con tàu thì trang hiện ra nhiệt độ của nó:
 
 > *The fleet lives in the cloud now. Every craft phones home to the ground station to report how it's doing.*
 
-Câu "the fleet lives in the **cloud**" là một gợi ý rất đậm — ta cứ ghi nhớ đã.
+Câu "the fleet lives in the **cloud**" là một gợi ý rất rõ, ta tạm thời ghi nhớ.
 
 Mở DevTools tab Network, bấm một con tàu, ta thấy request:
 
@@ -65,7 +65,7 @@ Nghĩa là backend sẽ **đi fetch cái URL nằm trong field `resolver`** mà 
 
 ![image](./02-reading.png)
 
-Vấn đề: server fetch URL của ta nhưng **không trả về nội dung** — nó chỉ trả về một con số "nhiệt độ" như `3604.5°C` ở trên. Vậy con số đó từ đâu ra? Ta thử trỏ `resolver` vào vài URL có độ dài body biết trước:
+Vấn đề: server fetch URL của ta nhưng **không trả về nội dung**, nó chỉ trả về một con số "nhiệt độ" như `3604.5°C` ở trên. Vậy con số đó từ đâu ra? Ta thử trỏ `resolver` vào vài URL có độ dài body biết trước:
 
 ![](./10_encode.jpg)
 ![](./10_result.jpg)
@@ -77,7 +77,6 @@ Vấn đề: server fetch URL của ta nhưng **không trả về nội dung** �
 |---|---|
 | `httpbin.org/bytes/100` | `10` |
 | `httpbin.org/bytes/537` | `53.7` |
-| body `"42"` (2 byte) | `0.2` |
 
 -> `temperature = len(body) / 10`. Ta chỉ đọc được **độ dài** của response, không đọc được nội dung. Đây là một `length oracle`.
 
@@ -109,7 +108,7 @@ Nhưng path thật sự đáng giá không phải `project-id`. Metadata server 
 GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
 ```
 
-Gọi được endpoint này nghĩa là lấy được một ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== hợp lệ để giả danh chính service account của server — tức leo thẳng từ SSRF lên quyền GCP. 
+Gọi được endpoint này nghĩa là lấy được một ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== hợp lệ để giả danh chính service account của server, leo thẳng từ SSRF lên quyền GCP. 
 
 Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối . 
 
@@ -121,8 +120,8 @@ Dù vậy, kể cả khi có header `Metadata-Flavor: Google`, bạn vẫn khôn
 2. Bức tường thứ hai là `length oracle`: nó chặn bạn đọc bất cứ thứ gì, kể cả khi đã chạm tới
 
 ### Twist: backend tự đính kèm credential của chính nó
-Ta không kiểm soát được header nhưng **backend** thì có. Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính 
-    ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
+Ta không kiểm soát được header nhưng **backend** thì có.
+Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính  ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
 
 Token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
 
@@ -139,7 +138,7 @@ Ta có `https://httpbin.org/bearer`:
 ![](./bearer_result.jpg)
 
 Backend nhận về **1068 byte** (nhiệt độ ~`106.8`) — tức là có body JSON dài. 
-Vậy **backend tự nó đã đính kèm ==Authorization: Bearer `<token>`== vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token — server tự "khoe" nó ra rồi!
+Vậy **backend** tự nó đã đính kèm ==Authorization: Bearer `<token>`== vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token mà server đã tự "khoe" nó ra rồi
 
 ### Vậy đọc nội dung qua SSRF bằng cách nào
 
@@ -147,8 +146,6 @@ Nguyên tắc chung: muốn đọc được nội dung qua SSRF, bạn phải l�
 -> Giờ chỉ cần làm server fetch tới **máy chủ của ta** để bắt lại cái token đó.
 
 Exfil về server của mình: trỏ resolver thẳng vào một request-logger bạn dựng. Khi backend fetch URL đó, toàn bộ request được lấy về server của bạn, và bạn đọc được nguyên văn.
-
-
 
 ### Exfil token qua request-logger
 
@@ -174,7 +171,7 @@ Trong request bắt được có:
 "authorization": "Bearer ya29.c.c0AZ4bNp..."
 ```
 
-Google có endpoint công khai https://oauth2.googleapis.com/tokeninfo?access_token= nhận access token qua query param và trả lại metadata của nó mà không cần header `Authorization` — rất tiện để soi nhanh một token lạ trước khi dùng:
+Google có endpoint công khai (https://oauth2.googleapis.com/tokeninfo?access_token=) nhận access token qua query param và trả lại metadata của nó mà không cần header `Authorization`:
 
 ```bash!
 curl -s "https://oauth2.googleapis.com/tokeninfo?access_token=$TOKEN"
