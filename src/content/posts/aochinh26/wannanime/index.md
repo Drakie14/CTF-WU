@@ -12,10 +12,10 @@ tags:
   - os.path.join
 ---
 
-## Đề bài
+# Đề bài
 File: [wannanime](https://github.com/Drakie14/Challenges/blob/aochinh26/wannanime.zip)
 
-## Solution
+# Solution
 Truy cập trang web, ta thấy giao diện sau:
 
 ![image](https://hackmd.io/_uploads/rJ0nI7RqGl.png)
@@ -29,9 +29,7 @@ Ta đăng kí thử 1 tài khoản rồi log in:
 Sau khi login ta thấy dashboard như sau:
 
 ![image](https://hackmd.io/_uploads/HkPu_mR9ze.png)
-
-### Session
-
+## CSRF
 Check thử cookie, ta thấy session có 1 đoạn giống như Base64 encoded:
 
 ![image](https://hackmd.io/_uploads/SynH57R9Gl.png)
@@ -58,9 +56,9 @@ def admin():
 
 -> Ta cần `role : admin` để truy cập vào route này.
 
-#### Sửa trực tiếp
+### Sửa trực tiếp
 
-Ta **ngây thơ** thử thay role từ user thành admin, Base64 encode rồi ném lại vào cookie session xem được không:
+Ta thử thay role từ user thành admin, Base64 encode rồi ném lại vào cookie session xem được không:
 
 ![image](https://hackmd.io/_uploads/S1dXAQR9fe.png)
 
@@ -70,7 +68,7 @@ Bấm F5 để refresh nhưng lại trả ta về trang chủ -> Thất bại.
 
 Nhận thấy token của Flask gắn liền với 1 user cố định (được ký bằng `SECRET_KEY` của server) nên nếu đổi payload thì cũng phải tạo Flask token mới — điều ta không thể làm được khi không có key.
 
-#### Thử chèn input thông qua username để đạt được role `admin`
+### Thử chèn input thông qua username để đạt được role `admin`
 
 Ta thử cách khác với payload sau:
 
@@ -131,19 +129,24 @@ Tạo cặp `(1,3)` là 1 chuỗi string dài:
 
 -> `'\' or LOWER(description) REGEXP '`
 
+### Dùng `comment` để phần dư `\'` không gây lỗi
+
+Trong SQL, máy nhận biết comment trên 1 dòng thông qua `--` 
+Vì vậy payload của ta phải luôn có `-- \` ở cuối.
+
 ### SQL code để lấy password của admin
 
-Sau khi thoát khỏi được SQL string, giờ ta cần tìm cách thực hiện một query khác ngay trên 1 dòng lệnh.
+Sau khi thoát khỏi được SQL string và không gây lỗi, giờ ta cần tìm cách thực hiện một query khác ngay trên 1 dòng lệnh.
 
-#### `INSERT INTO users (username, password, role)`
+### `INSERT INTO users (username, password, role)`
 
-Vào lúc làm bài thì thay vì suy nghĩ đến việc sử dụng ==SELECT== để lấy về password của admin, ta lại suy nghĩ đến việc đăng kí 1 user với role là admin.
+Vào lúc làm bài thì thay vì suy nghĩ đến việc sử dụng ==SELECT== để lấy về password của admin, tôi lại lỡ suy nghĩ đến con đường vòng là đăng kí 1 user với role là admin.
 
-Đáng tiếc thay sau một lúc lâu tìm kiếm và thử nghiệm thì ta nghĩ việc thực hiện nhiều query khác nhau trên 1 câu lệnh là không thể.
+Đáng tiếc thay sau một lúc lâu tìm kiếm và thử nghiệm thì nhận ra việc thực hiện nhiều query khác nhau trên 1 câu lệnh là không thể.
 
-#### `UNION`
+### `UNION`
 
-May mắn thay sau khi kiên trì tìm kiếm, ta tìm được query ==UNION== để ghép 2 query ==SELECT== lại với nhau.
+Sau khi kiên trì tìm kiếm, ta tìm được query ==UNION== để ghép 2 query ==SELECT== lại với nhau.
 
 Tài liệu tham khảo thêm về UNION:
 1. https://support.microsoft.com/vi-vn/access/use-a-union-query-to-combine-multiple-queries-into-a-single-result
