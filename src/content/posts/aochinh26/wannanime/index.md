@@ -1,7 +1,7 @@
 ---
 title: wannanime
 date: 2026-10-04
-ctf: Giới thiệu ngành
+ctf: aochinh26
 category: web
 difficulty: medium
 tags:
