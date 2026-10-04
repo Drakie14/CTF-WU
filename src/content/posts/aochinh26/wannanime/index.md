@@ -155,7 +155,7 @@ Trước tiên, ta thử đọc hết thông tin của users bằng payload sau:
 
 Code python có dạng như sau:
 
--> ==count = math.ceil(cursor.execute(f"SELECT * FROM anime WHERE LOWER(title) REGEXP `'UNION SELECT * FROM users -- \' or LOWER(description) REGEXP '`UNION SELECT * FROM users -- \'") / size)==
+-> ==count = math.ceil(cursor.execute(f"SELECT * FROM anime WHERE LOWER(title) REGEXP `'UNION SELECT * FROM users -- \' or LOWER(description) REGEXP '`UNION SELECT * FROM users -- \' ") / size)==
 
 Nhận thấy trang trả về `not_found.html` thay vì thông tin của user. Ta lại quay về đọc thêm về ==UNION== và tìm được rằng:
 
