@@ -1,3 +1,17 @@
+---
+title: wannanime_rewind
+date: 2026-10-05
+ctf: aochinh26
+category: web
+difficulty: medium
+tags:
+  - Flask Session
+  - flask-unsign
+  - SQL Injection
+  - UNION
+  - Path Traversal
+---
+
 # Đề bài
 File: [wannanime_rewind.zip](https://github.com/Drakie14/Challenges/blob/aochinh26/wannanime_rewind.zip)
 # Solution 
