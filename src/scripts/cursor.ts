@@ -1,16 +1,18 @@
 /**
- * Con trỏ Reze cỡ lớn (Windows "size 7" = 32 + 6×16 = 128px) vẽ bằng phần tử HTML bám theo chuột.
+ * Con trỏ Reze cỡ lớn (80px ≈ Windows "size 4" = 32 + 3×16) vẽ bằng phần tử HTML bám theo chuột.
  * Không dùng `cursor: url()` ở cỡ này vì Chrome bỏ cursor tùy chỉnh > 32px khi chuột ở gần
  * mép cửa sổ. Khi bật, `html.reze-cursor-on` ẩn con trỏ thật; cursor CSS 32px trong global.css
  * vẫn là fallback cho màn cảm ứng / khi JS không chạy.
  * `.reze-cursor` được transition:persist (BaseLayout) nên không nháy khi chuyển trang.
  */
 
-const SIZE = 128;
+/** Cỡ hiển thị (CSS px). Ảnh gốc 128px (256px cho màn 2x), trình duyệt tự thu nhỏ. */
+const SIZE = 80;
+const SCALE = SIZE / 128;
 
 type Kind = 'normal' | 'link' | 'text';
 
-// Hotspot theo khung 128px trong file .cur gốc.
+// Hotspot theo khung 128px trong file .cur gốc (nhân SCALE khi vẽ).
 const KINDS: Record<Kind, { src: string; src2x: string; hx: number; hy: number }> = {
   normal: { src: '/cursors/reze-128.png', src2x: '/cursors/reze-256.png', hx: 5, hy: 4 },
   link: { src: '/cursors/reze-link-128.png', src2x: '/cursors/reze-link-256.png', hx: 5, hy: 4 },
@@ -33,8 +35,8 @@ function root(): HTMLElement | null {
       const img = document.createElement('img');
       img.src = k.src;
       img.srcset = `${k.src} 1x, ${k.src2x} 2x`;
-      img.width = SIZE;
-      img.height = SIZE;
+      img.width = 128;
+      img.height = 128;
       img.alt = '';
       img.decoding = 'async';
       img.dataset.kind = name;
@@ -56,7 +58,7 @@ function render(): void {
   if (!el) return;
   const k = KINDS[kind];
   el.dataset.kind = kind;
-  el.style.transform = `translate(${x - k.hx}px, ${y - k.hy}px)`;
+  el.style.transform = `translate(${x - k.hx * SCALE}px, ${y - k.hy * SCALE}px)`;
 }
 
 function show(on: boolean): void {

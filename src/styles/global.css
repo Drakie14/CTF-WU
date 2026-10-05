@@ -185,8 +185,9 @@ html.reze-cursor-on * {
   left: 0;
   top: 0;
   z-index: 10000;
-  width: 128px;
-  height: 128px;
+  /* Khớp SIZE trong src/scripts/cursor.ts. */
+  width: 80px;
+  height: 80px;
   pointer-events: none;
   visibility: hidden;
   view-transition-name: reze-cursor;
