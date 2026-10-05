@@ -117,14 +117,19 @@ function spawn(cx: number, cy: number): void {
     el.style.height = `${rows.length * scale}px`;
     el.style.backgroundImage = `url(${sprites[idx]})`;
     el.style.backgroundSize = '100% 100%';
+    const x = cx - (rows[0].length * scale) / 2;
+    const y = cy - (rows.length * scale) / 2;
+    // Đặt vị trí ngay khi tạo: nếu chờ tick() (~24fps) thì cánh hoa nằm ở góc trên-trái
+    // (left/top = 0) trong vài chục ms → nháy ở góc màn hình khi click liên tục.
+    el.style.transform = `translate(${snap(x)}px, ${snap(y)}px)`;
     (document.querySelector('.sakura-layer') ?? document.body).append(el);
 
     const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1;
     const speed = 80 + Math.random() * 130;
     petals.push({
       el,
-      x: cx - (rows[0].length * scale) / 2,
-      y: cy - (rows.length * scale) / 2,
+      x,
+      y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       phase: Math.random() * Math.PI * 2,
@@ -141,7 +146,8 @@ function spawn(cx: number, cy: number): void {
 }
 
 function tick(now: number): void {
-  acc += Math.min(now - last, 100);
+  // Timestamp của rAF có thể sớm hơn performance.now() lúc spawn → kẹp về 0.
+  acc += Math.max(0, Math.min(now - last, 100));
   last = now;
   if (acc >= FRAME_MS) {
     const dt = acc / 1000;
