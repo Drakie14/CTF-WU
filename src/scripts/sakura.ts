@@ -6,23 +6,43 @@
  */
 
 const PALETTE: Record<string, string> = {
-  '1': '#ffe4ef',
-  '2': '#fbb6d4',
-  '3': '#f472b6',
-  '4': '#db2777',
-  '5': '#fcd34d',
+  o: '#be185d', // viền
+  r: '#9d174d', // tâm hoa
+  d: '#ec4899', // gốc cánh
+  p: '#f9a8d4',
+  l: '#fcd5e5',
+  w: '#fff7fa', // mép cánh sáng
+  y: '#fde047', // nhụy
 };
 
+// Cánh anh đào: đầu có khía chữ V, thuôn dần về gốc hồng đậm.
 const SPRITES: string[][] = [
-  // cánh hoa có khía ở đầu
-  ['.1..1.', '122221', '122321', '.2332.', '.2332.', '..33..'],
-  // cánh hoa nhỏ nghiêng
-  ['..11.', '.1221', '12232', '.2332', '..33.'],
-  // bông hoa 5 cánh, nhụy vàng
-  ['..1.1..', '.12121.', '1222221', '.22522.', '1232321', '.12321.', '..3.3..'],
+  // bông hoa 5 cánh
+  [
+    '....oo.oo....',
+    '...owlolwo...',
+    '.o.olllllo.o.',
+    'owo.olplo.owo',
+    'olloopdpoollo',
+    'ollppdydppllo',
+    '.oppdyrydppo.',
+    '..oopdddpoo..',
+    '...olppplo...',
+    '..olpoooplo..',
+    '..owlo.olwo..',
+    '..ooo...ooo..',
+  ],
+  // cánh rời
+  ['.oo.oo.', 'owwowwo', 'owllllo', 'olllllo', 'olllllo', '.olllo.', '.olplo.', '..opo..', '..odo..', '...o...'],
+  // cánh nghiêng
+  ['...oo.oo', '..owwowo', '.owlllwo', '.olllllo', 'olllllo.', 'ollllo..', 'olppo...', 'opdo....', 'oo......'],
+  // cánh nhỏ
+  ['oo.oo', 'owowo', 'olllo', 'olllo', '.opo.', '.odo.', '..o..'],
 ];
+// Tỉ lệ xuất hiện: cánh rời nhiều hơn bông hoa nguyên.
+const WEIGHTS = [1, 3, 3, 2];
 
-const PIXEL = 3; // 1 pixel sprite = 3px màn hình
+const PIXEL = 2; // 1 pixel sprite = 2px màn hình
 const MAX_PETALS = 140;
 const FRAME_MS = 1000 / 24;
 
@@ -66,18 +86,28 @@ function spriteUrls(): string[] {
   return urls;
 }
 
+function pickSprite(): number {
+  const total = WEIGHTS.reduce((a, b) => a + b, 0);
+  let n = Math.random() * total;
+  for (let i = 0; i < WEIGHTS.length; i++) {
+    n -= WEIGHTS[i];
+    if (n < 0) return i;
+  }
+  return 0;
+}
+
 function snap(v: number): number {
   return Math.round(v / PIXEL) * PIXEL;
 }
 
 function spawn(cx: number, cy: number): void {
   const sprites = spriteUrls();
-  const count = 8 + Math.floor(Math.random() * 5);
+  const count = 10 + Math.floor(Math.random() * 5);
   for (let i = 0; i < count; i++) {
     if (petals.length >= MAX_PETALS) petals.shift()?.el.remove();
-    const idx = Math.floor(Math.random() * SPRITES.length);
+    const idx = pickSprite();
     const rows = SPRITES[idx];
-    const scale = Math.random() < 0.3 ? PIXEL + 1 : PIXEL;
+    const scale = Math.random() < 0.35 ? PIXEL + 1 : PIXEL;
     const el = document.createElement('div');
     el.className = 'sakura-petal';
     el.setAttribute('aria-hidden', 'true');
@@ -88,7 +118,7 @@ function spawn(cx: number, cy: number): void {
     document.body.append(el);
 
     const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1;
-    const speed = 90 + Math.random() * 150;
+    const speed = 80 + Math.random() * 130;
     petals.push({
       el,
       x: cx - (rows[0].length * scale) / 2,
@@ -96,10 +126,10 @@ function spawn(cx: number, cy: number): void {
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       phase: Math.random() * Math.PI * 2,
-      sway: 20 + Math.random() * 30,
+      sway: 25 + Math.random() * 35,
       age: 0,
-      life: 1.6 + Math.random() * 1.1,
-      flipEvery: 0.12 + Math.random() * 0.2,
+      life: 2.2 + Math.random() * 1.2,
+      flipEvery: 0.18 + Math.random() * 0.25,
     });
   }
   if (!rafId) {
@@ -125,14 +155,14 @@ function tick(now: number): void {
       }
       // Bung lên rồi chậm dần, rơi với vận tốc giới hạn như cánh hoa thật.
       p.vx *= 0.9;
-      p.vy = Math.min(p.vy + 420 * dt, 80);
+      p.vy = Math.min(p.vy + 320 * dt, 55);
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      const swayX = Math.sin(p.age * 3 + p.phase) * p.sway * Math.min(p.age, 1);
+      const swayX = Math.sin(p.age * 2.4 + p.phase) * p.sway * Math.min(p.age, 1);
       // Lật ngang theo bước để giả lập cánh hoa xoay — giữ nguyên lưới pixel, không rotate.
       const flip = Math.floor(p.age / p.flipEvery) % 2 === 0 ? 1 : -1;
       const remain = p.life - p.age;
-      const opacity = remain > 0.6 ? 1 : remain > 0.3 ? 0.66 : 0.33;
+      const opacity = remain > 0.75 ? 1 : remain > 0.4 ? 0.66 : 0.33;
       p.el.style.transform = `translate(${snap(p.x + swayX)}px, ${snap(p.y)}px) scaleX(${flip})`;
       p.el.style.opacity = String(opacity);
     }
