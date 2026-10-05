@@ -156,7 +156,7 @@ a {
 }
 
 /* ==========================================================================
-   Con trỏ Reze + hoa anh đào pixel khi click (src/scripts/sakura.ts)
+   Con trỏ Reze (src/scripts/cursor.ts)
    ========================================================================== */
 html {
   cursor: var(--cur-normal);
@@ -244,33 +244,6 @@ html.reze-cursor-on .reze-cursor {
 .rbar:hover .rbar-thumb,
 .rbar-thumb.is-drag {
   background: rgb(244 114 182 / 0.7);
-}
-
-/* Lớp chứa cánh hoa: persist qua các lần chuyển trang, và có view-transition-name riêng để
-   không bị chụp thành ảnh tĩnh rồi mờ đi cùng trang cũ — cánh hoa rơi liền mạch sang trang mới. */
-.sakura-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  overflow: hidden;
-  pointer-events: none;
-  view-transition-name: sakura;
-}
-::view-transition-group(sakura),
-::view-transition-new(sakura) {
-  animation: none;
-}
-::view-transition-old(sakura) {
-  display: none;
-}
-
-.sakura-petal {
-  position: absolute;
-  left: 0;
-  top: 0;
-  pointer-events: none;
-  image-rendering: pixelated;
-  will-change: transform, opacity;
 }
 
 /* ==========================================================================
