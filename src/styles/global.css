@@ -27,6 +27,10 @@
   --curve: 48px;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', Consolas, monospace;
   --font-sans: 'Lexend Variable', system-ui, 'Segoe UI', Roboto, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  /* Con trỏ Reze (48px, hotspot lấy từ file .cur gốc); fallback về cursor hệ thống. */
+  --cur-normal: url('/cursors/reze.png') 2 2, auto;
+  --cur-link: url('/cursors/reze-link.png') 2 2, pointer;
+  --cur-text: url('/cursors/reze-text.png') 6 8, text;
   color-scheme: dark;
 }
 
@@ -148,6 +152,36 @@ a {
   .particles {
     display: none;
   }
+}
+
+/* ==========================================================================
+   Con trỏ Reze + hoa anh đào pixel khi click (src/scripts/sakura.ts)
+   ========================================================================== */
+html {
+  cursor: var(--cur-normal);
+}
+a[href],
+button,
+summary,
+select,
+label[for],
+[role='button'] {
+  cursor: var(--cur-link);
+}
+input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']),
+textarea,
+[contenteditable='true'] {
+  cursor: var(--cur-text);
+}
+
+.sakura-petal {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+  pointer-events: none;
+  image-rendering: pixelated;
+  will-change: transform, opacity;
 }
 
 /* ==========================================================================
@@ -331,7 +365,7 @@ a {
   border: 1px solid rgb(255 255 255 / 0.1);
   border-radius: 0.4rem;
   padding: 0.2rem 0.6rem;
-  cursor: pointer;
+  cursor: var(--cur-link);
 }
 .prose .copy-btn:hover {
   background: rgb(255 255 255 / 0.12);
@@ -421,7 +455,7 @@ a {
   padding: 0 1rem;
 }
 .prose details > summary {
-  cursor: pointer;
+  cursor: var(--cur-link);
   padding: 0.7rem 0;
   font-weight: 600;
   color: var(--text);

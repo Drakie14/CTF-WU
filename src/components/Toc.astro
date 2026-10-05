@@ -63,7 +63,7 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
     border-radius: 0.6rem;
     background: rgb(34 34 40 / 0.45);
     opacity: 0.6;
-    cursor: pointer;
+    cursor: var(--cur-link);
     transition: opacity 0.15s;
   }
   .toc-rail:hover {
