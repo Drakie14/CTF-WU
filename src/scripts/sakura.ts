@@ -6,42 +6,44 @@
  * để chuyển động có chất "giật" kiểu game 8-bit. Tắt khi người dùng bật reduced-motion.
  */
 
+// Phong cách "sakura pixel": không viền, hồng phấn phẳng, đối xứng 4 phía, nhụy vàng/xanh lá.
 const PALETTE: Record<string, string> = {
-  o: '#be185d', // viền
-  r: '#9d174d', // tâm hoa
-  d: '#ec4899', // gốc cánh
-  p: '#f9a8d4',
-  l: '#fcd5e5',
-  w: '#fff7fa', // mép cánh sáng
-  y: '#fde047', // nhụy
+  w: '#fff4f6',
+  l: '#fbd0da',
+  p: '#f6a5b8',
+  m: '#f0809c',
+  d: '#e8466d',
+  y: '#f6c142',
+  g: '#9ccb8f',
 };
 
-// Cánh anh đào: đầu có khía chữ V, thuôn dần về gốc hồng đậm.
-const SPRITES: string[][] = [
-  // bông hoa 5 cánh
-  [
-    '....oo.oo....',
-    '...owlolwo...',
-    '.o.olllllo.o.',
-    'owo.olplo.owo',
-    'olloopdpoollo',
-    'ollppdydppllo',
-    '.oppdyrydppo.',
-    '..oopdddpoo..',
-    '...olppplo...',
-    '..olpoooplo..',
-    '..owlo.olwo..',
-    '..ooo...ooo..',
-  ],
-  // cánh rời
-  ['.oo.oo.', 'owwowwo', 'owllllo', 'olllllo', 'olllllo', '.olllo.', '.olplo.', '..opo..', '..odo..', '...o...'],
-  // cánh nghiêng
-  ['...oo.oo', '..owwowo', '.owlllwo', '.olllllo', 'olllllo.', 'ollllo..', 'olppo...', 'opdo....', 'oo......'],
-  // cánh nhỏ
-  ['oo.oo', 'owowo', 'olllo', 'olllo', '.opo.', '.odo.', '..o..'],
+/** Chỉ vẽ góc trên-trái (đối xứng qua đường chéo) rồi lật ra 4 phía. */
+function mirror(quarter: string[]): string[] {
+  const rows = quarter.map((r) => r + [...r.slice(0, -1)].reverse().join(''));
+  return [...rows, ...rows.slice(0, -1).reverse()];
+}
+
+interface Sprite {
+  rows: string[];
+  /** Hệ số phóng so với PIXEL (đốm nhỏ vẽ 3×3 nên phóng to hơn). */
+  zoom: number;
+  weight: number;
+}
+
+const SPRITES: Sprite[] = [
+  // bông tròn, tâm trắng
+  { rows: mirror(['...dmm', '.dmppp', '.mppll', 'dppllw', 'mpllww', 'mplwww']), zoom: 1, weight: 1 },
+  // bông 4 cánh khía, nhụy vàng
+  { rows: mirror(['...dd.', '..dmpm', '.dppll', 'dmpmlw', 'dpllww', '.mlwwy']), zoom: 1, weight: 2 },
+  // bông 4 cánh chéo
+  { rows: mirror(['.ll...', 'lwlp..', 'llpm..', '.pmdd.', '...dpw', '....wy']), zoom: 1, weight: 2 },
+  // bông nhỏ
+  { rows: mirror(['..dp', '.dpl', 'dplw', 'plwy']), zoom: 1, weight: 3 },
+  // đốm lấp lánh
+  { rows: ['plp', 'lyl', 'plp'], zoom: 2, weight: 2 },
+  { rows: ['.p.', 'pgp', '.p.'], zoom: 2, weight: 2 },
+  { rows: ['m.m', '.l.', 'm.m'], zoom: 2, weight: 2 },
 ];
-// Tỉ lệ xuất hiện: cánh rời nhiều hơn bông hoa nguyên.
-const WEIGHTS = [1, 3, 3, 2];
 
 const PIXEL = 2; // 1 pixel sprite = 2px màn hình
 const MAX_PETALS = 140;
@@ -57,7 +59,6 @@ interface Petal {
   sway: number;
   age: number;
   life: number;
-  flipEvery: number;
 }
 
 const petals: Petal[] = [];
@@ -68,7 +69,7 @@ let acc = 0;
 
 function spriteUrls(): string[] {
   if (urls) return urls;
-  urls = SPRITES.map((rows) => {
+  urls = SPRITES.map(({ rows }) => {
     const canvas = document.createElement('canvas');
     canvas.width = rows[0].length;
     canvas.height = rows.length;
@@ -88,10 +89,10 @@ function spriteUrls(): string[] {
 }
 
 function pickSprite(): number {
-  const total = WEIGHTS.reduce((a, b) => a + b, 0);
+  const total = SPRITES.reduce((a, b) => a + b.weight, 0);
   let n = Math.random() * total;
-  for (let i = 0; i < WEIGHTS.length; i++) {
-    n -= WEIGHTS[i];
+  for (let i = 0; i < SPRITES.length; i++) {
+    n -= SPRITES[i].weight;
     if (n < 0) return i;
   }
   return 0;
@@ -107,8 +108,8 @@ function spawn(cx: number, cy: number): void {
   for (let i = 0; i < count; i++) {
     if (petals.length >= MAX_PETALS) petals.shift()?.el.remove();
     const idx = pickSprite();
-    const rows = SPRITES[idx];
-    const scale = Math.random() < 0.35 ? PIXEL + 1 : PIXEL;
+    const { rows, zoom } = SPRITES[idx];
+    const scale = (Math.random() < 0.35 ? PIXEL + 1 : PIXEL) * zoom;
     const el = document.createElement('div');
     el.className = 'sakura-petal';
     el.setAttribute('aria-hidden', 'true');
@@ -130,7 +131,6 @@ function spawn(cx: number, cy: number): void {
       sway: 25 + Math.random() * 35,
       age: 0,
       life: 2.2 + Math.random() * 1.2,
-      flipEvery: 0.18 + Math.random() * 0.25,
     });
   }
   if (!rafId) {
@@ -160,11 +160,9 @@ function tick(now: number): void {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       const swayX = Math.sin(p.age * 2.4 + p.phase) * p.sway * Math.min(p.age, 1);
-      // Lật ngang theo bước để giả lập cánh hoa xoay — giữ nguyên lưới pixel, không rotate.
-      const flip = Math.floor(p.age / p.flipEvery) % 2 === 0 ? 1 : -1;
       const remain = p.life - p.age;
       const opacity = remain > 0.75 ? 1 : remain > 0.4 ? 0.66 : 0.33;
-      p.el.style.transform = `translate(${snap(p.x + swayX)}px, ${snap(p.y)}px) scaleX(${flip})`;
+      p.el.style.transform = `translate(${snap(p.x + swayX)}px, ${snap(p.y)}px)`;
       p.el.style.opacity = String(opacity);
     }
   }
