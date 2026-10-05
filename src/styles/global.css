@@ -175,6 +175,45 @@ textarea,
   cursor: var(--cur-text);
 }
 
+/* Con trỏ Reze cỡ lớn vẽ bằng HTML (src/scripts/cursor.ts): ẩn con trỏ thật khi đang bật. */
+html.reze-cursor-on,
+html.reze-cursor-on * {
+  cursor: none !important;
+}
+.reze-cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10000;
+  width: 128px;
+  height: 128px;
+  pointer-events: none;
+  visibility: hidden;
+  view-transition-name: reze-cursor;
+}
+html.reze-cursor-on .reze-cursor {
+  visibility: visible;
+}
+.reze-cursor img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+.reze-cursor[data-kind='normal'] img[data-kind='normal'],
+.reze-cursor[data-kind='link'] img[data-kind='link'],
+.reze-cursor[data-kind='text'] img[data-kind='text'] {
+  opacity: 1;
+}
+::view-transition-group(reze-cursor),
+::view-transition-new(reze-cursor) {
+  animation: none;
+}
+::view-transition-old(reze-cursor) {
+  display: none;
+}
+
 /* Thanh cuộn tự vẽ (src/scripts/scrollbar.ts) — native scrollbar không nhận `cursor`. */
 .rbar-on {
   scrollbar-width: none;
