@@ -27,10 +27,11 @@
   --curve: 48px;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', Consolas, monospace;
   --font-sans: 'Lexend Variable', system-ui, 'Segoe UI', Roboto, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
-  /* Con trỏ Reze (48px, hotspot lấy từ file .cur gốc); fallback về cursor hệ thống. */
-  --cur-normal: url('/cursors/reze.png') 2 2, auto;
-  --cur-link: url('/cursors/reze-link.png') 2 2, pointer;
-  --cur-text: url('/cursors/reze-text.png') 6 8, text;
+  /* Con trỏ Reze, hotspot lấy từ file .cur gốc. Giữ đúng 32 CSS px (bản 64px cho màn 2x):
+     Chrome bỏ cursor tùy chỉnh > 32px khi chuột ở gần mép cửa sổ. */
+  --cur-normal: image-set(url('/cursors/reze.png') 1x, url('/cursors/reze@2x.png') 2x) 1 1, auto;
+  --cur-link: image-set(url('/cursors/reze-link.png') 1x, url('/cursors/reze-link@2x.png') 2x) 1 1, pointer;
+  --cur-text: image-set(url('/cursors/reze-text.png') 1x, url('/cursors/reze-text@2x.png') 2x) 4 5, text;
   color-scheme: dark;
 }
 
@@ -174,11 +175,59 @@ textarea,
   cursor: var(--cur-text);
 }
 
-.sakura-petal {
+/* Thanh cuộn tự vẽ (src/scripts/scrollbar.ts) — native scrollbar không nhận `cursor`. */
+.rbar-on {
+  scrollbar-width: none;
+}
+.rbar-on::-webkit-scrollbar {
+  display: none;
+}
+.rbar {
   position: fixed;
   left: 0;
   top: 0;
+  z-index: 60;
+  width: 10px;
+}
+.rbar[hidden] {
+  display: none;
+}
+.rbar-thumb {
+  width: 6px;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: rgb(244 114 182 / 0.35);
+  transition: background-color 0.15s;
+  cursor: var(--cur-link);
+  touch-action: none;
+}
+.rbar:hover .rbar-thumb,
+.rbar-thumb.is-drag {
+  background: rgb(244 114 182 / 0.7);
+}
+
+/* Lớp chứa cánh hoa: persist qua các lần chuyển trang, và có view-transition-name riêng để
+   không bị chụp thành ảnh tĩnh rồi mờ đi cùng trang cũ — cánh hoa rơi liền mạch sang trang mới. */
+.sakura-layer {
+  position: fixed;
+  inset: 0;
   z-index: 9999;
+  overflow: hidden;
+  pointer-events: none;
+  view-transition-name: sakura;
+}
+::view-transition-group(sakura),
+::view-transition-new(sakura) {
+  animation: none;
+}
+::view-transition-old(sakura) {
+  display: none;
+}
+
+.sakura-petal {
+  position: absolute;
+  left: 0;
+  top: 0;
   pointer-events: none;
   image-rendering: pixelated;
   will-change: transform, opacity;

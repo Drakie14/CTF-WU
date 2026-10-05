@@ -32,7 +32,7 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
     <div class="shell-side" transition:persist={persistKey} data-persist-key={persistKey}>
       <Sidebar groups={groups} stats={{ posts: posts.length, ctfs: ctfs.terms.length }} currentSlug={currentSlug} filter={filter} />
     </div>
-    <main id="main" class="panel" tabindex="-1" data-panel transition:animate={panelTransition}>
+    <main id="main" class="panel" tabindex="-1" data-panel data-rbar transition:animate={panelTransition}>
       {view === 'post' && <div class="read-progress" aria-hidden="true" />}
       <div class="side-toggle-wrap">
         <button class="side-toggle" type="button" aria-pressed="false" title="Thu gọn danh sách write-up" data-side-toggle>

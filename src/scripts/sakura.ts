@@ -1,7 +1,8 @@
 /**
  * Click chuột → bung một chùm hoa anh đào pixel art rồi rơi xuống.
  * Sprite vẽ bằng canvas thành data: URL (CSP cho phép img-src data:), phóng to bằng
- * `image-rendering: pixelated`. Vị trí được làm tròn theo lưới pixel và chạy ~24fps
+ * `image-rendering: pixelated`. Cánh hoa nằm trong `.sakura-layer` (transition:persist) nên vẫn
+ * rơi tiếp khi chuyển trang bằng View Transitions. Vị trí được làm tròn theo lưới pixel và chạy ~24fps
  * để chuyển động có chất "giật" kiểu game 8-bit. Tắt khi người dùng bật reduced-motion.
  */
 
@@ -115,7 +116,7 @@ function spawn(cx: number, cy: number): void {
     el.style.height = `${rows.length * scale}px`;
     el.style.backgroundImage = `url(${sprites[idx]})`;
     el.style.backgroundSize = '100% 100%';
-    document.body.append(el);
+    (document.querySelector('.sakura-layer') ?? document.body).append(el);
 
     const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1;
     const speed = 80 + Math.random() * 130;

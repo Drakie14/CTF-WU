@@ -61,9 +61,11 @@ const canonicalUrl = canonical === false ? undefined : new URL(canonical ?? Astr
     <a class="skip-link" href="#main">Bỏ qua tới nội dung</a>
     <Background />
     <slot />
+    <div class="sakura-layer" aria-hidden="true" transition:persist="sakura"></div>
   </body>
 </html>
 
 <script>
   import '../scripts/sakura';
+  import '../scripts/scrollbar';
 </script>
