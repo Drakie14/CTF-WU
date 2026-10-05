@@ -181,6 +181,10 @@ Ta thử lại với payload khác:
 
 `UNION SELECT id, username, password, role, NULL FROM users -- \`
 
+:::warning
+Sử dụng `NULL` để kiểu dữ liệu của 2 bên ==SELECT== giống nhau
+:::
+
 Lần này SQL Injection đã kích hoạt thành công và trả về thông tin như sau:
 
 ![image](https://hackmd.io/_uploads/HkCNnEksGx.png)
