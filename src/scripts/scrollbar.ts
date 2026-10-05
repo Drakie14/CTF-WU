@@ -34,7 +34,8 @@ function layout(bar: Bar): void {
   const view = el.clientHeight;
   const total = el.scrollHeight;
   const rect = viewRect(el);
-  const visible = total - view > 1 && rect.width > 40 && el.checkVisibility();
+  // `visibilityProperty`: sidebar thu gọn chỉ bị `visibility: hidden` (vẫn có kích thước) → phải ẩn thanh cuộn.
+  const visible = total - view > 1 && rect.width > 40 && el.checkVisibility({ visibilityProperty: true });
   track.hidden = !visible;
   if (!visible) return;
   // Bo theo góc panel để thumb không lòi ra ngoài phần bo tròn.
