@@ -30,6 +30,9 @@ export default defineConfig({
   build: {
     format: 'directory',
   },
+  // Prefetch tự làm trong src/scripts/prefetch.ts (router dùng lại được HTML đã tải); tắt bản của
+  // Astro để không tải mỗi trang hai lần.
+  prefetch: false,
   integrations: [
     attachments(),
     {
