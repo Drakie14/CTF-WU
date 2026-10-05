@@ -25,7 +25,9 @@ Bấm vào một thành viên, ta sang trang chi tiết với URL dạng `/membe
 
 ![image](./02-member.png)
 
-Trang này hiển thị thông tin lấy từ file `members/member1.js`. Để ý thêm cái nút mặt trời ở góc phải trên — đó là tính năng đổi theme, lát nữa sẽ thấy nó gọi tới một endpoint riêng. Giờ ta mở source `index.js` lên soi xem server xử lý những gì.
+Trang này hiển thị thông tin lấy từ file `members/member1.js`. 
+
+Giờ ta mở source `index.js` lên soi xem server xử lý những gì.
 
 ## Soi route /member — ngửi thấy path traversal
 
@@ -39,13 +41,19 @@ app.get('/member', requireSession, (req, res) => {
 })
 ```
 
-Dấu hiệu đập vào mắt ngay: input của user (`memberID`) được nối thẳng vào `require()` mà không hề lọc. Hễ thấy một giá trị do người dùng điều khiển chui vào một hàm nhận đường dẫn file — `require`, `fs.readFile`, `res.sendFile`, `include`... — thì phản xạ đầu tiên luôn là [path traversal](https://owasp.org/www-community/attacks/Path_Traversal): nhồi `../` để leo ra khỏi thư mục dự kiến. Ở đây đường dẫn là `./members/<memberID>.js`, nên nếu `memberID` chứa `../` ta có thể bắt Node load một file `.js` bất kỳ trên hệ thống thay vì chỉ các file trong `members/`.
+Dấu hiệu đập vào mắt ngay: input của user (`memberID`) được nối thẳng vào `require()` mà không hề lọc. 
+Hễ thấy một giá trị do người dùng điều khiển chui vào một hàm nhận đường dẫn file, phản xạ đầu tiên luôn là [path traversal](https://owasp.org/www-community/attacks/Path_Traversal): nhồi `../` để leo ra khỏi thư mục dự kiến. Ở đây đường dẫn là `./members/<memberID>.js`,
 
-Nhưng khoan mừng. Lỗ hổng này cho ta *load* một file `.js` có sẵn, chứ không cho ta ghi file mới lên server — ta đâu upload được gì. Load được file nào thì có ích? Chưa rõ. Ta tạm cất ý tưởng "`require()` tùy ý" này sang một bên và soi tiếp.
+Nếu `memberID` chứa `../` ta có thể bắt Node load một file `.js` bất kỳ trên hệ thống thay vì chỉ các file trong `members/`.
+Lỗ hổng này cho ta *load* một file `.js` có sẵn. 
+
+Nhưng vấn đề là Load được file nào thì có ích?  -> Chưa rõ!!!!!
+=> Ta tạm cất ý tưởng "`require()` tùy ý" này sang một bên và soi tiếp.
 
 ## change-theme + dset — ngửi thấy prototype pollution
 
-Cái nút đổi theme hồi nãy chính là route này, kèm middleware kiểm tra session:
+Để ý thêm cái nút mặt trời ở góc phải trên là tính năng đổi theme, thấy nó gọi tới một endpoint riêng.
+Cái nút đổi theme chính là route này, kèm middleware kiểm tra session:
 
 ```javascript!
 const sessionStorage = {}
