@@ -20,7 +20,7 @@ Truy cập trang, ta thấy một CA "Administration Self-Service" cho tự đă
 
 ![image](./01-site.png)
 
-`ASS` = *Administration Self-Service*, một CA nội bộ cấp certificate Ed25519. Muốn lấy flag phải gọi `POST /admin` với cert do CA ký, còn hạn, ký đúng `nonce`, và có **subject bằng subject của cert ADMIN**. Nhưng cert ADMIN không trả private key và chỉ cấp được **một lần**.
+`ASS` = *Administration Self-Service*, một CA nội bộ cấp certificate Ed25519. Muốn lấy flag phải gọi `POST /admin` với cert do CA ký, còn hạn, ký đúng `nonce`, và có subject bằng subject của cert ADMIN. Nhưng cert ADMIN không trả private key và chỉ cấp được một lần.
 
 Mấu chốt: server so subject bằng `asn1crypto`:
 
@@ -28,7 +28,7 @@ Mấu chốt: server so subject bằng `asn1crypto`:
 authorized = ca.subject(presented) == ca.subject(administrator_certificate)
 ```
 
-`asn1crypto.x509.Name.__eq__` không so byte thô mà so theo luật chuẩn hoá tên X.509 (RFC 4518 / stringprep), trong đó có bước **case-fold (table B.2)**:
+`asn1crypto.x509.Name.__eq__` không so byte thô mà so theo luật chuẩn hoá tên X.509 (RFC 4518 / stringprep), trong đó có bước case-fold (table B.2):
 
 ```python!
 >>> import stringprep
@@ -49,27 +49,27 @@ Hai tên khác nhau ở mức Python string (qua được kiểm tra trùng tên
 2. Đăng ký `CLIENT` tên `MAẞA` -> nhận private key, subject đụng độ admin.
 3. Lấy nonce, ký bằng key CLIENT, nộp cert CLIENT vào `/admin` -> subject khớp -> flag.
 
-Hai bước đăng ký làm thẳng bằng **form trên trang**.
+Hai bước đăng ký làm thẳng bằng form trên trang.
 
-**Bước 1 — Đăng ký ADMIN.** Nhập tên `MASSA`, chọn profile `ADMIN`, bấm *Request certificate*. Kết quả chỉ có `certificate`, **không** có `private_key` (đề không trả key cho ADMIN, ta chỉ cần chiếm slot admin):
+Bước 1 — Đăng ký ADMIN. Nhập tên `MASSA`, chọn profile `ADMIN`, bấm *Request certificate*. Kết quả chỉ có `certificate`, không có `private_key` (đề không trả key cho ADMIN, ta chỉ cần chiếm slot admin):
 
 ![image](./02-form-admin.png)
 
-**Bước 2 — Đăng ký CLIENT.** Nhập tên `MAẞA` (`MA` + `ẞ` + `A`), chọn `CLIENT`, *Request certificate*. Lần này kết quả **có `private_key`** — mà subject của nó lại **đụng độ** cert ADMIN ở trên (vì `ẞ` fold thành `ss`):
+Bước 2 — Đăng ký CLIENT. Nhập tên `MAẞA` (`MA` + `ẞ` + `A`), chọn `CLIENT`, *Request certificate*. Lần này kết quả có `private_key` — mà subject của nó lại đụng độ cert ADMIN ở trên (vì `ẞ` fold thành `ss`):
 
 ![image](./03-form-client.png)
 
-Ba bước xác thực còn lại làm ngay trong **DevTools Console** — không cần ký ở ngoài, vì WebCrypto có sẵn `Ed25519`.
+Ba bước xác thực còn lại làm ngay trong DevTools Console — không cần ký ở ngoài, vì WebCrypto có sẵn `Ed25519`.
 
-**Bước 3 — Xin nonce.** `GET /auth/nonce` trả một chuỗi ngẫu nhiên (dùng một lần) mà ta phải ký:
+Bước 3 — Xin nonce. `GET /auth/nonce` trả một chuỗi ngẫu nhiên (dùng một lần) mà ta phải ký:
 
 ![image](./05-step-nonce.png)
 
-**Bước 4 — Ký nonce.** Import `private_key` của CLIENT thành khoá `Ed25519` rồi ký chuỗi `nonce`, lấy chữ ký dạng base64. Toàn bộ chạy bằng `crypto.subtle.sign` **ngay trong trình duyệt**:
+Bước 4 — Ký nonce. Import `private_key` của CLIENT thành khoá `Ed25519` rồi ký chuỗi `nonce`, lấy chữ ký dạng base64. Toàn bộ chạy bằng `crypto.subtle.sign` ngay trong trình duyệt:
 
 ![image](./06-step-sign.png)
 
-**Bước 5 — Nộp /admin.** `POST /admin` với **cert CLIENT** + `nonce` + `signature`. Chữ ký hợp lệ (đúng khoá CLIENT), và khi server chuẩn hoá subject thì cert CLIENT (`MAẞA`) **khớp** cert ADMIN (`MASSA`) -> trả flag:
+Bước 5 — Nộp /admin. `POST /admin` với cert CLIENT + `nonce` + `signature`. Chữ ký hợp lệ (đúng khoá CLIENT), và khi server chuẩn hoá subject thì cert CLIENT (`MAẞA`) khớp cert ADMIN (`MASSA`) -> trả flag:
 
 ![image](./07-step-admin.png)
 
@@ -100,7 +100,7 @@ curl -s -X POST $B/admin -H 'content-type: application/json' -d @admin.json
 ![image](./08-openssl-manual.png)
 
 :::warning
-Hai lỗi hay gặp khi làm tay: **nonce bị dính `\n` cuối** (Notepad tự thêm) làm chữ ký sai — phải lưu bằng `jq -rj`/`printf` không xuống dòng; và **PEM phải có xuống dòng thật** (dùng `jq -r` để đổi `\n` escape thành dòng thật, đừng dán nguyên chuỗi `\n`). Ký bằng **private key**, còn **certificate** chỉ để nộp.
+Hai lỗi hay gặp khi làm tay: nonce bị dính `\n` cuối (Notepad tự thêm) làm chữ ký sai — phải lưu bằng `jq -rj`/`printf` không xuống dòng; và PEM phải có xuống dòng thật (dùng `jq -r` để đổi `\n` escape thành dòng thật, đừng dán nguyên chuỗi `\n`). Ký bằng private key, còn certificate chỉ để nộp.
 :::
 
 Full solve:

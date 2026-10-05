@@ -20,9 +20,9 @@ Truy cập forum, ta thấy một board phpBB bình thường:
 
 ![image](./01-forum-home.png)
 
-phpBB **3.3.16**. `seed.php` nhét flag vào một **private message gửi cho `user_id=2` (admin)**; mật khẩu admin ngẫu nhiên 24 ký tự đặt lúc build nên không đăng nhập trực tiếp được.
+phpBB 3.3.16. `seed.php` nhét flag vào một private message gửi cho `user_id=2` (admin); mật khẩu admin ngẫu nhiên 24 ký tự đặt lúc build nên không đăng nhập trực tiếp được.
 
-Bản này dính **[CVE-2026-48611](https://pentest-tools.com/research/phpbb-authentication-bypass)** (auth bypass, vá ở 3.3.17): controller liên kết tài khoản OAuth `ucp.php?mode=login_link` cho phép **chọn auth provider tuỳ ý** qua tham số `auth_provider`, bỏ qua `auth_method=db` của board. Provider **`apache`** uỷ quyền xác thực cho web server — chỉ kiểm tra `PHP_AUTH_USER == username` và `PHP_AUTH_PW != ''`, **không** so mật khẩu với hash.
+Bản này dính [CVE-2026-48611](https://pentest-tools.com/research/phpbb-authentication-bypass) (auth bypass, vá ở 3.3.17): controller liên kết tài khoản OAuth `ucp.php?mode=login_link` cho phép chọn auth provider tuỳ ý qua tham số `auth_provider`, bỏ qua `auth_method=db` của board. Provider `apache` uỷ quyền xác thực cho web server — chỉ kiểm tra `PHP_AUTH_USER == username` và `PHP_AUTH_PW != ''`, không so mật khẩu với hash.
 
 Ảnh `php:8.2-apache` (mod_php) tự map header `Authorization: Basic` -> `PHP_AUTH_*`, còn `login_link_x=1` (nút submit kiểu image) làm dữ liệu login_link khác rỗng để qua cửa. 
 

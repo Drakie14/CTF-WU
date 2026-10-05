@@ -22,7 +22,7 @@ Truy cập trang, ta thấy giao diện "Avispa Country Club":
 
 ![image](./01-site.png)
 
-App **FastAPI (Python 3.12)**, chủ đề cướp cây gậy golf vàng trong két. Đọc `main.py`, endpoint mục tiêu `POST /api/vault/admin-item` chỉ trả flag khi thỏa **cả 2 điều kiện**:
+App FastAPI (Python 3.12), chủ đề cướp cây gậy golf vàng trong két. Đọc `main.py`, endpoint mục tiêu `POST /api/vault/admin-item` chỉ trả flag khi thỏa cả 2 điều kiện:
 
 ```python!
 @app.post("/api/vault/admin-item")
@@ -36,11 +36,11 @@ async def vault_admin(body: VaultPhraseRequest, req: Request):
     return JSONResponse({"error": "Insufficient role."}, status_code=403)
 ```
 
-Vậy có 2 lớp cần phá: **(1) biết `PHRASE`** (3 từ, sinh ngẫu nhiên mỗi lần khởi động) và **(2) có quyền admin** qua header `X-User-Role: admin`.
+Vậy có 2 lớp cần phá: (1) biết `PHRASE` (3 từ, sinh ngẫu nhiên mỗi lần khởi động) và (2) có quyền admin qua header `X-User-Role: admin`.
 
 ### Lớp 1 — Khôi phục mật khẩu vault (Enigma)
 
-`PHRASE` trông ngẫu nhiên nhưng **tất định** từ 3 rotor `R1,R2,R3`:
+`PHRASE` trông ngẫu nhiên nhưng tất định từ 3 rotor `R1,R2,R3`:
 
 ```python!
 R1 = _sec.randbelow(26); R2 = _sec.randbelow(26); R3 = _sec.randbelow(26)
@@ -48,7 +48,7 @@ _letters = enigma(R1, R2, R3)    # -> 3 chữ cái, vd ['L','U','R']
 PHRASE = [WORDS[_letters[0]][0], WORDS[_letters[1]][1], WORDS[_letters[2]][0]]
 ```
 
-Điểm chí mạng: **cả 3 rotor bị rò rỉ qua HTTP header**. Ba endpoint "pro-shop" trả HTTP 418 kèm `X-Golf-Hint` = base64 của giá trị rotor (6 chữ số):
+Điểm chí mạng: cả 3 rotor bị rò rỉ qua HTTP header. Ba endpoint "pro-shop" trả HTTP 418 kèm `X-Golf-Hint` = base64 của giá trị rotor (6 chữ số):
 
 ```python!
 def hint(v): return base64.b64encode(f"{v:06d}".encode()).decode()
@@ -64,7 +64,7 @@ Truy cập thẳng một endpoint pro-shop trên trình duyệt, trang chỉ hi�
 
 ![image](./02-teapot.png)
 
-Nhưng mở tab **Network**, chọn request đó rồi xem **Response headers**, giá trị rotor lộ ra ở header `X-Golf-Hint` (đây là `R1` — `X-Caddy-Note: Rotor I` xác nhận), dạng base64 của 6 chữ số:
+Nhưng mở tab Network, chọn request đó rồi xem Response headers, giá trị rotor lộ ra ở header `X-Golf-Hint` (đây là `R1` — `X-Caddy-Note: Rotor I` xác nhận), dạng base64 của 6 chữ số:
 
 ![image](./02b-network-hint.png)
 
@@ -78,7 +78,7 @@ Trang `/vault` cho nhập 3 từ này. Nhập đúng mật khẩu (`divot inside
 
 ![image](./06-vault-filled.png)
 
-Bấm **OPEN VAULT** -> vault mở với quyền `privileged user`, nhưng "special item" (flag) vẫn báo **ADMIN CLEARANCE REQUIRED** — tức đã qua lớp mật khẩu nhưng chưa đủ quyền admin:
+Bấm OPEN VAULT -> vault mở với quyền `privileged user`, nhưng "special item" (flag) vẫn báo ADMIN CLEARANCE REQUIRED — tức đã qua lớp mật khẩu nhưng chưa đủ quyền admin:
 
 ![image](./07-vault-result.png)
 
@@ -96,13 +96,13 @@ Có mật khẩu, `/api/vault/enter` cho vào tầng "privileged" và gợi ý C
 }
 ```
 
-`copy_headers` copy `X-User-*` từ phản hồi auth service xuống backend. **CVE GHSA-7r4p-vjf4-gxv4**: Caddy dính lỗi **không strip header do client gửi lên** trước khi forward. `/auth` không set `X-User-Role`, nên header `X-User-Role: admin` client tự nhét vào được giữ nguyên và backend tin tưởng — đúng như gợi ý *"The caddy doesn't strip what the auth service doesn't set."*
+`copy_headers` copy `X-User-*` từ phản hồi auth service xuống backend. CVE GHSA-7r4p-vjf4-gxv4: Caddy dính lỗi không strip header do client gửi lên trước khi forward. `/auth` không set `X-User-Role`, nên header `X-User-Role: admin` client tự nhét vào được giữ nguyên và backend tin tưởng — đúng như gợi ý *"The caddy doesn't strip what the auth service doesn't set."*
 
 > Bản source chạy thẳng uvicorn (không có Caddy trước), nên header gửi trực tiếp tới FastAPI luôn được nhận. Trên server thật có Caddy nhưng dính CVE nên header vẫn xuyên qua -> cùng một exploit chạy được ở cả hai nơi.
 
 ### Chuỗi khai thác
 
-`clubs/balls/bags` -> giải base64 -> `R1,R2,R3` -> `enigma` -> `WORDS` -> `PHRASE` -> `POST /api/vault/admin-item` với body `{"phrase": "<PHRASE>"}` **và header `X-User-Role: admin`** -> nhận flag.
+`clubs/balls/bags` -> giải base64 -> `R1,R2,R3` -> `enigma` -> `WORDS` -> `PHRASE` -> `POST /api/vault/admin-item` với body `{"phrase": "<PHRASE>"}` và header `X-User-Role: admin` -> nhận flag.
 
 ```python!
 #!/usr/bin/env python3
@@ -187,7 +187,7 @@ Kết quả chạy thực tế (local, dựng từ source chính thức CSAW):
 [+] FLAG: csaw{el3gant_sw1ng_n3ver_c4ught}
 ```
 
-Toàn bộ chuỗi khai thác cũng làm được **hoàn toàn trong trình duyệt**, không cần chạy lệnh ngoài: mở DevTools -> Console và dán đoạn tự-chứa dưới (fetch rotor từ header -> tính `enigma` -> `POST` kèm header injection):
+Toàn bộ chuỗi khai thác cũng làm được hoàn toàn trong trình duyệt, không cần chạy lệnh ngoài: mở DevTools -> Console và dán đoạn tự-chứa dưới (fetch rotor từ header -> tính `enigma` -> `POST` kèm header injection):
 
 ```javascript!
 (async () => {
@@ -215,7 +215,7 @@ Console cho thấy 3 request `418 I'm a Teapot` (rò rỉ rotor qua header) rồ
 ![image](./04-console.png)
 
 :::info
-Giải đã kết thúc, không còn instance. Các kết quả/ảnh ở trên được chạy **local** bằng chính source công khai mà BTC phát hành ([osirislab/CSAW-CTF-2026-Quals-Public](https://github.com/osirislab/CSAW-CTF-2026-Quals-Public/tree/main/web/golf-heist)) — trong `app/main.py` flag được hardcode đúng bằng flag thật của đề, nên exploit cho ra chính xác flag dưới đây.
+Giải đã kết thúc, không còn instance. Các kết quả/ảnh ở trên được chạy local bằng chính source công khai mà BTC phát hành ([osirislab/CSAW-CTF-2026-Quals-Public](https://github.com/osirislab/CSAW-CTF-2026-Quals-Public/tree/main/web/golf-heist)) — trong `app/main.py` flag được hardcode đúng bằng flag thật của đề, nên exploit cho ra chính xác flag dưới đây.
 :::
 
 -> Flag: `csaw{el3gant_sw1ng_n3ver_c4ught}`

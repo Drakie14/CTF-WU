@@ -30,7 +30,7 @@ Mở `flag.js` ra chỉ có một câu trêu: `// cmon, you didn't think it was 
 
 ![image](./terminal-scriptjs.png)
 
-Ta nhận thấy toàn bộ tham số mã hoá đã bị **để lộ ngay trong JavaScript phía client**:
+Ta nhận thấy toàn bộ tham số mã hoá đã bị để lộ ngay trong JavaScript phía client:
 ```javascript!
 const aes256CipherValues = {
   iv:         "oMhm3ETjFKP3Aeo4",
@@ -44,9 +44,9 @@ const aes256CipherValues = {
 2. Thuật toán là `AES-256-GCM` (WebCrypto), với `iv`, `ciphertext`, `tag` đều là base64
 3. Tác giả cố tình "không log, không return" flag rồi nghĩ rằng thế là không ai lấy được
 
-Vậy `security phía client` là gì? Về cơ bản, nó **không tồn tại**: mọi thứ gửi tới trình duyệt (JS, key, ciphertext) thì ta đều đọc và chạy lại được. Việc không in flag ra không làm nó an toàn hơn.
+Vậy `security phía client` là gì? Về cơ bản, nó không tồn tại: mọi thứ gửi tới trình duyệt (JS, key, ciphertext) thì ta đều đọc và chạy lại được. Việc không in flag ra không làm nó an toàn hơn.
 
-Lưu ý: gọi thẳng `decryptFlag()` **không** ra flag vì hàm này cố tình không `return`/`log`, và cú pháp kiểu `decryptFlag() return` sẽ báo `SyntaxError`. Ta mở DevTools -> Console rồi **tự chạy lại đúng phần giải mã** (các biến `aes256CipherValues` là global nên gọi trực tiếp được), hàm trả về flag:
+Lưu ý: gọi thẳng `decryptFlag()` không ra flag vì hàm này cố tình không `return`/`log`, và cú pháp kiểu `decryptFlag() return` sẽ báo `SyntaxError`. Ta mở DevTools -> Console rồi tự chạy lại đúng phần giải mã (các biến `aes256CipherValues` là global nên gọi trực tiếp được), hàm trả về flag:
 
 ```javascript!
 (async () => {

@@ -37,7 +37,7 @@ Vậy câu hỏi là: server dựa vào đâu để biết "ta là ai"? Ta mở 
 set-cookie: logged_in=guest; Path=/; HttpOnly; SameSite=Lax
 ```
 
-Ta nhận thấy server **lưu thẳng tên đăng nhập vào giá trị cookie** — không ký (sign), không mã hoá, không dùng session id ngẫu nhiên. Khi tải trang chủ, server đọc luôn `logged_in` để quyết định quyền. Đây chính là lỗ hổng `Broken Access Control` kinh điển: tin tưởng dữ liệu do client giữ.
+Ta nhận thấy server lưu thẳng tên đăng nhập vào giá trị cookie — không ký (sign), không mã hoá, không dùng session id ngẫu nhiên. Khi tải trang chủ, server đọc luôn `logged_in` để quyết định quyền. Đây chính là lỗ hổng `Broken Access Control` kinh điển: tin tưởng dữ liệu do client giữ.
 
 -> Ta chỉ cần sửa cookie `logged_in` từ `guest` thành `admin`.
 
@@ -55,7 +55,7 @@ curl 'https://first-flag-absurd-admin.netlify.app/__data.json' -b 'logged_in=adm
 ```
 
 :::warning
-`HttpOnly` chỉ chặn JavaScript đọc cookie, chứ **không** ngăn ta tự sửa cookie bằng DevTools hay `curl`. Cookie phân quyền phải là session id tra ở server, hoặc token được ký (HMAC/JWT có chữ ký).
+`HttpOnly` chỉ chặn JavaScript đọc cookie, chứ không ngăn ta tự sửa cookie bằng DevTools hay `curl`. Cookie phân quyền phải là session id tra ở server, hoặc token được ký (HMAC/JWT có chữ ký).
 :::
 
 -> Flag: `FirstFlag{ch0c0lat3CH1PCookie5}`

@@ -26,15 +26,15 @@ Flag Format: `CSSCTF{...}`
 
 ### Quan sát ban đầu
 
-Mở `http://34.116.80.78:8001` là một chiếc đồng hồ, bên cạnh là log `/api/feed`: mỗi giây thêm một bản ghi `{timestamp, ciphertext}`, cửa sổ luôn giữ **60 bản ghi / 60 giây liên tiếp**. Ciphertext đổi liên tục nên nhìn như "không thể giải".
+Mở `http://34.116.80.78:8001` là một chiếc đồng hồ, bên cạnh là log `/api/feed`: mỗi giây thêm một bản ghi `{timestamp, ciphertext}`, cửa sổ luôn giữ 60 bản ghi / 60 giây liên tiếp. Ciphertext đổi liên tục nên nhìn như "không thể giải".
 
 ![image](./01-home.jpg)
 
 Hai nhận xét then chốt:
 
-1. **Plaintext là cố định.** Mọi ciphertext đều có dạng `CSSCTF{3_5_9_5_6}` (độ dài các nhóm giống hệt nhau). Đây chính là **một flag duy nhất** bị mã hóa bằng nhiều key khác nhau — key mới đổi mỗi giây, còn flag thì không.
+1. Plaintext là cố định. Mọi ciphertext đều có dạng `CSSCTF{3_5_9_5_6}` (độ dài các nhóm giống hệt nhau). Đây chính là một flag duy nhất bị mã hóa bằng nhiều key khác nhau — key mới đổi mỗi giây, còn flag thì không.
 
-2. **Dãy ciphertext lặp lại.** Capture hôm nay và hôm trước cho cùng một dãy 60 ciphertext (chỉ khác timestamp hiển thị). Nghĩa là key không phụ thuộc thời gian thực; đây là một dãy cố định trượt qua cửa sổ 60 giây → giải được hoàn toàn offline.
+2. Dãy ciphertext lặp lại. Capture hôm nay và hôm trước cho cùng một dãy 60 ciphertext (chỉ khác timestamp hiển thị). Nghĩa là key không phụ thuộc thời gian thực; đây là một dãy cố định trượt qua cửa sổ 60 giây → giải được hoàn toàn offline.
 
 Vì prefix `CSSCTF` đã biết, với mỗi bản ghi `r` ta lấy ngay được 6 giá trị key đầu:
 
@@ -44,15 +44,15 @@ key(r, c) = ciphertext[r][c] - "CSSCTF"[c]   (mod 26),  c = 0..5
 
 ### Cấu trúc keystream
 
-Xếp 6 cột key này theo các bản ghi, ta thấy các cột chỉ là bản dịch (rotation) của nhau — tức là tồn tại **một keystream chung `M`**, và mỗi vị trí ký tự chỉ lấy một phần tử của `M`. Dò độ lệch giữa các cột cho ra:
+Xếp 6 cột key này theo các bản ghi, ta thấy các cột chỉ là bản dịch (rotation) của nhau — tức là tồn tại một keystream chung `M`, và mỗi vị trí ký tự chỉ lấy một phần tử của `M`. Dò độ lệch giữa các cột cho ra:
 
 ```
 key(r, c) = M[(r + 43*c) mod 77]
 ```
 
-với `c` là **thứ tự ký tự alnum** (bỏ qua `{ _ }`, nhưng vẫn đếm các chữ số trong flag). Chu kỳ là **77** chứ không phải 60: cửa sổ 60 giây chỉ là một đoạn trượt của dãy dài 77 phần tử. Đúng tinh thần Chrono I — *"every second hides a secret"* — mỗi giây là một mảnh của cùng một keystream.
+với `c` là thứ tự ký tự alnum (bỏ qua `{ _ }`, nhưng vẫn đếm các chữ số trong flag). Chu kỳ là 77 chứ không phải 60: cửa sổ 60 giây chỉ là một đoạn trượt của dãy dài 77 phần tử. Đúng tinh thần Chrono I — *"every second hides a secret"* — mỗi giây là một mảnh của cùng một keystream.
 
-6 cột đã biết × 60 bản ghi phủ trọn cả 77 chỉ số của `M`, nên dựng lại `M` đầy đủ rồi giải mọi vị trí còn lại. Vì flag cố định, mỗi vị trí phải cho **cùng một ký tự ở cả 60 bản ghi** — đây vừa là cách giải vừa là cách kiểm chứng.
+6 cột đã biết × 60 bản ghi phủ trọn cả 77 chỉ số của `M`, nên dựng lại `M` đầy đủ rồi giải mọi vị trí còn lại. Vì flag cố định, mỗi vị trí phải cho cùng một ký tự ở cả 60 bản ghi — đây vừa là cách giải vừa là cách kiểm chứng.
 
 ```python
 import json

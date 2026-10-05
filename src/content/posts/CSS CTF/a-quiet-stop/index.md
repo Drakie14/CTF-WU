@@ -16,7 +16,7 @@ Nothing about this place screams importance. And yet... it's exactly where the t
 
 Flag Format: `FirstFlag{city_country}` — ví dụ `FirstFlag{newyork_unitedstates}`
 ## Solution
-Truy cập vào challenge, ta được cho một tấm ảnh chụp góc phố và cần xác định `city_country` nơi ảnh được chụp. Đây là dạng `geolocation` nên không có payload hay script để "giải" — ta phải **quan sát các manh mối trong ảnh** rồi suy luận.
+Truy cập vào challenge, ta được cho một tấm ảnh chụp góc phố và cần xác định `city_country` nơi ảnh được chụp. Đây là dạng `geolocation` nên không có payload hay script để "giải" — ta phải quan sát các manh mối trong ảnh rồi suy luận.
 
 ![image](./original.png)
 
@@ -38,7 +38,7 @@ Phóng to soi từng chi tiết, ta khoanh được 3 manh mối cần lưu ý:
 
 Vậy ta có một pub tên `The Waterhouse`, thuộc chuỗi `Wetherspoon`, nằm trên `Kennedy Street`. Ba manh mối này ghép lại chỉ về một địa điểm duy nhất.
 
-Ta search nhanh [`The Waterhouse Wetherspoon Kennedy Street`](https://www.jdwetherspoon.com/pubs/the-waterhouse-manchester/) -> đây là pub tại **Manchester**, Anh Quốc. Đối chiếu trên bản đồ, đúng toà nhà gạch đỏ ở góc phố trong ảnh:
+Ta search nhanh [`The Waterhouse Wetherspoon Kennedy Street`](https://www.jdwetherspoon.com/pubs/the-waterhouse-manchester/) -> đây là pub tại Manchester, Anh Quốc. Đối chiếu trên bản đồ, đúng toà nhà gạch đỏ ở góc phố trong ảnh:
 
 ![image](./map-location.png)
 

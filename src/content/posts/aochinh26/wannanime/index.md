@@ -90,7 +90,7 @@ Sau khi thử kiểm soát cookie session thất bại, ta quay trở lại vớ
 
 Ở các route như `/register` và `/login` sử dụng `%s` làm placeholder cho các values nên ta không thể sử dụng các route này để SQL Injection.
 
-**Nhưng** ở route `/dashboard` có tồn tại:
+Nhưng ở route `/dashboard` có tồn tại:
 
 ```python!
 count = math.ceil(cursor.execute(f"SELECT * FROM anime WHERE LOWER(title) REGEXP '{keyword}' or LOWER(description) REGEXP '{keyword}'") / size)

@@ -21,7 +21,7 @@ Truy cập vào challenge, ta được cho một tấm ảnh `1.jpg`:
 
 ![image](./original.jpg)
 
-Đề nói `behind the picture` (đằng sau bức ảnh) -> đây là gợi ý kho báu **không nằm ở nội dung ảnh** mà nằm ở phần dữ liệu đi kèm file, tức `metadata`.
+Đề nói `behind the picture` (đằng sau bức ảnh) -> đây là gợi ý kho báu không nằm ở nội dung ảnh mà nằm ở phần dữ liệu đi kèm file, tức `metadata`.
 
 Vậy ta thử soi metadata. Không cần tool gì phức tạp, chỉ một lệnh `file` (hoặc `exiftool`) là flag đã lộ ra ngay trong `comment` của file JPEG:
 

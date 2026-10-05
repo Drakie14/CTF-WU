@@ -27,7 +27,7 @@ Bấm vào tên một con tàu thì trang hiện ra nhiệt độ của nó:
 
 > *The fleet lives in the cloud now. Every craft phones home to the ground station to report how it's doing.*
 
-Câu "the fleet lives in the **cloud**" là một gợi ý rất rõ, ta tạm thời ghi nhớ.
+Câu "the fleet lives in the cloud" là một gợi ý rất rõ, ta tạm thời ghi nhớ.
 
 Mở DevTools tab Network, bấm một con tàu, ta thấy request:
 
@@ -57,7 +57,7 @@ async function T(a, t, e) {
 }
 ```
 
-Nghĩa là backend sẽ **đi fetch cái URL nằm trong field `resolver`** mà ta hoàn toàn kiểm soát. Đây chính là `SSRF` kinh điển.
+Nghĩa là backend sẽ đi fetch cái URL nằm trong field `resolver` mà ta hoàn toàn kiểm soát. Đây chính là `SSRF` kinh điển.
 
 -> Format header: `"X" + base64(JSON {"resolver": "<URL ta chọn>"})`.
 
@@ -65,7 +65,7 @@ Nghĩa là backend sẽ **đi fetch cái URL nằm trong field `resolver`** mà 
 
 ![image](./02-reading.png)
 
-Vấn đề: server fetch URL của ta nhưng **không trả về nội dung**, nó chỉ trả về một con số "nhiệt độ" như `3604.5°C` ở trên. Vậy con số đó từ đâu ra? Ta thử trỏ `resolver` vào vài URL có độ dài body biết trước:
+Vấn đề: server fetch URL của ta nhưng không trả về nội dung, nó chỉ trả về một con số "nhiệt độ" như `3604.5°C` ở trên. Vậy con số đó từ đâu ra? Ta thử trỏ `resolver` vào vài URL có độ dài body biết trước:
 
 ![](./10_encode.jpg)
 ![](./10_result.jpg)
@@ -78,7 +78,7 @@ Vấn đề: server fetch URL của ta nhưng **không trả về nội dung**, 
 | `httpbin.org/bytes/100` | `10` |
 | `httpbin.org/bytes/537` | `53.7` |
 
--> `temperature = len(body) / 10`. Ta chỉ đọc được **độ dài** của response, không đọc được nội dung. Đây là một `length oracle`.
+-> `temperature = len(body) / 10`. Ta chỉ đọc được độ dài của response, không đọc được nội dung. Đây là một `length oracle`.
 
 ### Vậy SSRF này trỏ đi đâu được?
 
@@ -97,12 +97,12 @@ Gợi ý "cloud" + server chạy trên GCP khiến ta nghĩ ngay tới [GCP meta
 ```
 ![image](https://hackmd.io/_uploads/rJYNLUTqzx.png)
 
-May mắn thay, request `200 OK` — SSRF **chạm được** vào metadata nội bộ.
+May mắn thay, request `200 OK` — SSRF chạm được vào metadata nội bộ.
 ![image](https://hackmd.io/_uploads/S1EPIU6qGe.png)
 
 ### Nhắm tới token của service account
 
-Nhưng path thật sự đáng giá không phải `project-id`. Metadata server GCP có một endpoint cấp thẳng **access token của service account** đang gắn cho instance:
+Nhưng path thật sự đáng giá không phải `project-id`. Metadata server GCP có một endpoint cấp thẳng access token của service account đang gắn cho instance:
 
 ```
 GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
@@ -110,7 +110,7 @@ GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts
 
 Gọi được endpoint này nghĩa là lấy được một ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== hợp lệ để giả danh chính service account của server, leo thẳng từ SSRF lên quyền GCP. 
 
-Vấn đề là GCP metadata server **bắt buộc** mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối . 
+Vấn đề là GCP metadata server bắt buộc mọi request phải kèm header `Metadata-Flavor: Google`, nếu không sẽ từ chối . 
 
 ### 2 bức tường bảo mật tách biệt
 
@@ -120,7 +120,7 @@ Dù vậy, kể cả khi có header `Metadata-Flavor: Google`, bạn vẫn khôn
 2. Bức tường thứ hai là `length oracle`: nó chặn bạn đọc bất cứ thứ gì, kể cả khi đã chạm tới
 
 ### Twist: backend tự đính kèm credential của chính nó
-Ta không kiểm soát được header nhưng **backend** thì có.
+Ta không kiểm soát được header nhưng backend thì có.
 Nếu server này tự nó cũng là một GCP client (dùng Cloud SDK/Google client library để gọi các API khác của Google), rất có thể nó đã cấu hình sẵn một lớp middleware tự động đính  ==[Authorization: Bearer `<token>`](https://docs.cloud.google.com/docs/authentication/rest#user-creds)== vào *mọi* request outbound. 
 
 Token sẽ tự "theo" request của ta đi tới bất kỳ đâu ta trỏ `resolver` vào.
@@ -137,13 +137,13 @@ Ta có `https://httpbin.org/bearer`:
 ![](./bearer_encode.jpg)
 ![](./bearer_result.jpg)
 
-Backend nhận về **1068 byte** (nhiệt độ ~`106.8`) — tức là có body JSON dài. 
-Vậy **backend** tự nó đã đính kèm ==Authorization: Bearer `<token>`== vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token mà server đã tự "khoe" nó ra rồi
+Backend nhận về 1068 byte (nhiệt độ ~`106.8`) — tức là có body JSON dài. 
+Vậy backend tự nó đã đính kèm ==Authorization: Bearer `<token>`== vào mọi request outbound (~1030 ký tự token). Ta không cần tự gửi token mà server đã tự "khoe" nó ra rồi
 
 ### Vậy đọc nội dung qua SSRF bằng cách nào
 
 Nguyên tắc chung: muốn đọc được nội dung qua SSRF, bạn phải làm cho dữ liệu nhạy cảm chảy về một nơi bạn kiểm soát, chứ không phải về backend. 
--> Giờ chỉ cần làm server fetch tới **máy chủ của ta** để bắt lại cái token đó.
+-> Giờ chỉ cần làm server fetch tới máy chủ của ta để bắt lại cái token đó.
 
 Exfil về server của mình: trỏ resolver thẳng vào một request-logger bạn dựng. Khi backend fetch URL đó, toàn bộ request được lấy về server của bạn, và bạn đọc được nguyên văn.
 
@@ -152,7 +152,7 @@ Exfil về server của mình: trỏ resolver thẳng vào một request-logger 
 Egress mở ra internet, nhưng `webhook.site`, `requestcatcher`, `oast.pro`, `hookb.in`, `pipedream`... đều bị chặn. Ta dùng `postb.in`.
 
 :::info
-**Bẫy quan trọng:** sink nào trả về redirect cross-host (vd `toptal.com` → `postb.in`) sẽ khiến thư viện `node-fetch` của backend **drop header `Authorization`** khi đi qua redirect. Nên ta phải trỏ **thẳng** vào host không redirect.
+Bẫy quan trọng: sink nào trả về redirect cross-host (vd `toptal.com` → `postb.in`) sẽ khiến thư viện `node-fetch` của backend drop header `Authorization` khi đi qua redirect. Nên ta phải trỏ thẳng vào host không redirect.
 :::
 
 ![image](https://hackmd.io/_uploads/BytgQR2qze.png)
@@ -178,7 +178,7 @@ curl -s "https://oauth2.googleapis.com/tokeninfo?access_token=$TOKEN"
 ```
 ![image](https://hackmd.io/_uploads/r14TNBT9fe.png)
 
-Field quan trọng nhất là `scope`: `https://www.googleapis.com/auth/cloud-platform` là scope rộng nhất GCP có — nó không giới hạn token vào một API cụ thể (như `devstorage.read_only` chỉ đọc được Storage), mà cho phép gọi **bất kỳ** API nào mà IAM role của service account cho phép. 
+Field quan trọng nhất là `scope`: `https://www.googleapis.com/auth/cloud-platform` là scope rộng nhất GCP có — nó không giới hạn token vào một API cụ thể (như `devstorage.read_only` chỉ đọc được Storage), mà cho phép gọi bất kỳ API nào mà IAM role của service account cho phép. 
 -> Ta đã có thể truy cập vào bất cứ đâu ta muốn
 
 Bash payload:

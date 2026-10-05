@@ -23,9 +23,9 @@ Trang chủ chỉ có đúng một ô nhập URL để gửi cho bot ghé thăm 
 
 ![image](./01-site.png)
 
-Đây là challenge **client-side / browser-extension XSS**. Bot (Playwright + Firefox) mang sẵn cookie `flag` gắn với `doc.rust-lang.org` (path `/stable/std/`, **không** `httpOnly`). Ta phải chạy JS trong ngữ cảnh `doc.rust-lang.org` để đọc `document.cookie` rồi exfil. Chuỗi khai thác ghép **4 bug**.
+Đây là challenge client-side / browser-extension XSS. Bot (Playwright + Firefox) mang sẵn cookie `flag` gắn với `doc.rust-lang.org` (path `/stable/std/`, không `httpOnly`). Ta phải chạy JS trong ngữ cảnh `doc.rust-lang.org` để đọc `document.cookie` rồi exfil. Chuỗi khai thác ghép 4 bug.
 
-> Vì flag được **exfil về webhook của attacker** (bot chạy phía server, không phải trình duyệt của ta), bước lấy flag không hiện trên màn hình — ta gửi URL trang khai thác vào ô trên rồi đọc cookie `flag` ở webhook sau ~40s.
+> Vì flag được exfil về webhook của attacker (bot chạy phía server, không phải trình duyệt của ta), bước lấy flag không hiện trên màn hình — ta gửi URL trang khai thác vào ô trên rồi đọc cookie `flag` ở webhook sau ~40s.
 
 ### Bug 1 — Domain-prefix confusion (server)
 
@@ -36,11 +36,11 @@ if (!url || !url.startsWith('https://doc.rust-lang.org')) {   // (!) thiếu d�
 await runBrowser(url);
 ```
 
-Thiếu `/` cuối nên `https://doc.rust-lang.org.<attacker>/` vẫn qua -> ép bot mở thẳng **trang attacker**, ta có full JS. (Hint đề: `doc.rust-lang.org` itself is out of scope -> phải dùng subdomain kiểu này.)
+Thiếu `/` cuối nên `https://doc.rust-lang.org.<attacker>/` vẫn qua -> ép bot mở thẳng trang attacker, ta có full JS. (Hint đề: `doc.rust-lang.org` itself is out of scope -> phải dùng subdomain kiểu này.)
 
 ### Bug 2 — Điều khiển `activateOn` (options.js postMessage)
 
-`web_accessible_resources: ["*"]` + UUID cố định -> nhúng được `moz-extension://<uuid>/options.html`. `options.js` **không kiểm tra `e.origin`**, chỉ cần chuỗi *chứa* `https://doc.rust-lang.org/`, rồi lưu **`u.origin`** làm `activateOn`:
+`web_accessible_resources: ["*"]` + UUID cố định -> nhúng được `moz-extension://<uuid>/options.html`. `options.js` không kiểm tra `e.origin`, chỉ cần chuỗi *chứa* `https://doc.rust-lang.org/`, rồi lưu `u.origin` làm `activateOn`:
 
 ```js!
 window.addEventListener('message', (e) => {         // không check origin
@@ -55,7 +55,7 @@ window.addEventListener('message', (e) => {         // không check origin
 
 ### Bug 3 — Bypass js-xss bằng import map (ghi `previous` thô)
 
-`cs.js` lưu `previous = window[nonce](location.href)`, với `window[nonce]` là default export của `http://localhost:3000/jsxss.js` (đáng lẽ là `filterXSS`). `nonce` ngẫu nhiên nhưng **specifier import là URL tuyệt đối cố định** -> đặt sẵn **import map** trong top frame để remap:
+`cs.js` lưu `previous = window[nonce](location.href)`, với `window[nonce]` là default export của `http://localhost:3000/jsxss.js` (đáng lẽ là `filterXSS`). `nonce` ngẫu nhiên nhưng specifier import là URL tuyệt đối cố định -> đặt sẵn import map trong top frame để remap:
 
 ```html!
 <script type="importmap">
@@ -74,7 +74,7 @@ Khi `cs.js` chạy trên trang docs thật:
 elm.innerHTML = 'Previous: ' + previous;   // (!) SINK
 ```
 
-`<img onerror>` do content script tạo là node DOM thật của trang -> inline handler **chạy trong world của `doc.rust-lang.org`**. Trang ở `/stable/std/` nên `document.cookie` chứa cookie `flag` (non-httpOnly) -> đọc và exfil về server attacker.
+`<img onerror>` do content script tạo là node DOM thật của trang -> inline handler chạy trong world của `doc.rust-lang.org`. Trang ở `/stable/std/` nên `document.cookie` chứa cookie `flag` (non-httpOnly) -> đọc và exfil về server attacker.
 
 ### Luồng hoàn chỉnh
 

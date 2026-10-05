@@ -27,10 +27,10 @@ Truy cập vào challenge, ta được cho một tấm bản đồ sao của Pol
 
 Đọc kỹ đề, ta rút ra đúng một bài toán quen thuộc:
 
-1. Các hành tinh là **node**, các đường kẻ đứt nối giữa chúng là **cạnh (edge)**, con số trên mỗi đường là **trọng số** (số ngày bay).
-2. Ta phải đi từ `EARTH` tới `LANCER-RXKRD`, chỉ được bám theo các đường có sẵn, và tổng số ngày phải **dưới 25**.
+1. Các hành tinh là node, các đường kẻ đứt nối giữa chúng là cạnh (edge), con số trên mỗi đường là trọng số (số ngày bay).
+2. Ta phải đi từ `EARTH` tới `LANCER-RXKRD`, chỉ được bám theo các đường có sẵn, và tổng số ngày phải dưới 25.
 
-Vậy đây chính là bài toán `shortest path` (đường đi ngắn nhất) trên đồ thị có trọng số. Cái tên *"**A** **Star** Trail"* cũng là một cú chơi chữ rất duyên: [`A*`](https://en.wikipedia.org/wiki/A*_search_algorithm) là thuật toán tìm đường kinh điển — nhưng với đồ thị nhỏ như này, một lượt [`Dijkstra`](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm) (hay thậm chí nhẩm tay) là đủ.
+Vậy đây chính là bài toán `shortest path` (đường đi ngắn nhất) trên đồ thị có trọng số. Cái tên *"A Star Trail"* cũng là một cú chơi chữ rất duyên: [`A*`](https://en.wikipedia.org/wiki/A*_search_algorithm) là thuật toán tìm đường kinh điển — nhưng với đồ thị nhỏ như này, một lượt [`Dijkstra`](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm) (hay thậm chí nhẩm tay) là đủ.
 
 ### Trích xuất đồ thị từ ảnh
 
@@ -60,7 +60,7 @@ Ta đọc từng cạnh và trọng số trực tiếp trên bản đồ:
 | VERGINON — 10-49-SLATER-4090 | 7.5 |
 
 :::info
-Đề ghi *"not to scale"* ngay góc dưới — nên **tuyệt đối không** được ước lượng khoảng cách bằng mắt. Chỉ có con số ghi trên cạnh mới là trọng số thật.
+Đề ghi *"not to scale"* ngay góc dưới — nên tuyệt đối không được ước lượng khoảng cách bằng mắt. Chỉ có con số ghi trên cạnh mới là trọng số thật.
 :::
 
 ### Chạy Dijkstra
@@ -106,7 +106,7 @@ print(round(dist[dst], 1), path)
 # -> 21.0 ['EARTH', 'PALLUS-XA', '12-PUCK-8', 'JIP-REIA', 'TAYLOR-3489', 'LANCER-RXKRD']
 ```
 
--> Đường ngắn nhất: `EARTH -> PALLUS-XA -> 12-PUCK-8 -> JIP-REIA -> TAYLOR-3489 -> LANCER-RXKRD`, tổng **21.0 ngày** (thoả điều kiện dưới 25).
+-> Đường ngắn nhất: `EARTH -> PALLUS-XA -> 12-PUCK-8 -> JIP-REIA -> TAYLOR-3489 -> LANCER-RXKRD`, tổng 21.0 ngày (thoả điều kiện dưới 25).
 
 ![image](./02-path.png)
 
@@ -114,7 +114,7 @@ print(round(dist[dst], 1), path)
 
 ### Ghép flag
 
-Theo format đề: lấy **ký tự đầu của mỗi hành tinh trên đường đi**, rồi gắn số ngày (1 chữ số thập phân) vào cuối, ngăn bằng dấu `-`:
+Theo format đề: lấy ký tự đầu của mỗi hành tinh trên đường đi, rồi gắn số ngày (1 chữ số thập phân) vào cuối, ngăn bằng dấu `-`:
 
 <center>
 

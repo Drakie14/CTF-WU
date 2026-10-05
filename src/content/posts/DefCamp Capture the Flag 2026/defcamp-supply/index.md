@@ -22,13 +22,13 @@ A backend component relevant to custom profile verification is included. The res
 Flag Format: `CTF{sha256}`
 
 ## Solution
-Đề cho ta một phần source (chỉ **một component backend** — phần còn lại chạy trên remote) và một instance là web shop "DefCamp Supply" bán đồ nghề cho lab bảo mật. Truy cập vào challenge, ta thấy một catalog có vài món thường và vài món **premium** (gắn nhãn *"Restricted: requires 20 credits"*):
+Đề cho ta một phần source (chỉ một component backend — phần còn lại chạy trên remote) và một instance là web shop "DefCamp Supply" bán đồ nghề cho lab bảo mật. Truy cập vào challenge, ta thấy một catalog có vài món thường và vài món premium (gắn nhãn *"Restricted: requires 20 credits"*):
 
 ![image](./01-shop.png)
 
 > Giao diện ở trên được dựng lại từ đúng `templates/index.html` + `style.css` + bộ ảnh sản phẩm trong source (CTF đã đóng, không còn instance để chụp trực tiếp).
 
-Thử bấm vào một món premium, ta nhận thấy khác biệt mấu chốt so với món thường: nó có thêm một dropdown **`Build profile`** với các lựa chọn `stealth`, `audit`, `sandbox`, `forensics`... Giá trị `profile` này được gửi kèm khi `POST /checkout`, và chính nó là mảnh backend mà đề "tốt bụng" đưa cho ta soi.
+Thử bấm vào một món premium, ta nhận thấy khác biệt mấu chốt so với món thường: nó có thêm một dropdown `Build profile` với các lựa chọn `stealth`, `audit`, `sandbox`, `forensics`... Giá trị `profile` này được gửi kèm khi `POST /checkout`, và chính nó là mảnh backend mà đề "tốt bụng" đưa cho ta soi.
 
 ### Mảnh source được cho — điểm bất thường
 
@@ -63,12 +63,12 @@ def main() -> int:
     return 1
 ```
 
-Input của user (`profile`) đã được chèn vào ở đoạn này — nó bị **nhét thẳng vào một chuỗi lệnh shell** bằng f-string rồi đưa cho `subprocess.run(..., shell=True)`. Đây là `command injection` kinh điển.
+Input của user (`profile`) đã được chèn vào ở đoạn này — nó bị nhét thẳng vào một chuỗi lệnh shell bằng f-string rồi đưa cho `subprocess.run(..., shell=True)`. Đây là `command injection` kinh điển.
 
-Vậy vì sao `shell=True` lại nguy hiểm? Khi bật cờ này, Python không gọi trực tiếp chương trình mà đưa cả chuỗi `command` cho `/bin/sh -c` phân tích. Mọi metacharacter của shell — `"`, `;`, `|`, `$(...)`, `` ` ` `` — đều được shell diễn giải. Mà `profile` lại nằm **bên trong cặp nháy kép** `"{profile}"`, nên ta có đúng hai con đường để thoát ra:
+Vậy vì sao `shell=True` lại nguy hiểm? Khi bật cờ này, Python không gọi trực tiếp chương trình mà đưa cả chuỗi `command` cho `/bin/sh -c` phân tích. Mọi metacharacter của shell — `"`, `;`, `|`, `$(...)`, `` ` ` `` — đều được shell diễn giải. Mà `profile` lại nằm bên trong cặp nháy kép `"{profile}"`, nên ta có đúng hai con đường để thoát ra:
 
 1. Đóng nháy kép rồi gắn lệnh mới: `"; <lệnh>; echo "` — ta tự đóng chuỗi `"..."`, chèn lệnh ở giữa, và mở lại một chuỗi rỗng để phần đuôi vẫn hợp lệ.
-2. Dùng `command substitution` ngay trong nháy kép: `$(...)` và backtick **vẫn được shell thực thi** kể cả khi đang ở trong dấu `"`. Cách này gọn hơn — không cần phá cấu trúc lệnh.
+2. Dùng `command substitution` ngay trong nháy kép: `$(...)` và backtick vẫn được shell thực thi kể cả khi đang ở trong dấu `"`. Cách này gọn hơn — không cần phá cấu trúc lệnh.
 
 ### PoC offline
 
@@ -91,7 +91,7 @@ Cả hai đều chạy. `verify_profile.py` không nhận ra `profile` nên in `
 
 ### Đưa lên instance
 
-Trên app thật, chuỗi `profile` đi theo `POST /checkout` của một món premium (nhớ unlock đủ 20 credits trước), và kết quả `verify_custom_profile(...)` được app in lại trong mục **Recent supply drops** của order. Nói cách khác, output lệnh ta chèn sẽ phản chiếu thẳng ra trang — một kênh exfil có sẵn:
+Trên app thật, chuỗi `profile` đi theo `POST /checkout` của một món premium (nhớ unlock đủ 20 credits trước), và kết quả `verify_custom_profile(...)` được app in lại trong mục Recent supply drops của order. Nói cách khác, output lệnh ta chèn sẽ phản chiếu thẳng ra trang — một kênh exfil có sẵn:
 
 ![image](./02-rce.png)
 
@@ -111,7 +111,7 @@ $(grep -rhoE 'CTF\{[0-9a-f]{64}\}' / 2>/dev/null | head -1)
 Payload cuối cùng gọn nhất chính là command substitution đọc file flag, và flag `CTF{sha256}` sẽ hiện ngay trong kết quả order.
 
 :::warning
-**Fix đúng cách:** không bao giờ nối input vào chuỗi shell. Bỏ hẳn `shell=True` và truyền tham số dưới dạng list — `subprocess.run(["python3", "verify_profile.py", profile], ...)` — để `profile` luôn là **một** argv đơn lẻ, shell không còn cơ hội diễn giải metacharacter.
+Fix đúng cách: không bao giờ nối input vào chuỗi shell. Bỏ hẳn `shell=True` và truyền tham số dưới dạng list — `subprocess.run(["python3", "verify_profile.py", profile], ...)` — để `profile` luôn là một argv đơn lẻ, shell không còn cơ hội diễn giải metacharacter.
 :::
 
 -> Payload: `$(cat flag.txt)` (gửi qua field `profile` của một món premium ở `/checkout`)

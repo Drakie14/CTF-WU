@@ -20,11 +20,11 @@ Trang chủ cho upload file, kèm mục gợi ý "phân tích file đã upload b
 
 ![image](./01-site.png)
 
-App gồm **Bun** (web, port 3000) + **MongoDB 8.2.10** chạy chung một container, share `/tmp`. Flag chỉ tồn tại trong biến môi trường `process.env.FLAG` — không nằm sẵn trong file nào. Ta được cấp tài khoản Mongo **`viewer:viewer`** *read-only* (port 27017, `bindIp: 0.0.0.0`) để "phân tích DB". Lời giải ghép **4 mắt xích**.
+App gồm Bun (web, port 3000) + MongoDB 8.2.10 chạy chung một container, share `/tmp`. Flag chỉ tồn tại trong biến môi trường `process.env.FLAG` — không nằm sẵn trong file nào. Ta được cấp tài khoản Mongo `viewer:viewer` *read-only* (port 27017, `bindIp: 0.0.0.0`) để "phân tích DB". Lời giải ghép 4 mắt xích.
 
 ### Bug 1 — `/upload`: ghi file tuỳ ý vào `/tmp` + tự thay FLAG
 
-`src/index.ts` ghi nội dung upload ra `/tmp/<name>` (tên khớp `^[a-zA-Z][a-zA-Z0-9.]*$`), lọc bỏ `"` `'` `` ` `` rồi **thay lần xuất hiện đầu tiên của chuỗi `FLAG`** bằng flag thật:
+`src/index.ts` ghi nội dung upload ra `/tmp/<name>` (tên khớp `^[a-zA-Z][a-zA-Z0-9.]*$`), lọc bỏ `"` `'` `` ` `` rồi thay lần xuất hiện đầu tiên của chuỗi `FLAG` bằng flag thật:
 
 ```ts!
 const path = `/tmp/${file.name}`;
@@ -35,25 +35,25 @@ const txt = (await file.text())
 await Bun.write(path, txt);
 ```
 
--> Ta tạo được **file không có dấu nháy** trong `/tmp`, và nếu nội dung chứa `FLAG` thì flag thật được nhét thẳng vào file của ta.
+-> Ta tạo được file không có dấu nháy trong `/tmp`, và nếu nội dung chứa `FLAG` thì flag thật được nhét thẳng vào file của ta.
 
 ### Bug 2 — mongod `import()` = primitive đọc file phía server
 
-`viewer` bị sandbox JS (không `fs`/`env`/`exec`), *nhìn* như bịt kín. Nhưng engine JS server-side của mongod 8.2.10 (SpiderMonkey) **có `import()` hoạt động**: `import('/tmp/x')` khiến chính **mongod `openat()` và nạp file như một ES module**. Vì Bun và mongod chung `/tmp`, mongod đọc được đúng file ta vừa upload — dù chỉ là user read-only.
+`viewer` bị sandbox JS (không `fs`/`env`/`exec`), *nhìn* như bịt kín. Nhưng engine JS server-side của mongod 8.2.10 (SpiderMonkey) có `import()` hoạt động: `import('/tmp/x')` khiến chính mongod `openat()` và nạp file như một ES module. Vì Bun và mongod chung `/tmp`, mongod đọc được đúng file ta vừa upload — dù chỉ là user read-only.
 
 ### Bug 3 — timing: `$function` không drain, `mapReduce` thì có
 
-Trong `$function`, Promise của `import()` **không bao giờ settle** (không có vòng lặp event) -> module không eval. Nhưng trong **`mapReduce` chạy trên ≥2 document**, hàng đợi job của JS **được drain giữa các lần gọi `map`**, và `globalThis` được giữ xuyên suốt query. Vậy chạy `import()` từ mapReduce thì module **eval thật**, side-effect lộ ra ở lần `map` thứ 2 trở đi. (Nhớ upload sẵn ≥2 file để collection `files` có ≥2 doc.)
+Trong `$function`, Promise của `import()` không bao giờ settle (không có vòng lặp event) -> module không eval. Nhưng trong `mapReduce` chạy trên ≥2 document, hàng đợi job của JS được drain giữa các lần gọi `map`, và `globalThis` được giữ xuyên suốt query. Vậy chạy `import()` từ mapReduce thì module eval thật, side-effect lộ ra ở lần `map` thứ 2 trở đi. (Nhớ upload sẵn ≥2 file để collection `files` có ≥2 doc.)
 
 ### Bug 4 — exfil không dùng quote bằng regex `.source`
 
-Vì `"`/`'`/`` ` `` bị lọc, không dùng string literal được. Mẹo: **regex literal** — upload module có nội dung:
+Vì `"`/`'`/`` ` `` bị lọc, không dùng string literal được. Mẹo: regex literal — upload module có nội dung:
 
 ```js!
 globalThis.__LK = (/FLAG/).source
 ```
 
-Sau khi server thay `FLAG`, nó thành `globalThis.__LK = (/NNS{...}/).source`, mà `.source` của regex literal chính là **chuỗi pattern** — tức toàn bộ flag, không cần một dấu nháy nào. Import module đó từ mapReduce rồi đọc `globalThis.__LK` qua lần drain là có flag.
+Sau khi server thay `FLAG`, nó thành `globalThis.__LK = (/NNS{...}/).source`, mà `.source` của regex literal chính là chuỗi pattern — tức toàn bộ flag, không cần một dấu nháy nào. Import module đó từ mapReduce rồi đọc `globalThis.__LK` qua lần drain là có flag.
 
 ### Luồng hoàn chỉnh & exploit
 
