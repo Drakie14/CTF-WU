@@ -42,3 +42,7 @@ public/admin/chunks/
 
 # Profile Chrome tạm của Lighthouse khi chạy trong WSL (chrome-launcher tạo thư mục mang tên đường dẫn Windows)
 /C:*
+
+# graphify (cài local qua pipx, graph tự sinh)
+graphify-out/
+.claude/
