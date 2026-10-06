@@ -229,7 +229,7 @@ khi `options` không tự có `cmd`, nó sẽ ngửa lên prototype chain nhặt
 
 Đây đúng là lúc ta lôi lại ý tưởng path traversal cho phép `require()` một file `.js` bất kỳ. Nếu trên hệ thống có sẵn một module mà bên trong đã viết sẵn một gadget kiểu trên, thì ta chỉ việc pollute cho khớp property nó đọc, rồi dùng path traversal bắt Node nạp module đó để kích hoạt. Hai lỗ hổng rời rạc — một cái "ghi được lên prototype", một cái "nạp được module tùy ý" — ghép lại mới thành chuỗi.
 
-Module nào có gadget sẵn? `npm` là ứng viên kinh điển (xem [HackTricks — proto pollution to RCE](https://book.hacktricks.xyz/pentesting-web/deserialization/nodejs-proto-prototype-pollution/prototype-pollution-to-rce)). Node cài global nên trên máy luôn tồn tại `/usr/lib/node_modules/npm/bin/npx-cli.js`. Khi file này được load, nó tự biến thành lời gọi `npm exec`:
+Module nào có gadget sẵn? `npm` là ứng viên kinh điển (xem [HackTricks — proto pollution to RCE](https://hacktricks.wiki/en/pentesting-web/deserialization/nodejs-proto-prototype-pollution/prototype-pollution-to-rce.html)). Node cài global nên trên máy luôn tồn tại `/usr/lib/node_modules/npm/bin/npx-cli.js`. Khi file này được load, nó tự biến thành lời gọi `npm exec`:
 
 ```javascript!
 // npx-cli.js
