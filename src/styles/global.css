@@ -251,17 +251,11 @@ html.reze-cursor-on .reze-cursor {
    ========================================================================== */
 .prose {
   font-family: var(--font-sans);
-  font-size: 1rem;
+  /* Phóng to chữ theo bề rộng màn hình để nội dung lấp đầy panel khi zoom out. */
+  font-size: clamp(1rem, 0.6rem + 0.7vw, 1.5rem);
   line-height: 1.8;
   color: var(--text-soft);
   overflow-wrap: break-word;
-}
-/* Giới hạn độ rộng dòng chữ cho dễ đọc; code, bảng, ảnh vẫn chiếm hết panel. */
-.prose > p,
-.prose > ul,
-.prose > ol,
-.prose > blockquote {
-  max-width: 68ch;
 }
 .prose > * + * {
   margin-top: 1.1em;
@@ -279,23 +273,23 @@ html.reze-cursor-on .reze-cursor {
   scroll-margin-top: 1.5rem;
 }
 .prose h1 {
-  font-size: 1.75rem;
+  font-size: 1.75em;
   margin-top: 2em;
 }
 .prose h2 {
-  font-size: 1.4rem;
+  font-size: 1.4em;
   margin-top: 2.4em;
   padding-bottom: 0.35em;
   border-bottom: 1px solid var(--panel-border);
 }
 .prose h3 {
-  font-size: 1.15rem;
+  font-size: 1.15em;
   margin-top: 1.6em;
 }
 .prose h4,
 .prose h5,
 .prose h6 {
-  font-size: 1rem;
+  font-size: 1em;
   margin-top: 1.4em;
 }
 .prose a {
