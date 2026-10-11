@@ -3,6 +3,7 @@ title: Chrono II
 date: 2026-10-01
 ctf: CSS CTF
 category: crypto
+draft: true
 difficulty: medium
 tags:
   - Crypto
