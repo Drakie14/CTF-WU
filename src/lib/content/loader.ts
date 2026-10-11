@@ -92,7 +92,14 @@ async function loadAll(ctx: LoaderContext, options: PostsLoaderOptions): Promise
   const { store, logger, config, parseData, renderMarkdown } = ctx;
   const root = fileURLToPath(config.root);
   const bases = [options.base, ...(options.extraBases ?? [])].map((b) => path.resolve(root, b));
-  const files = (await Promise.all(bases.map(listMarkdownFiles))).flat();
+  const allFiles = (await Promise.all(bases.map(listMarkdownFiles))).flat();
+  // Drafts remain in the repository but are omitted from the public collection.
+  const files: SourceFile[] = [];
+  for (const file of allFiles) {
+    const raw = await fs.readFile(file.absPath, 'utf8');
+    if (splitFrontmatter(raw).data.draft === true) continue;
+    files.push(file);
+  }
 
   const infos = files.map((f) => ({
     ...f,

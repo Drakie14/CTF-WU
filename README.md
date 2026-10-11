@@ -112,7 +112,7 @@ tags: [tag1, tag2]
 ```
 
 Field khác được hỗ trợ: `difficulty` (`easy|medium|hard|insane`), `points` (số nguyên),
-`summary` (hoặc `description` như HackMD), `cover: ./cover.png`.
+`summary` (hoặc `description` như HackMD), `cover: ./cover.png`, `draft: true` (giữ bài trong repo nhưng ẩn khỏi website).
 
 | Trường hợp | Kết quả |
 | --- | --- |

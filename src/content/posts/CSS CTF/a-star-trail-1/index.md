@@ -3,6 +3,7 @@ title: A Star Trail 1
 date: 2026-09-30
 ctf: CSS CTF
 category: misc
+draft: true
 difficulty: easy
 tags:
   - Misc

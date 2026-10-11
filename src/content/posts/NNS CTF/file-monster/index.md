@@ -3,6 +3,7 @@ title: File monster
 date: 2026-09-27
 ctf: NNS CTF
 category: misc
+draft: true
 difficulty: hard
 tags:
   - MongoDB

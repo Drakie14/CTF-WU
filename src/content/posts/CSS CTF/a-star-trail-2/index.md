@@ -3,6 +3,7 @@ title: A Star Trail 2
 date: 2026-09-30
 ctf: CSS CTF
 category: misc
+draft: true
 difficulty: medium
 tags:
   - Misc

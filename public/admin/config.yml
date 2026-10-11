@@ -99,6 +99,11 @@ collections:
         label: Title
         widget: string
         required: true
+      - name: draft
+        label: Bản nháp (ẩn khỏi website)
+        widget: boolean
+        required: false
+        default: false
       - name: date
         label: Date
         widget: datetime
