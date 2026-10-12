@@ -18,6 +18,7 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
     <nav class="toc" aria-label="Mục lục" data-toc data-pagefind-ignore="all">
       <button class="toc-rail" type="button" aria-expanded="false" aria-controls="toc-pop" data-toc-toggle>
         <span class="sr-only">Mục lục</span>
+        <span class="toc-label" aria-hidden="true">Mục lục</span>
         {items.map((h) => (
           <span class={`toc-bar toc-l${h.level}`} data-toc-bar={h.slug} aria-hidden="true" />
         ))}
@@ -90,6 +91,9 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
   .toc-bar[data-active] {
     background: var(--accent);
     transform: scaleY(2);
+  }
+  .toc-label {
+    display: none;
   }
 
   .toc-pop {
@@ -174,5 +178,70 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
   .toc a[aria-current='true'] {
     border-left-color: var(--accent);
     color: var(--accent);
+  }
+
+  @media (max-width: 640px) {
+    /* Trên mobile, mục lục nằm trong luồng đọc thay vì đè lên phần chữ. */
+    .toc {
+      position: relative;
+      top: auto;
+      height: auto;
+      justify-content: flex-start;
+      margin-bottom: 0.75rem;
+    }
+    .toc-rail {
+      flex-direction: row;
+      align-items: center;
+      width: auto;
+      max-width: 100%;
+      max-height: none;
+      min-height: 2.5rem;
+      gap: 0.35rem;
+      padding: 0.45rem 0.7rem;
+      opacity: 0.9;
+    }
+    .toc-label {
+      display: inline;
+      margin-right: 0.2rem;
+      color: var(--text-soft);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .toc-bar {
+      width: 1.2rem;
+    }
+    .toc-bar.toc-l1 {
+      width: 0.9rem;
+    }
+    .toc-bar.toc-l2 {
+      width: 0.65rem;
+    }
+    .toc-pop {
+      top: calc(100% + 0.4rem);
+      right: auto;
+      left: 0;
+      width: min(24rem, 100%);
+      max-height: min(55svh, 22rem);
+    }
+    .toc:hover .toc-pop {
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-4px);
+      transition:
+        opacity 0.15s,
+        transform 0.15s,
+        visibility 0s linear 0.15s;
+    }
+    .toc:focus-within .toc-pop,
+    .toc[data-open] .toc-pop {
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+      transition:
+        opacity 0.15s,
+        transform 0.15s;
+    }
   }
 </style>

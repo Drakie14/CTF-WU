@@ -168,8 +168,37 @@ const hasMore = shown < total;
       display: inline;
     }
     .sb-nav a {
+      min-height: 2.5rem;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
       padding: 0.45rem 0.5rem;
       letter-spacing: 0.1em;
+    }
+    .sb-stats {
+      gap: 0.35rem;
+      margin-top: 0.9rem;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+    }
+    .sb-stats > span {
+      white-space: nowrap;
+    }
+    .sb-owner {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+    }
+    .sb-tools {
+      margin-top: 0.65rem;
+    }
+    .sb-search {
+      padding-inline: 0.75rem;
+    }
+    .sb-search input {
+      font-size: 16px;
     }
   }
   .brand-mark {

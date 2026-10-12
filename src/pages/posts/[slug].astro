@@ -68,4 +68,12 @@ const ogImage = cover
   .article-grid:has(> :global(.toc)) > .prose {
     padding-right: 3rem;
   }
+  @media (max-width: 640px) {
+    .article {
+      padding: 1.5rem 1rem calc(3rem + env(safe-area-inset-bottom));
+    }
+    .article-grid:has(> :global(.toc)) > .prose {
+      padding-right: 0;
+    }
+  }
 </style>
