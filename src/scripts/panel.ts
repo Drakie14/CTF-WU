@@ -108,18 +108,14 @@ function setupTocPopup(panel: HTMLElement): void {
 function setupBack(panel: HTMLElement): void {
   const back = panel.querySelector<HTMLAnchorElement>('[data-back]');
   if (!back) return;
-  back.addEventListener('click', (e) => {
-    let fromList = false;
-    try {
-      fromList = sessionStorage.getItem('from-list') === '1';
-    } catch {
-      /* ignore */
-    }
-    if (fromList && history.length > 1) {
-      e.preventDefault();
-      history.back();
-    }
-  });
+  // Dùng URL đã lưu thay vì history.back(): tab mobile có thể có history bên ngoài
+  // hoặc cờ session cũ, khiến nút Back đi sai trang hoặc trông như không hoạt động.
+  try {
+    const returnTo = sessionStorage.getItem('from-list-url');
+    if (returnTo?.startsWith('/') && !returnTo.startsWith('//')) back.href = returnTo;
+  } catch {
+    /* Storage bị chặn: giữ href mặc định về trang chủ. */
+  }
 }
 
 document.addEventListener('astro:page-load', () => {

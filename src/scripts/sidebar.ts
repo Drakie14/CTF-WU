@@ -224,7 +224,7 @@ function setupScrollMemory(list: HTMLElement): void {
     if (!row) return;
     try {
       sessionStorage.setItem(`scroll:${persistKey()}`, String(list.scrollTop));
-      sessionStorage.setItem('from-list', '1');
+      sessionStorage.setItem('from-list-url', `${location.pathname}${location.search}${location.hash}`);
     } catch {
       /* storage bị chặn: bỏ qua */
     }
