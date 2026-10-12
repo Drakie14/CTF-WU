@@ -184,7 +184,8 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
     /* Giữ mục lục trong luồng và bám mép trên khi cuộn bài trên mobile. */
     .toc {
       position: sticky;
-      top: calc(env(safe-area-inset-top) + 0.5rem);
+      /* Nút Back của AppLayout ghim ở top: 0; chừa hàng riêng phía dưới nó. */
+      top: calc(env(safe-area-inset-top) + 3.25rem);
       height: 2.5rem;
       justify-content: flex-start;
       margin-bottom: 0.75rem;
