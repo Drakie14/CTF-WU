@@ -184,10 +184,10 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
     /* Giữ mục lục trong luồng và bám mép trên khi cuộn bài trên mobile. */
     .toc {
       position: sticky;
-      /* Nút Back của AppLayout ghim ở top: 0; chừa hàng riêng phía dưới nó. */
-      top: calc(env(safe-area-inset-top) + 3.25rem);
+      /* Ghim bên phải để không đè lên nút Back ở bên trái. */
+      top: calc(env(safe-area-inset-top) + 0.5rem);
       height: 2.5rem;
-      justify-content: flex-start;
+      justify-content: flex-end;
       margin-bottom: 0.75rem;
     }
     .toc-rail {
@@ -221,8 +221,8 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
     }
     .toc-pop {
       top: calc(100% + 0.4rem);
-      right: auto;
-      left: 0;
+      right: 0;
+      left: auto;
       width: min(24rem, 100%);
       max-height: min(55svh, 22rem);
     }
