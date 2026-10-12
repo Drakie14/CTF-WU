@@ -181,11 +181,11 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
   }
 
   @media (max-width: 640px) {
-    /* Trên mobile, mục lục nằm trong luồng đọc thay vì đè lên phần chữ. */
+    /* Giữ mục lục trong luồng và bám mép trên khi cuộn bài trên mobile. */
     .toc {
-      position: relative;
-      top: auto;
-      height: auto;
+      position: sticky;
+      top: calc(env(safe-area-inset-top) + 0.5rem);
+      height: 2.5rem;
       justify-content: flex-start;
       margin-bottom: 0.75rem;
     }

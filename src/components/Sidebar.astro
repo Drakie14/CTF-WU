@@ -157,6 +157,11 @@ const hasMore = shown < total;
     display: none;
   }
   @media (max-width: 479.98px) {
+    .sb-header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
     .brand-full {
       position: absolute;
       width: 1px;
@@ -172,8 +177,14 @@ const hasMore = shown < total;
       box-sizing: border-box;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      flex: 1;
+      min-width: 0;
       padding: 0.45rem 0.5rem;
       letter-spacing: 0.1em;
+    }
+    .sb-nav {
+      width: 100%;
     }
     .sb-stats {
       gap: 0.35rem;
@@ -588,8 +599,26 @@ const hasMore = shown < total;
   }
   @media (max-width: 639.98px) {
     .row {
-      padding-right: 1.3rem;
-      gap: 0.7rem;
+      display: grid;
+      grid-template-columns: 0.62rem minmax(0, 1fr);
+      align-items: start;
+      gap: 0.35rem 0.7rem;
+      padding: 0.7rem 1rem 0.7rem 0.85rem;
+    }
+    .row-main {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .diamond {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      align-self: center;
+    }
+    .row-side {
+      grid-column: 2;
+      grid-row: 2;
+      align-items: flex-start;
+      text-align: left;
     }
     .row-title {
       display: -webkit-box;
@@ -601,6 +630,12 @@ const hasMore = shown < total;
     }
     .row-meta {
       font-size: 0.65rem;
+    }
+    /* Không uốn và đẩy các dòng trên màn cảm ứng; giữ toàn bộ thẻ trong khung cuộn. */
+    .sb-list .row {
+      animation: none !important;
+      transform: none !important;
+      opacity: 1 !important;
     }
   }
 
