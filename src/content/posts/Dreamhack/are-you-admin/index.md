@@ -14,7 +14,7 @@ Hmm... You look suspicious. Are you admin?
 https://dreamhack.io/wargame/challenges/1922
 # Solution 
 Đọc source code của `app.py`, ta thấy ở route `/intro` yêu cầu 2 param là `name` và `detail`
-Ta thử nhập như sau: `http://127.0.0.1:8000/intro?name=helo&detail=helo` thì thu được 
+Ta thử nhập như sau: `http://127.0.0.1:8000/intro?name=hello&detail=hello` thì thu được 
 ![image](https://hackmd.io/_uploads/BkqLs4rjzg.png)
 Quan trọng là trong source code in lên màn hình `input` của người dùng
 -> Ta nghĩ ngay tới XSS để chèn đoạn JS vào `html` của trang
@@ -49,12 +49,12 @@ Ta thử điền payload sau xem có nhận được tín hiệu không
 Lần này thì đã có header `Authorization` rồi
 -> `Basic YWRtaW46bG9jYWxwYXNzMTIz`
 
-Vậy ta chỉ cần thêm header và gửi request đến sever và nhận lại flag.
+Vậy ta chỉ cần thêm header và gửi request đến server và nhận lại flag.
 ![image](https://hackmd.io/_uploads/r1gwNHBoGl.png)
 -> `DH{local_test_flag}`
 
 
 > Nếu ai thắc mắc về password của `admin`:
 >  Lần này đọc lại route `/whoami`, thấy `user_info` là header `Authorization` bỏ chữ `Basic` rồi decode Base64
-Tôi dùng [cybercef](https://gchq.github.io/CyberChef/) để decode, thu được 
+Tôi dùng [CyberChef](https://gchq.github.io/CyberChef/) để decode, thu được 
 ![image](https://hackmd.io/_uploads/rywe4HSjGg.png)
