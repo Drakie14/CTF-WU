@@ -1,3 +1,15 @@
+---
+title: Bypass IF
+date: 2026-10-14
+ctf: Dreamhack
+category: web
+difficulty: easy
+tags:
+  - Web
+  - Command Injection
+  - Timeout
+---
+
 # Đề bài
 Admin's `KEY` is required! Enter an appropriate `KEY` value to obtain a flag.
 

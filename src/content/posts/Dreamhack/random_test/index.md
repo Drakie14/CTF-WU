@@ -1,3 +1,15 @@
+---
+title: Locker Bruteforce
+date: 2026-10-14
+ctf: Dreamhack
+category: web
+difficulty: easy
+tags:
+  - Web
+  - Brute Force
+  - Logic Bug
+---
+
 # Đề bài:
 A locker has been assigned to Dream for the new semester. However, Dream, who has a bad memory, forgot all of her locker numbers and lock passwords... Please find out the locker number and lock password for Dream!
 The locker number is a 4-digit random string containing lowercase letters or numbers, and the password is a random integer between 100 and 200. If both values are entered correctly, a flag is output. The flag is in `FLAG` a variable.

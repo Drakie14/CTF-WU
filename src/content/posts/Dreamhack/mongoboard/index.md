@@ -1,3 +1,16 @@
+---
+title: MongoBoard
+date: 2026-10-14
+ctf: Dreamhack
+category: web
+difficulty: medium
+tags:
+  - Web
+  - NoSQL
+  - MongoDB
+  - ObjectId
+---
+
 # Đề bài
 This is a bulletin board composed of node and mongodb.
 Earn FLAG by reading secret posts.

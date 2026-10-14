@@ -1,3 +1,17 @@
+---
+title: DreamDocs
+date: 2026-10-14
+ctf: Dreamhack
+category: web
+difficulty: easy
+tags:
+  - Web
+  - Header
+  - Authorization
+  - IDOR
+  - Brute Force
+---
+
 # Đề bài 
 Introducing DreamDocs: a platform for browsing docs!
 https://dreamhack.io/wargame/challenges/2325

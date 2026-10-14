@@ -1,3 +1,17 @@
+---
+title: Image Uploader
+date: 2026-10-14
+ctf: Dreamhack
+category: web
+difficulty: medium
+tags:
+  - Web
+  - PHP
+  - File Upload
+  - Logic Bug
+  - htaccess
+---
+
 # Đề bài 
 Simple but typical image uploader!
 https://dreamhack.io/wargame/challenges/2624
