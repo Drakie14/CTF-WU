@@ -17,12 +17,11 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       <header class="topbar">
         <div class="brand-actions">
           <button type="button" class="icon-button" data-sidebar-toggle aria-label="Thu gọn thư viện" title="Thu gọn thư viện">☰</button>
-          <a class="wordmark" href="/admin/">CTF<span>//</span>WU <small>Studio</small></a>
+          <a class="wordmark" href="/admin/studio/">CTF<span>//</span>WU <small>Studio</small></a>
           <button type="button" class="connection-pill" data-connection title="GitHub chưa kết nối"><i></i><span>GitHub</span></button>
         </div>
         <div class="top-actions">
           <a href="/admin/import/">Import cả giải</a>
-          <a href="/admin/">CMS cũ</a>
           <button type="button" class="publish" data-publish>Publish</button>
         </div>
       </header>
@@ -50,11 +49,12 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       <section class="workspace" aria-label="Soạn write-up">
         <section class="library-home" data-library-home>
           <div class="browser-head">
-            <div><p class="eyebrow">Workspace / WU</p><h1>Thư mục write-up</h1></div>
-            <button type="button" class="create-folder" data-new>+ Tạo write-up</button>
+            <div><p class="eyebrow" data-library-path>Workspace / WU</p><h1 data-library-title>Thư mục write-up</h1></div>
+            <div class="browser-actions"><button type="button" class="back-folder" data-folder-back hidden>← Tất cả folder</button><button type="button" class="create-folder" data-new>+ Tạo write-up</button></div>
           </div>
           <div class="folder-grid" data-folder-grid><p class="empty-tree">Kết nối GitHub để tải thư mục.</p></div>
-          <section class="recent-posts"><h2>Bài viết gần đây</h2><div class="recent-grid" data-recent-posts></div></section>
+          <section class="folder-posts" data-folder-posts hidden><h2>Bài trong folder</h2><div class="recent-grid" data-folder-files></div></section>
+          <section class="recent-posts" data-recent-section><h2>Bài viết gần đây</h2><div class="recent-grid" data-recent-posts></div></section>
         </section>
 
         <section class="composer" data-composer hidden>
@@ -80,7 +80,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           </details>
 
           <div class="markdown-tools" aria-label="Công cụ Markdown">
-            <button type="button" data-markdown="heading">H2</button><button type="button" data-markdown="bold"><b>B</b></button><button type="button" data-markdown="link">Link</button><button type="button" data-markdown="code">Code</button><button type="button" data-markdown="info">Info</button><button type="button" data-markdown="warning">Warning</button><button type="button" data-markdown="toc">Mục lục</button>
+            <button type="button" data-markdown="heading">H2</button><button type="button" data-markdown="bold"><b>B</b></button><button type="button" data-markdown="link">Link</button><button type="button" data-markdown="code">Code</button><button type="button" data-markdown="info">Info</button><button type="button" data-markdown="warning">Warning</button><button type="button" data-markdown="footnote">Footnote</button><button type="button" data-markdown="highlight">Highlight</button><button type="button" data-markdown="latex">LaTeX</button><button type="button" data-markdown="mermaid">Mermaid</button><button type="button" data-markdown="sup">Sup</button><button type="button" data-markdown="sub">Sub</button><button type="button" data-markdown="toc">Mục lục</button><button type="button" data-markdown="youtube">YouTube</button><button type="button" data-markdown="task">Task</button><button type="button" data-markdown="quote">Quote</button>
           </div>
 
           <div class="editor-grid">
@@ -93,6 +93,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
               </label>
               <ul class="assets" data-assets-list></ul>
             </section>
+            <div class="resize-handle" data-resize aria-label="Kéo để đổi độ rộng editor" role="separator" aria-orientation="vertical"></div>
             <section class="preview-pane">
               <div class="pane-head"><span>Preview</span><span data-preview-state>Đang chờ nội dung</span></div>
               <article class="preview" data-preview><p class="placeholder">Preview Markdown sẽ hiện ở đây.</p></article>
@@ -112,6 +113,12 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       import { markdown } from '@codemirror/lang-markdown';
       import { languages } from '@codemirror/language-data';
       import { oneDark } from '@codemirror/theme-one-dark';
+      import katex from 'katex';
+      import 'katex/dist/katex.min.css';
+      // Mermaid's pre-bundled browser build avoids the Vite dependency resolver
+      // walking optional language-server modules used only by Mermaid's tooling.
+      // @ts-expect-error The package does not publish a declaration for this bundle.
+      import mermaid from 'mermaid/dist/mermaid.min.js';
 
       const $ = <T extends Element = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
       const title = $<HTMLInputElement>('[data-title]');
@@ -129,12 +136,19 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
 
       type Asset = { file: File; name: string; url: string };
       type RepoFile = { path: string; sha: string };
+      type Draft = { title: string; folder: string; date: string; ctf: string; category: string; difficulty: string; tags: string; source: string };
       let repo = { name: '', branch: 'main' };
       let openFile: RepoFile | undefined;
       let assets: Asset[] = [];
       let renderVersion = 0;
       let localDirectory: FileSystemDirectoryHandle | undefined;
       let editor: EditorView;
+      let repoFiles: RepoFile[] = [];
+      let repoTree: Array<{ path: string; sha: string; type: string }> = [];
+      let activeFolder: string | undefined;
+      let selectedFiles = new Set<string>();
+      let selectedFolders = new Set<string>();
+      let draftTimer: ReturnType<typeof setTimeout> | undefined;
 
       const editorSource = () => editor.state.doc.toString();
       function setEditorSource(source: string) {
@@ -147,16 +161,39 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
             extensions: [
               lineNumbers(), EditorView.lineWrapping, oneDark,
               markdown({ codeLanguages: languages }),
-              EditorView.updateListener.of((update) => { if (update.docChanged) void renderPreview(); }),
+              EditorView.updateListener.of((update) => { if (update.docChanged) { void renderPreview(); scheduleDraft(); } }),
             ],
           }),
           parent: $('[data-editor]'),
         });
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
         editor.contentDOM.addEventListener('paste', (event) => {
           const images = [...(event.clipboardData?.items ?? [])].filter((item) => item.type.startsWith('image/')).map((item) => item.getAsFile()).filter((file): file is File => Boolean(file));
           if (images.length) { event.preventDefault(); addFiles(images); }
         });
       }
+
+      const draftKey = () => `ctf-wu.studio.draft.${openFile?.path ?? `new:${relativeFolder()}`}`;
+      function scheduleDraft() { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 450); }
+      function saveDraft() {
+        if (!$('[data-composer]').hasAttribute('hidden') && (title.value.trim() || editorSource().trim())) {
+          const draft: Draft = { title: title.value, folder: folder.value, date: date.value, ctf: ctf.value, category: category.value, difficulty: difficulty.value, tags: tags.value, source: editorSource() };
+          localStorage.setItem(draftKey(), JSON.stringify(draft));
+          $('[data-save-state]').textContent = 'Nháp đã lưu cục bộ';
+        }
+      }
+      function restoreDraft() {
+        try {
+          const value = localStorage.getItem(draftKey());
+          if (!value) return false;
+          const draft = JSON.parse(value) as Draft;
+          title.value = draft.title; folder.value = draft.folder; date.value = draft.date; ctf.value = draft.ctf;
+          category.value = draft.category; difficulty.value = draft.difficulty; tags.value = draft.tags; setEditorSource(draft.source);
+          $('[data-save-state]').textContent = 'Đã khôi phục nháp cục bộ';
+          return true;
+        } catch { return false; }
+      }
+      function removeDraft() { localStorage.removeItem(draftKey()); }
 
       function storedToken(): string {
         try {
@@ -260,14 +297,10 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         try {
           const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
           const data = await api<{ tree: Array<{ path: string; type: string; sha: string }> }>(`/git/trees/${ref.object.sha}?recursive=1`);
-          const files = data.tree.filter((item) => item.type === 'blob' && item.path.startsWith(`${postRoot}/`) && (item.path.endsWith('/index.md') || /\.md$/.test(item.path)))
+          repoTree = data.tree.filter((item) => item.type === 'blob');
+          const files = repoTree.filter((item) => item.path.startsWith(`${postRoot}/`) && (item.path.endsWith('/index.md') || /\.md$/.test(item.path)))
             .map((item) => ({ path: item.path, sha: item.sha })).sort((a, b) => a.path.localeCompare(b.path));
-          tree.replaceChildren(...files.map((file) => {
-            const button = document.createElement('button'); button.type = 'button'; button.className = 'tree-file';
-            const bits = file.path.split('/'); button.innerHTML = `<span>${bits.at(-2) === 'posts' ? bits.at(-1) : bits.at(-2) ?? bits.at(-1)}</span><small>${file.path.replace(`${postRoot}/`, '')}</small>`;
-            button.addEventListener('click', () => void openPost(file)); return button;
-          }));
-          if (!files.length) tree.innerHTML = '<p class="empty-tree">Chưa có write-up.</p>';
+          repoFiles = files;
           renderFolderHome(files);
         } catch (error) { tree.innerHTML = ''; setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }
@@ -280,7 +313,9 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           folder.value = parts.slice(0, -2).join('/') || 'uncategorized';
           $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
           $('[data-save-state]').textContent = 'Đã mở từ GitHub';
-          populate(decode(content.content)); showComposer(); setStatus('');
+          populate(decode(content.content));
+          if (restoreDraft()) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok'); else setStatus('');
+          activeFolder = relativeFolder(); renderSidebar(); showComposer();
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }
       function showComposer() {
@@ -296,9 +331,42 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         resetEditor();
         folder.value = folderName;
         ctf.value = folderName.split('/').at(-1) ?? folderName;
+        activeFolder = folderName;
+        restoreDraft(); renderSidebar();
         showComposer();
         $('[data-metadata]').setAttribute('open', '');
         title.focus();
+      }
+      const articleName = (file: RepoFile) => file.path.replace(`${postRoot}/`, '').split('/').at(-2) ?? 'Write-up';
+      const folderOf = (file: RepoFile) => file.path.replace(`${postRoot}/`, '').split('/').slice(0, -2).join('/') || 'Chưa phân loại';
+      function toggleSelectedFile(path: string) { selectedFiles.has(path) ? selectedFiles.delete(path) : selectedFiles.add(path); renderFolderHome(repoFiles); renderSidebar(); }
+      function toggleSelectedFolder(folderName: string) {
+        const files = repoFiles.filter((file) => folderOf(file) === folderName);
+        const allSelected = files.every((file) => selectedFiles.has(file.path));
+        files.forEach((file) => allSelected ? selectedFiles.delete(file.path) : selectedFiles.add(file.path));
+        selectedFolders.has(folderName) ? selectedFolders.delete(folderName) : selectedFolders.add(folderName);
+        renderFolderHome(repoFiles); renderSidebar();
+      }
+      function makeFileCard(file: RepoFile, className = 'recent-card') {
+        const card = document.createElement('article'); card.className = className; card.draggable = true;
+        card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="file-open"><span>▤</span><strong></strong><small></small></button>`;
+        card.querySelector('strong')!.textContent = articleName(file); card.querySelector('small')!.textContent = folderOf(file);
+        card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFile(file.path); });
+        card.querySelector('.file-open')!.addEventListener('click', () => void openPost(file));
+        card.addEventListener('dragstart', () => { if (!selectedFiles.has(file.path)) { selectedFiles.clear(); selectedFiles.add(file.path); } });
+        return card;
+      }
+      function renderSidebar() {
+        const tree = $('[data-tree]');
+        const scope = activeFolder ? repoFiles.filter((file) => folderOf(file) === activeFolder) : [];
+        if (!activeFolder) { tree.innerHTML = '<p class="empty-tree">Mở một folder hoặc một bài để xem các bài cùng folder.</p>'; return; }
+        tree.replaceChildren(...scope.map((file) => {
+          const item = document.createElement('div'); item.className = 'tree-file';
+          item.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="tree-open"><span></span><small></small></button>`;
+          item.querySelector('span')!.textContent = articleName(file); item.querySelector('small')!.textContent = file.path.replace(`${postRoot}/`, '');
+          item.querySelector('.selection-checkbox')!.addEventListener('click', () => toggleSelectedFile(file.path));
+          item.querySelector('.tree-open')!.addEventListener('click', () => void openPost(file)); return item;
+        }));
       }
       function renderFolderHome(files: RepoFile[]) {
         const folderMap = new Map<string, RepoFile[]>();
@@ -309,22 +377,52 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         }
         const grid = $('[data-folder-grid]');
         grid.replaceChildren(...[...folderMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, folderFiles]) => {
-          const button = document.createElement('button'); button.type = 'button'; button.className = 'folder-card';
-          button.innerHTML = `<span class="folder-icon">□</span><strong></strong><small>${folderFiles.length} bài viết</small>`;
-          button.querySelector('strong')!.textContent = name;
-          button.addEventListener('click', () => startNewInFolder(name));
-          return button;
+          const card = document.createElement('article'); card.className = 'folder-card'; card.draggable = true;
+          card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn folder">${selectedFolders.has(name) ? '■' : '□'}</button><button type="button" class="folder-open"><span class="folder-icon">▱</span><strong></strong><small>${folderFiles.length} bài viết</small></button>`;
+          card.querySelector('strong')!.textContent = name;
+          card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFolder(name); });
+          card.querySelector('.folder-open')!.addEventListener('click', () => { activeFolder = name; renderFolderHome(repoFiles); renderSidebar(); });
+          card.addEventListener('dragstart', () => { if (!selectedFolders.has(name)) { selectedFolders.clear(); selectedFolders.add(name); } });
+          card.addEventListener('dragover', (event) => { event.preventDefault(); card.dataset.drop = ''; });
+          card.addEventListener('dragleave', () => delete card.dataset.drop);
+          card.addEventListener('drop', (event) => { event.preventDefault(); delete card.dataset.drop; void moveSelectionTo(name); });
+          return card;
         }));
+        const folderPosts = $('[data-folder-posts]'); const folderFiles = $('[data-folder-files]');
+        const isFolderOpen = Boolean(activeFolder && folderMap.has(activeFolder));
+        folderPosts.toggleAttribute('hidden', !isFolderOpen); $('[data-recent-section]').toggleAttribute('hidden', isFolderOpen);
+        $('[data-folder-back]').toggleAttribute('hidden', !isFolderOpen);
+        $('[data-library-path]').textContent = isFolderOpen ? `Workspace / WU / ${activeFolder}` : 'Workspace / WU';
+        $('[data-library-title]').textContent = isFolderOpen ? activeFolder! : 'Thư mục write-up';
+        if (isFolderOpen) folderFiles.replaceChildren(...folderMap.get(activeFolder!)!.map((file) => makeFileCard(file, 'folder-file-card')));
         const recent = $('[data-recent-posts]');
-        recent.replaceChildren(...files.slice(-8).reverse().map((file) => {
-          const button = document.createElement('button'); button.type = 'button'; button.className = 'recent-card';
-          const parts = file.path.replace(`${postRoot}/`, '').split('/');
-          button.innerHTML = `<span>▤</span><strong></strong><small></small>`;
-          button.querySelector('strong')!.textContent = parts.at(-2) ?? parts.at(-1) ?? 'Write-up';
-          button.querySelector('small')!.textContent = parts.slice(0, -1).join(' / ');
-          button.addEventListener('click', () => void openPost(file));
-          return button;
-        }));
+        recent.replaceChildren(...files.slice(-8).reverse().map((file) => makeFileCard(file)));
+      }
+      async function moveSelectionTo(targetFolder: string) {
+        const files = repoFiles.filter((file) => selectedFiles.has(file.path)).filter((file) => folderOf(file) !== targetFolder);
+        if (!files.length) return setStatus('Chọn ít nhất một bài ở folder khác trước khi kéo thả.', 'info');
+        if (!token()) return setStatus('Cần kết nối GitHub để sắp xếp bài.', 'error');
+        const conflict = files.find((file) => repoFiles.some((candidate) => folderOf(candidate) === targetFolder && articleName(candidate) === articleName(file)));
+        if (conflict) return setStatus(`Folder đích đã có bài trùng tên: ${articleName(conflict)}.`, 'error');
+        try {
+          setStatus(`Đang chuyển ${files.length} bài vào ${targetFolder}…`);
+          const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
+          const parent = await api<{ tree: { sha: string } }>(`/git/commits/${ref.object.sha}`);
+          const entries: Array<{ path: string; mode: string; type: string; sha: string | null }> = [];
+          for (const file of files) {
+            const oldDirectory = file.path.replace(/\/[^/]+$/, '');
+            const newDirectory = `${postRoot}/${targetFolder}/${articleName(file)}`;
+            for (const item of repoTree.filter((entry) => entry.path === oldDirectory || entry.path.startsWith(`${oldDirectory}/`))) {
+              entries.push({ path: item.path.replace(oldDirectory, newDirectory), mode: '100644', type: 'blob', sha: item.sha });
+              entries.push({ path: item.path, mode: '100644', type: 'blob', sha: null });
+            }
+          }
+          const tree = await api<{ sha: string }>('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: parent.tree.sha, tree: entries }) });
+          const commit = await api<{ sha: string }>('/git/commits', { method: 'POST', body: JSON.stringify({ message: `content: chuyển ${files.length} write-up vào ${targetFolder}`, tree: tree.sha, parents: [ref.object.sha] }) });
+          await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+          selectedFiles.clear(); selectedFolders.clear(); activeFolder = targetFolder;
+          setStatus(`Đã chuyển ${files.length} bài vào ${targetFolder}.`, 'ok'); void loadTree();
+        } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }
       function renderAssets() {
         const list = $('[data-assets-list]');
@@ -350,7 +448,16 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           code: `\`${selected}\``,
           info: `:::info\n${selected}\n:::`,
           warning: `:::warning\n${selected}\n:::`,
+          footnote: `${selected}[^1]\n\n[^1]: Chú thích ở cuối bài.`,
+          highlight: `==${selected}==`,
+          latex: `$$\n${selected === 'nội dung' ? 'E = mc^2' : selected}\n$$`,
+          mermaid: `\`\`\`mermaid\ngraph TD\n  A[Bắt đầu] --> B[Kết thúc]\n\`\`\``,
+          sup: `<sup>${selected}</sup>`,
+          sub: `<sub>${selected}</sub>`,
           toc: '[TOC]',
+          youtube: `[YouTube](https://www.youtube.com/watch?v=VIDEO_ID)`,
+          task: `- [ ] ${selected}`,
+          quote: `> ${selected}`,
         };
         insertText(snippets[kind] ?? selected);
       }
@@ -380,15 +487,15 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       }
       const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
       function normalizeCallouts(source: string) {
-        return source.replace(/^:::(info|warning)(?:\s+([^\n]+))?\s*\n([\s\S]*?)^:::\s*$/gim, (_all, kind, heading, content) => {
-          const title = heading || (kind.toLowerCase() === 'warning' ? 'Warning' : 'Info');
+        return source.replace(/^:::(info|warning|note|tip|danger|success)(?:\s+([^\n]+))?\s*\n([\s\S]*?)^:::\s*$/gim, (_all, kind, heading, content) => {
+          const title = heading || kind.charAt(0).toUpperCase() + kind.slice(1).toLowerCase();
           return `> [!${kind.toUpperCase()}] ${title}\n> ${content.trim().replace(/\n/g, '\n> ')}`;
         });
       }
       function decorateCallouts() {
         for (const quote of preview.querySelectorAll('blockquote')) {
           const paragraph = quote.querySelector('p');
-          const match = /^\[!(INFO|WARNING)\]\s+([^\n]+)\n?/.exec(paragraph?.textContent ?? '');
+          const match = /^\[!(INFO|WARNING|NOTE|TIP|DANGER|SUCCESS)\]\s+([^\n]+)\n?/.exec(paragraph?.textContent ?? '');
           if (!match || !paragraph) continue;
           quote.classList.add('callout', `callout-${match[1].toLowerCase()}`);
           const label = document.createElement('strong'); label.className = 'callout-label'; label.textContent = match[2];
@@ -396,17 +503,54 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           quote.prepend(label);
         }
       }
+      function renderTableOfContents() {
+        const toc = preview.querySelector('[data-toc]');
+        if (!toc) return;
+        const headings = [...preview.querySelectorAll<HTMLHeadingElement>('h1,h2,h3')];
+        const list = document.createElement('ol');
+        headings.forEach((heading, index) => {
+          const id = `section-${index + 1}-${slugify(heading.textContent ?? '')}`; heading.id = id;
+          const item = document.createElement('li'); const link = document.createElement('a'); link.href = `#${id}`; link.textContent = heading.textContent; item.append(link); list.append(item);
+        });
+        toc.replaceChildren(list);
+      }
+      function renderMath() {
+        for (const element of preview.querySelectorAll<HTMLElement>('[data-latex]')) {
+          try { element.innerHTML = katex.renderToString(element.dataset.latex ?? '', { displayMode: element.dataset.display === 'true', throwOnError: false }); } catch { /* leave source visible */ }
+        }
+      }
+      function renderYoutube() {
+        for (const link of preview.querySelectorAll<HTMLAnchorElement>('a[href*="youtube.com"],a[href*="youtu.be"]')) {
+          const match = /(?:v=|youtu\.be\/)([\w-]{6,})/.exec(link.href); if (!match) continue;
+          const frame = document.createElement('iframe'); frame.className = 'youtube-embed'; frame.src = `https://www.youtube-nocookie.com/embed/${match[1]}`; frame.title = 'YouTube video'; frame.loading = 'lazy'; frame.allowFullscreen = true;
+          link.replaceWith(frame);
+        }
+      }
+      function prepareExtensions(source: string) {
+        const footnotes: string[] = [];
+        const withoutDefinitions = source.replace(/^\[\^(\d+)\]:\s*(.+)$/gim, (_all, id, content) => { footnotes[Number(id) - 1] = content; return ''; });
+        const withNotes = withoutDefinitions.replace(/\[\^(\d+)\]/g, (_all, id) => `<sup class="footnote-ref"><a href="#footnote-${id}">[${id}]</a></sup>`);
+        const withHighlight = withNotes.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+        const withMath = withHighlight.replace(/\$\$\s*([\s\S]+?)\s*\$\$/g, (_all, expression) => `<span data-latex="${escapeHtml(expression.trim())}" data-display="true"></span>`).replace(/\$([^$\n]+)\$/g, (_all, expression) => `<span data-latex="${escapeHtml(expression.trim())}"></span>`);
+        const withToc = withMath.replace(/^\[TOC\]\s*$/gim, '<nav class="auto-toc" data-toc aria-label="Mục lục tự động"></nav>');
+        if (!footnotes.length) return withToc;
+        return `${withToc}\n\n<section class="footnotes"><hr><ol>${footnotes.map((content, index) => content ? `<li id="footnote-${index + 1}">${content}</li>` : '').join('')}</ol></section>`;
+      }
       const languageAlias: Record<string, string> = { js: 'javascript', ts: 'typescript', py: 'python', sh: 'bash', yml: 'yaml', html: 'html', svg: 'xml' };
       async function renderPreview() {
         const version = ++renderVersion;
-        const source = normalizeCallouts(editorSource()).replace(/^\[TOC\]\s*$/gim, '').replace(/\]\(\.\/([^\s)]+)\)/g, (all, name) => assetUrl(name) ? `](${assetUrl(name)})` : all);
+        const source = prepareExtensions(normalizeCallouts(editorSource())).replace(/\]\(\.\/([^\s)]+)\)/g, (all, name) => assetUrl(name) ? `](${assetUrl(name)})` : all);
         if (!source.trim()) { preview.innerHTML = '<p class="placeholder">Preview Markdown sẽ hiện ở đây.</p>'; previewState.textContent = 'Đang chờ nội dung'; return; }
         previewState.textContent = 'Đang render…';
         preview.innerHTML = marked.parse(source, { gfm: true, breaks: true }) as string;
         decorateCallouts();
+        renderTableOfContents(); renderMath(); renderYoutube();
         const codeBlocks = [...preview.querySelectorAll<HTMLElement>('pre > code')];
         await Promise.all(codeBlocks.map(async (code) => {
           const rawLanguage = ([...code.classList].find((name) => name.startsWith('language-'))?.slice(9) || 'text').replace(/!+$/, '').toLowerCase();
+          if (rawLanguage === 'mermaid') {
+            const diagram = document.createElement('pre'); diagram.className = 'mermaid'; diagram.textContent = code.textContent ?? ''; code.parentElement?.replaceWith(diagram); return;
+          }
           const language = languageAlias[rawLanguage] ?? rawLanguage;
           try {
             const html = await codeToHtml(code.textContent ?? '', { lang: language, theme: 'github-dark-default' });
@@ -415,6 +559,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
             code.innerHTML = escapeHtml(code.textContent ?? '');
           }
         }));
+        if (version === renderVersion) await mermaid.run({ nodes: preview.querySelectorAll('.mermaid') });
         if (version === renderVersion) previewState.textContent = 'Live preview';
       }
       async function publish() {
@@ -438,6 +583,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           ] }) });
           const commit = await api<{ sha: string; html_url: string }>('/git/commits', { method: 'POST', body: JSON.stringify({ message: `content: ${openFile ? 'sửa' : 'thêm'} "${title.value.trim()}"`, tree: tree.sha, parents: [ref.object.sha] }) });
           await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+          removeDraft();
           openFile = { path: filePath, sha: '' }; $('[data-file-label]').textContent = filePath.replace(`${postRoot}/`, '');
           $('[data-save-state]').textContent = 'Đã publish';
           const localSynced = await syncLocal({ quiet: true });
@@ -479,7 +625,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           return false;
         }
       }
-      document.querySelectorAll<HTMLButtonElement>('[data-new]').forEach((button) => button.addEventListener('click', () => startNewInFolder(folder.value || 'Dreamhack')));
+      document.querySelectorAll<HTMLButtonElement>('[data-new]').forEach((button) => button.addEventListener('click', () => startNewInFolder(activeFolder || folder.value || 'Dreamhack')));
       $('[data-reload]').addEventListener('click', () => void loadTree());
       $('[data-connect]').addEventListener('click', () => {
         if (tokenInput.value.trim()) localStorage.setItem('ctf-wu.studio-token', tokenInput.value.trim());
@@ -487,6 +633,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       });
       $('[data-publish]').addEventListener('click', () => void publish());
       $('[data-library]').addEventListener('click', showLibrary);
+      $('[data-folder-back]').addEventListener('click', () => { activeFolder = undefined; renderFolderHome(repoFiles); renderSidebar(); });
       $('[data-auto-tags]').addEventListener('click', autoTags);
       $('[data-metadata-toggle]').addEventListener('click', () => {
         const metadata = $<HTMLDetailsElement>('[data-metadata]'); metadata.open = !metadata.open;
@@ -497,12 +644,19 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         localStorage.setItem('ctf-wu.studio-sidebar-collapsed', String(collapsed));
       });
       $('[data-connection]').addEventListener('click', () => { $('[data-token-box]').hidden = !($('[data-token-box]').hidden); });
-      [title, folder, date, ctf, category, difficulty, tags].forEach((input) => input.addEventListener('input', () => void renderPreview()));
+      [title, folder, date, ctf, category, difficulty, tags].forEach((input) => input.addEventListener('input', () => { void renderPreview(); scheduleDraft(); }));
       assetsInput.addEventListener('change', () => { if (assetsInput.files) addFiles(assetsInput.files); assetsInput.value = ''; });
       const drop = $('[data-drop]');
       drop.addEventListener('dragover', (event) => { event.preventDefault(); drop.dataset.over = ''; });
       drop.addEventListener('dragleave', () => delete drop.dataset.over);
       drop.addEventListener('drop', (event) => { event.preventDefault(); delete drop.dataset.over; if (event.dataTransfer?.files) addFiles(event.dataTransfer.files); });
+      $('[data-resize]').addEventListener('pointerdown', (event) => {
+        const handle = event.currentTarget as HTMLElement; const grid = document.querySelector<HTMLElement>('.editor-grid')!;
+        handle.setPointerCapture(event.pointerId); document.body.dataset.resizing = '';
+        const resize = (move: PointerEvent) => { const box = grid.getBoundingClientRect(); const percent = Math.max(30, Math.min(70, ((move.clientX - box.left) / box.width) * 100)); grid.style.gridTemplateColumns = `${percent}% .55rem minmax(0, 1fr)`; };
+        const finish = () => { document.body.removeAttribute('data-resizing'); handle.removeEventListener('pointermove', resize); handle.removeEventListener('pointerup', finish); };
+        handle.addEventListener('pointermove', resize); handle.addEventListener('pointerup', finish);
+      });
       initEditor();
       if (localStorage.getItem('ctf-wu.studio-sidebar-collapsed') === 'true') document.querySelector('.studio')!.setAttribute('data-sidebar-collapsed', '');
       void loadConfig(); resetEditor();
@@ -519,16 +673,16 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
   .top-actions a,.top-actions button,.editor-tools button,.markdown-tools button { min-height:2.25rem; padding:.42rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); text-decoration:none; font-size:.72rem; white-space:nowrap; } .top-actions a:hover,.editor-tools button:hover,.markdown-tools button:hover { border-color:var(--accent); color:#e2bbff; } .top-actions .publish { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; }
   .library { min-height:0; overflow:auto; padding:1rem; border-right:1px solid var(--line); background:#25262a; transition:opacity .16s ease; } .studio[data-sidebar-collapsed] .library { overflow:hidden; padding:0; opacity:0; pointer-events:none; } .library-head { display:flex; align-items:start; justify-content:space-between; gap:.5rem; } .eyebrow { margin:0 0 .3rem; color:var(--muted); font-size:.6rem; letter-spacing:.12em; text-transform:uppercase; } .library-head strong { display:block; max-width:14rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.72rem; } .library-head button { border:0; background:transparent; color:var(--muted); font-size:1.1rem; }
   .token-box { display:grid; gap:.5rem; margin:1rem 0; padding:.75rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); font-size:.72rem; } .token-box input,.metadata input,.metadata select { width:100%; min-width:0; border:1px solid var(--line); border-radius:.35rem; padding:.55rem; background:#1d1e21; color:var(--text); } .token-box button { border:1px solid #b05be8; border-radius:.35rem; padding:.45rem; background:var(--accent-soft); color:#e2bbff; } .token-box p { margin:0; color:var(--muted); font-size:.62rem; line-height:1.45; }
-  .new-file { width:100%; margin:1rem 0; padding:.65rem .75rem; border:1px solid #ad63e6; border-radius:.45rem; background:#a85ce01f; color:#e1bdff; text-align:left; font-weight:700; } .empty-tree { color:var(--muted); font:.68rem/1.5 inherit; } .tree { display:grid; gap:.18rem; } .tree-file { display:grid; gap:.12rem; width:100%; padding:.58rem .5rem; border:0; border-left:2px solid transparent; border-radius:.25rem; background:transparent; color:var(--text); text-align:left; } .tree-file:hover { border-left-color:var(--accent); background:var(--accent-soft); } .tree-file span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.73rem; } .tree-file small { overflow:hidden; color:var(--muted); font-size:.59rem; text-overflow:ellipsis; white-space:nowrap; }
-  .workspace { min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--canvas); } .library-home { flex:1; overflow:auto; padding:2rem clamp(1.3rem,4vw,3.5rem); } .browser-head { display:flex; align-items:start; justify-content:space-between; gap:1rem; margin-bottom:2.2rem; } .browser-head h1,.recent-posts h2 { margin:0; font:700 1.35rem/1.2 system-ui,sans-serif; letter-spacing:-.02em; } .create-folder { min-height:2.5rem; padding:.55rem .85rem; border:1px solid #ad63e6; border-radius:.45rem; background:transparent; color:#dfbaff; font-weight:700; }
-  .folder-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(15rem,1fr)); gap:1rem; } .folder-card { display:grid; min-height:10rem; grid-template-rows:auto 1fr auto; gap:.7rem; padding:1.25rem; border:1px solid var(--line); border-radius:.55rem; background:var(--panel); color:var(--text); text-align:left; transition:border-color .15s ease, background .15s ease; } .folder-card:hover { border-color:#a860db; background:#303035; } .folder-card .folder-icon { color:#cdc3d6; font-size:1.5rem; } .folder-card strong { align-self:end; font:650 1rem/1.2 system-ui,sans-serif; } .folder-card small,.recent-card small { color:var(--muted); font-size:.66rem; } .recent-posts { margin-top:2.8rem; } .recent-posts h2 { margin-bottom:1rem; } .recent-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(15rem,1fr)); gap:.8rem; } .recent-card { display:grid; min-height:7.5rem; gap:.35rem; padding:1rem; border:1px solid var(--line); border-radius:.5rem; background:#28292e; color:var(--text); text-align:left; } .recent-card:hover { border-color:#a860db; } .recent-card > span { color:#cbc0d7; } .recent-card strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; }
+  .new-file { width:100%; margin:1rem 0; padding:.65rem .75rem; border:1px solid #ad63e6; border-radius:.45rem; background:#a85ce01f; color:#e1bdff; text-align:left; font-weight:700; } .empty-tree { color:var(--muted); font:.68rem/1.5 inherit; } .tree { display:grid; gap:.18rem; } .tree-file { display:grid; grid-template-columns:1.65rem minmax(0,1fr); gap:.2rem; width:100%; padding:.35rem; border-left:2px solid transparent; border-radius:.25rem; background:transparent; } .tree-file:hover { border-left-color:var(--accent); background:var(--accent-soft); } .tree-open { display:grid; gap:.12rem; min-width:0; border:0; background:transparent; color:var(--text); text-align:left; } .tree-file span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.73rem; } .tree-file small { overflow:hidden; color:var(--muted); font-size:.59rem; text-overflow:ellipsis; white-space:nowrap; }
+  .workspace { min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--canvas); } .library-home { flex:1; overflow:auto; padding:2rem clamp(1.3rem,4vw,3.5rem); } .browser-head { display:flex; align-items:start; justify-content:space-between; gap:1rem; margin-bottom:2.2rem; } .browser-actions { display:flex; gap:.5rem; } .browser-head h1,.recent-posts h2,.folder-posts h2 { margin:0; font:700 1.35rem/1.2 system-ui,sans-serif; letter-spacing:-.02em; } .create-folder,.back-folder { min-height:2.5rem; padding:.55rem .85rem; border:1px solid #ad63e6; border-radius:.45rem; background:transparent; color:#dfbaff; font-weight:700; } .back-folder { border-color:var(--line); color:var(--muted); }
+  .folder-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(15rem,1fr)); gap:1rem; } .folder-card { position:relative; display:block; min-height:10rem; border:1px solid var(--line); border-radius:.55rem; background:var(--panel); transition:border-color .15s ease, background .15s ease; } .folder-card:hover,.folder-card[data-drop] { border-color:#a860db; background:#303035; } .folder-open { display:grid; width:100%; min-height:10rem; grid-template-rows:auto 1fr auto; gap:.7rem; padding:1.25rem; border:0; background:transparent; color:var(--text); text-align:left; } .folder-card .folder-icon { color:#cdc3d6; font-size:1.5rem; } .folder-card strong { align-self:end; font:650 1rem/1.2 system-ui,sans-serif; } .folder-card small,.recent-card small,.folder-file-card small { color:var(--muted); font-size:.66rem; } .recent-posts,.folder-posts { margin-top:2.8rem; } .recent-posts h2,.folder-posts h2 { margin-bottom:1rem; } .recent-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(15rem,1fr)); gap:.8rem; } .recent-card,.folder-file-card { position:relative; min-height:7.5rem; border:1px solid var(--line); border-radius:.5rem; background:#28292e; } .recent-card:hover,.folder-file-card:hover { border-color:#a860db; } .file-open { display:grid; width:100%; min-height:7.5rem; gap:.35rem; padding:1rem; border:0; background:transparent; color:var(--text); text-align:left; } .file-open > span { color:#cbc0d7; } .file-open strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; } .selection-checkbox { position:relative; z-index:2; display:grid; width:1.55rem; height:1.55rem; place-items:center; border:0; background:transparent; color:#cfc3dc; font-size:1rem; } .folder-card > .selection-checkbox,.recent-card > .selection-checkbox,.folder-file-card > .selection-checkbox { position:absolute; top:.6rem; right:.6rem; }
   .library-home[hidden],.composer[hidden] { display:none; } .composer { min-height:0; flex:1; display:flex; flex-direction:column; } .editor-tools { display:flex; align-items:center; gap:.55rem; min-height:3.5rem; padding:.55rem 1rem; border-bottom:1px solid var(--line); background:#292a2f; } .editor-tools strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.72rem; } .editor-tools span { margin-right:auto; color:var(--muted); font-size:.65rem; } .back-library { color:var(--muted)!important; }
   .metadata { border-bottom:1px solid var(--line); background:var(--panel); } .metadata summary { padding:.65rem 1rem; color:var(--muted); font-size:.68rem; cursor:pointer; user-select:none; } .metadata-fields { display:grid; grid-template-columns:2fr repeat(3,minmax(8rem,1fr)); gap:.55rem; padding:0 1rem 1rem; } .metadata label { display:grid; gap:.28rem; min-width:0; color:var(--muted); font-size:.59rem; letter-spacing:.07em; text-transform:uppercase; } .metadata .title-field,.metadata .tags-field { grid-column:span 2; }
   .markdown-tools { display:flex; flex-wrap:wrap; gap:.35rem; padding:.45rem .8rem; border-bottom:1px solid var(--line); background:#292a2f; } .markdown-tools button { min-height:1.8rem; padding:.2rem .45rem; color:var(--muted); font-size:.63rem; }
-  .editor-grid { min-height:0; flex:1; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .source-pane,.preview-pane { min-width:0; min-height:0; display:flex; flex-direction:column; } .source-pane { border-right:1px solid var(--line); background:#1f2024; } .preview-pane { background:#25262a; } .pane-head { display:flex; justify-content:space-between; padding:.6rem .85rem; border-bottom:1px solid var(--line); color:var(--muted); font-size:.62rem; letter-spacing:.07em; text-transform:uppercase; }.code-editor { min-height:18rem; flex:1; overflow:auto; } .code-editor .cm-editor { height:100%; font:.82rem/1.7 'JetBrains Mono Variable',ui-monospace,monospace; } .code-editor .cm-scroller { overflow:auto; } .code-editor .cm-gutters { border:0; background:#1d1e22; color:#6f727d; } .code-editor .cm-activeLineGutter,.code-editor .cm-activeLine { background:#ffffff08; }
+  .editor-grid { min-height:0; flex:1; display:grid; grid-template-columns:minmax(0,1fr) .55rem minmax(0,1fr); } .source-pane,.preview-pane { min-width:0; min-height:0; display:flex; flex-direction:column; } .source-pane { background:#1f2024; } .preview-pane { background:#25262a; } .resize-handle { cursor:col-resize; background:var(--line); touch-action:none; } .resize-handle:hover { background:var(--accent); } body[data-resizing] { cursor:col-resize; user-select:none; } .pane-head { display:flex; justify-content:space-between; padding:.6rem .85rem; border-bottom:1px solid var(--line); color:var(--muted); font-size:.62rem; letter-spacing:.07em; text-transform:uppercase; }.code-editor { min-height:18rem; flex:1; overflow:auto; } .code-editor .cm-editor { height:100%; font:.82rem/1.7 'JetBrains Mono Variable',ui-monospace,monospace; } .code-editor .cm-scroller { overflow:auto; } .code-editor .cm-gutters { border:0; background:#1d1e22; color:#6f727d; } .code-editor .cm-activeLineGutter,.code-editor .cm-activeLine { background:#ffffff08; }
   .asset-drop { display:block; margin:.75rem; padding:.75rem; border:1px dashed #575964; border-radius:.42rem; color:var(--muted); font-size:.68rem; text-align:center; } .asset-drop[data-over] { border-color:var(--accent); color:#e2bbff; } .asset-drop input { position:absolute; width:1px; height:1px; opacity:0; } .assets { display:grid; gap:.25rem; margin:0 .75rem 1rem; padding:0; list-style:none; } .assets li { display:flex; align-items:center; gap:.5rem; min-width:0; padding:.35rem .5rem; background:var(--panel-hi); color:var(--muted); font-size:.64rem; } .assets li span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .assets li button { margin-left:auto; border:0; background:none; color:var(--muted); font-size:1rem; }
-  .preview { overflow:auto; max-height:calc(100dvh - 13rem); padding:1.5rem clamp(1rem,3vw,3rem) 4rem; font:1rem/1.8 system-ui,sans-serif; color:#dadbe2; } .preview .placeholder { color:var(--muted); } .preview h1,.preview h2,.preview h3 { color:#f5f5f7; line-height:1.25; } .preview h1 { font-size:1.8rem; } .preview h2 { margin-top:2rem; font-size:1.35rem; } .preview a { color:#dea4ff; } .preview img { max-width:100%; height:auto; border:1px solid var(--line); border-radius:.5rem; } .preview pre { overflow:auto; padding:1rem; border:1px solid var(--line); border-radius:.45rem; } .preview pre.shiki { background:#18171d!important; } .preview code { padding:.1em .3em; border-radius:.2rem; background:#0004; } .preview pre code { padding:0; background:transparent; } .preview table { border-collapse:collapse; } .preview th,.preview td { padding:.4rem .6rem; border:1px solid var(--line); } .preview .callout { margin:1rem 0; padding:.75rem 1rem; border-left:3px solid #789cff; background:#789cff12; } .preview .callout-warning { border-left-color:#edb35e; background:#edb35e12; } .preview .callout-label { display:block; margin-bottom:.35rem; color:#b5c8ff; font-size:.85rem; } .preview .callout-warning .callout-label { color:#ffd28c; } .preview .callout p { margin:.25rem 0; }
+  .preview { overflow:auto; max-height:calc(100dvh - 13rem); padding:1.5rem clamp(1rem,3vw,3rem) 4rem; font:1rem/1.8 system-ui,sans-serif; color:#dadbe2; } .preview .placeholder { color:var(--muted); } .preview h1,.preview h2,.preview h3 { color:#f5f5f7; line-height:1.25; } .preview h1 { font-size:1.8rem; } .preview h2 { margin-top:2rem; font-size:1.35rem; } .preview a { color:#dea4ff; } .preview img { max-width:100%; height:auto; border:1px solid var(--line); border-radius:.5rem; } .preview pre { overflow:auto; padding:1rem; border:1px solid var(--line); border-radius:.45rem; } .preview pre.shiki { background:#18171d!important; } .preview code { padding:.1em .3em; border-radius:.2rem; background:#0004; } .preview pre code { padding:0; background:transparent; } .preview table { border-collapse:collapse; } .preview th,.preview td { padding:.4rem .6rem; border:1px solid var(--line); } .preview mark { border-radius:.15rem; padding:.05em .2em; background:#f6e05e; color:#27230c; } .preview .auto-toc { margin:1rem 0; padding:.8rem 1rem; border:1px solid var(--line); border-radius:.45rem; background:#1e1f24; } .preview .auto-toc ol { margin:.2rem 0; padding-left:1.2rem; } .preview .auto-toc li { margin:.2rem 0; } .preview .footnotes { margin-top:2.5rem; color:var(--muted); font-size:.9rem; } .preview .footnote-ref { margin-left:.1em; } .preview .youtube-embed { display:block; width:min(100%, 48rem); aspect-ratio:16/9; border:0; border-radius:.45rem; } .preview .callout { margin:1rem 0; padding:.75rem 1rem; border-left:3px solid #789cff; background:#789cff12; } .preview .callout-warning,.preview .callout-danger { border-left-color:#ed8a75; background:#ed8a7512; } .preview .callout-tip,.preview .callout-success { border-left-color:#68d391; background:#68d39112; } .preview .callout-label { display:block; margin-bottom:.35rem; color:#b5c8ff; font-size:.85rem; } .preview .callout-warning .callout-label,.preview .callout-danger .callout-label { color:#ffd09c; } .preview .callout p { margin:.25rem 0; }
   .status { min-height:1.65rem; margin:0; padding:.35rem 1rem; background:var(--panel); color:var(--muted); font-size:.7rem; } .status[data-kind='ok'] { color:var(--ok); } .status[data-kind='error'] { color:var(--error); }
-  @media (max-width:58rem) { .studio,.studio[data-sidebar-collapsed] { grid-template-columns:1fr; } .library { display:none; } .metadata-fields { grid-template-columns:1fr 1fr; } .metadata .title-field,.metadata .tags-field { grid-column:span 2; } .editor-grid { grid-template-columns:1fr; } .source-pane { min-height:50dvh; border-right:0; border-bottom:1px solid var(--line); } .preview { max-height:none; min-height:40dvh; } }
+  @media (max-width:58rem) { .studio,.studio[data-sidebar-collapsed] { grid-template-columns:1fr; } .library { display:none; } .metadata-fields { grid-template-columns:1fr 1fr; } .metadata .title-field,.metadata .tags-field { grid-column:span 2; } .editor-grid { grid-template-columns:1fr; } .resize-handle { display:none; } .source-pane { min-height:50dvh; border-bottom:1px solid var(--line); } .preview { max-height:none; min-height:40dvh; } }
   @media (max-width:38rem) { .topbar { align-items:start; flex-direction:column; } .top-actions { width:100%; } .top-actions > * { flex:1; text-align:center; } .connection-pill span { display:none; } .browser-head { align-items:stretch; flex-direction:column; } .create-folder { width:100%; } .folder-grid,.recent-grid { grid-template-columns:1fr; } .metadata-fields { grid-template-columns:1fr; } .metadata .title-field,.metadata .tags-field { grid-column:auto; } .editor-tools { flex-wrap:wrap; } .editor-tools span { order:3; width:100%; } }
 </style>
