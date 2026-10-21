@@ -1,5 +1,6 @@
 ---
 title: wannanime
+draft: false
 date: 2026-10-04
 ctf: aochinh26
 category: web
@@ -18,25 +19,27 @@ File: [wannanime](https://github.com/Drakie14/Challenges/blob/aochinh26/wannanim
 # Solution
 Truy cập trang web, ta thấy giao diện sau:
 
-![image](https://hackmd.io/_uploads/rJ0nI7RqGl.png)
+![image](https://hackmd.io/_uploads/HJl-UsL3fe.png)
 
 Ta đăng kí thử 1 tài khoản rồi log in:
 
-![image](https://hackmd.io/_uploads/S1OzuXA5Gx.png)
+![image](https://hackmd.io/_uploads/HJXzLiUhfl.png)
 
 `username: 67` và `password: 1`
 
 Sau khi login ta thấy dashboard như sau:
 
-![image](https://hackmd.io/_uploads/HkPu_mR9ze.png)
+![image](https://hackmd.io/_uploads/Skl3rLjI2zg.png)
+
 ## CSRF
 Check thử cookie, ta thấy session có 1 đoạn giống như Base64 encoded:
 
-![image](https://hackmd.io/_uploads/SynH57R9Gl.png)
+![image](https://hackmd.io/_uploads/ByzHPoI3fe.png)
 
--> ==`eyJyb2xlIjoidXNlciIsInVzZXJuYW1lIjoiNjcifQ`.asCoQQ.UB3Ea2R7OTEoDHM1zIxh9t2Qiyc==
+-> session: 
+==`eyJyb2xlIjoidXNlciIsInVzZXJuYW1lIjoiNjcifQ`.atkmMw.HwkHX_h-hY6cHqREpJM6EKsdnR4==
 
-![image](https://hackmd.io/_uploads/BJAEnmAczx.png)
+![image](https://hackmd.io/_uploads/HJp7PjL2ze.png)
 
 Mà trong `init.sql` có:
 
@@ -60,9 +63,9 @@ def admin():
 
 Ta thử thay role từ user thành admin, Base64 encode rồi ném lại vào cookie session xem được không:
 
-![image](https://hackmd.io/_uploads/S1dXAQR9fe.png)
+![image](https://hackmd.io/_uploads/ryKDvsUnfe.png)
 
--> ==`eyJyb2xlIjoiYWRtaW4iLCJ1c2VybmFtZSI6IjY3In0=`.asCoQQ.UB3Ea2R7OTEoDHM1zIxh9t2Qiyc==
+-> ==`eyJyb2xlIjoiYWRtaW4iLCJ1c2VybmFtZSI6IjY3In0=`.atkmMw.HwkHX_h-hY6cHqREpJM6EKsdnR4==
 
 Bấm F5 để refresh nhưng lại trả ta về trang chủ -> Thất bại.
 
@@ -74,11 +77,11 @@ Ta thử cách khác với payload sau:
 
 `username: ","role":"admin` và `password: 1`
 
-![image](https://hackmd.io/_uploads/B1cRb4A9zl.png)
+![image](https://hackmd.io/_uploads/SkN9wiLnfl.png)
 
-Sau khi đăng nhập thu được cookie session: ==`eyJyb2xlIjoidXNlciIsInVzZXJuYW1lIjoiXCIsXCJyb2xlXCI6XCJhZG1pbiJ9`.asCx8g.ruEyLft8646w9bsK_CaineiWyIM==
+Sau khi đăng nhập thu được cookie session: ==`eyJyb2xlIjoidXNlciIsInVzZXJuYW1lIjoiXCIsXCJyb2xlXCI6XCJhZG1pbiJ9`.atknmg.s5-MPtCD75TTIDlYoYVhviXPa8Y==
 
-![image](https://hackmd.io/_uploads/ry7w9VRcfg.png)
+![image](https://hackmd.io/_uploads/rk04ti8nGe.png)
 
 Nhận thấy `"` đã bị escaped. Sau đó thử với `\` thì nhận thấy cũng bị escaped.
 
@@ -163,45 +166,68 @@ Code python có dạng như sau:
 Nhận thấy trang trả về `not_found.html` thay vì thông tin của user. Ta lại quay về đọc thêm về ==UNION== và tìm được rằng:
 
 :::warning
-Nhớ rằng ==UNION== đặc biệt yêu cầu mọi ==SELECT== phải có chung số cột.
-![image](https://hackmd.io/_uploads/HyvxkL0qMg.png)
+Nhớ rằng ==UNION== đặc biệt yêu cầu mọi ==SELECT== phải có chung số cột và chung kiểu dữ liệu
+![image](https://hackmd.io/_uploads/SJfDFjUhfe.png)
 :::
 
 Giờ ta quan sát `init.sql`, nhận thấy:
 
 1. `anime` có 5 cột (id, title, image_url, genres, description)
-![image](https://hackmd.io/_uploads/SkWheVyjMl.png)
+```sql
+CREATE TABLE IF NOT EXISTS anime (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    genres TEXT NOT NULL,
+    description TEXT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+```
 
 2. `users` có 4 cột (id, username, password, role)
-![image](https://hackmd.io/_uploads/Sy_TGaRcMx.png)
+```sql
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL,
+    role VARCHAR(10) NOT NULL DEFAULT 'user'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+```
 
 Đó là lí do tại sao `SELECT * FROM anime` lại không thể ==UNION== với `SELECT * FROM users`.
 
 Ta thử lại với payload khác:
 
-`UNION SELECT id, username, password, role, NULL FROM users -- \`
+`UNION SELECT password, password, password, password, password FROM users -- \`
 
 :::warning
-Sử dụng `NULL` để kiểu dữ liệu của 2 bên ==SELECT== giống nhau
+Sử dụng `password` hết để chỉ hiển thị password thay vì các thông tin dư thừa khác và khiến kiểu dữ liệu của 2 bên ==SELECT== giống nhau
 :::
 
 Lần này SQL Injection đã kích hoạt thành công và trả về thông tin như sau:
 
-![image](https://hackmd.io/_uploads/HkCNnEksGx.png)
+![image](https://hackmd.io/_uploads/rkU69i82Me.png)
 
-| username | password |
-| -------- | -------- |
-| admin    | this_is_fake_admin_password_will_be_change_in_prod |
-| 67       | 1 |
-| ","role:"admin | 1 |
-
+-> admin password: `this_is_fake_admin_password_will_be_change_in_prod`
 ## Path Traversal
 
 Bây giờ ta đăng nhập vào account `admin`.
 
 Tại route `/admin` mà chỉ có riêng user với role `admin` vào được, ta đọc source code:
+```python
+@app.get('/admin')
+def admin():
+    if ('username' not in session or session['username'] != 'admin'):
+        return 'Bạn không phải admin'
+    filename = request.args.get('filename', None)
 
-![image](https://hackmd.io/_uploads/r1khkSJizg.png)
+    if filename is None:
+        return 'No filename provided', 400
+
+    while '../' in filename:
+        filename = filename.replace('../', '')
+
+    return open(os.path.join('files/', filename),'rb').read()
+```
 
 Nhận thấy web cấm `../` để leo lên các file trước.
 
@@ -215,11 +241,11 @@ Nhưng tất cả đều trả về một kết quả duy nhất: THẤT BẠI (
 
 Thế là ta lại đi research về hàm [os.path.join](https://docs.python.org/3/library/os.path.html#os.path.join) thì nhận thấy nếu `filename` là [absolute path](https://www.linuxfoundation.org/blog/blog/classic-sysadmin-absolute-path-vs-relative-path-in-linux-unix) thì vẫn sẽ đọc được file.
 
-![image](https://hackmd.io/_uploads/S1IC4Skozg.png)
+![image](https://hackmd.io/_uploads/B1OQhsU2Gl.png)
 
 Đây là một trường hợp kinh điển đã được nhắc đến trong PortSwigger:
 
-![image](https://hackmd.io/_uploads/S1VwmBkjMl.png)
+![image](https://hackmd.io/_uploads/H1SY3sI3fx.png)
 
 Vậy ta thử với [/etc/passwd](https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/) và thu được đoạn response khả nghi:
 
@@ -227,7 +253,7 @@ Vậy ta thử với [/etc/passwd](https://www.cyberciti.biz/faq/understanding-e
 ctf:x:1000:1000::/this_is_fake_directory_in_prod_this_is_random:/bin/sh
 ```
 
-![image](https://hackmd.io/_uploads/BkfaJ4SJsGg.png)
+![image](https://hackmd.io/_uploads/HJM-as8nMe.png)
 
 Vậy phân tích đoạn response trên:
 1. Username: `ctf`
@@ -240,9 +266,12 @@ Vậy phân tích đoạn response trên:
 
 Vậy ta đã có Home directory để dùng absolute path.
 
--> URL: `/admin?filename=/this_is_fake_directory_in_prod_this_is_random/flag.txt`
+-> URL: 
+```
+/admin?filename=/this_is_fake_directory_in_prod_this_is_random/flag.txt
+```
 
-![image](https://hackmd.io/_uploads/ByE9wryifx.png)
+![image](https://hackmd.io/_uploads/HkHN6iUnfe.png)
 
 -> Flag:
 
