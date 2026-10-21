@@ -40,15 +40,16 @@ function pageLink(target: EventTarget | null): HTMLAnchorElement | null {
   return a;
 }
 
-function fetchPage(url: string): Promise<Page | null> {
-  return fetch(url, { credentials: 'same-origin', priority: 'low' } as RequestInit)
-    .then(async (res) => {
-      const type = res.headers.get('content-type') ?? '';
-      // Redirect / lỗi: để router tự fetch và xử lý như bình thường.
-      if (!res.ok || res.redirected || !/^(text\/html|application\/xhtml\+xml)\b/.test(type)) return null;
-      return { body: await res.text(), type };
-    })
-    .catch(() => null);
+async function fetchPage(url: string): Promise<Page | null> {
+  try {
+    const res = await fetch(url, { credentials: 'same-origin', priority: 'low' } as RequestInit);
+    const type = res.headers.get('content-type') ?? '';
+    // Redirect / lỗi: để router tự fetch và xử lý như bình thường.
+    if (!res.ok || res.redirected || !/^(text\/html|application\/xhtml\+xml)\b/.test(type)) return null;
+    return { body: await res.text(), type };
+  } catch {
+    return null;
+  }
 }
 
 function prefetch(a: HTMLAnchorElement): void {

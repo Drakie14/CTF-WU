@@ -93,6 +93,7 @@ export interface NormalizeContext {
 export interface NormalizedFrontmatter {
   title: string;
   titleInferred: boolean;
+  draft: boolean;
   date: Date;
   dateSource: 'frontmatter' | 'git' | 'mtime';
   ctf: string;
@@ -109,6 +110,7 @@ export interface NormalizedFrontmatter {
 
 const KNOWN_KEYS = new Set([
   'title', 'date', 'ctf', 'category', 'difficulty', 'points', 'tags', 'summary', 'description', 'cover',
+  'draft',
 ]);
 
 /** Metadata HackMD hay xuất hiện: bỏ qua im lặng (không phải lỗi của người viết). */
@@ -163,6 +165,13 @@ export function normalizeFrontmatter(
     if (raw.title === undefined || raw.title === null) {
       warn('title', 'missing, using file/folder name as temporary title', undefined, ctx.baseName);
     }
+  }
+
+  let draft = false;
+  if (raw.draft !== undefined && typeof raw.draft !== 'boolean') {
+    warn('draft', 'must be a boolean', raw.draft, false);
+  } else if (raw.draft === true) {
+    draft = true;
   }
 
   // date
@@ -237,7 +246,7 @@ export function normalizeFrontmatter(
   }
 
   return {
-    data: { title, titleInferred, date, dateSource, ctf, ctfInferred, category, difficulty, points, tags, summary, cover },
+    data: { title, titleInferred, draft, date, dateSource, ctf, ctfInferred, category, difficulty, points, tags, summary, cover },
     warnings,
   };
 }

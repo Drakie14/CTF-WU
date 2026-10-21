@@ -19,6 +19,7 @@ const posts = defineCollection({
     z.object({
       title: z.string().catch(''),
       titleInferred: z.boolean().catch(true),
+      draft: z.boolean().catch(false),
       date: z.coerce.date().catch(() => new Date()),
       dateSource: z.enum(['frontmatter', 'git', 'mtime']).catch('mtime'),
       ctf: z.string().catch(''),

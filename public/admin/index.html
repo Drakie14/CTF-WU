@@ -9,7 +9,25 @@
     <link rel="cms-config-url" type="application/yaml" href="/admin/config.yml" />
   </head>
   <body>
+    <a class="studio-link" href="/admin/studio/">Mở Write-up Studio</a>
     <!-- Sveltia CMS được self-host: scripts/copy-cms.mjs chép bundle từ node_modules vào đây. -->
     <script src="/admin/sveltia-cms.js"></script>
+    <style>
+      .studio-link {
+        position: fixed;
+        right: 1rem;
+        bottom: 1rem;
+        z-index: 10000;
+        padding: 0.65rem 0.9rem;
+        border: 1px solid #f472b6;
+        border-radius: 0.5rem;
+        background: #2a1021;
+        color: #fce7f3;
+        font: 600 13px system-ui, sans-serif;
+        text-decoration: none;
+        box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+      }
+      .studio-link:hover { background: #f472b6; color: #2a1021; }
+    </style>
   </body>
 </html>

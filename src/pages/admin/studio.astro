@@ -1,0 +1,370 @@
+---
+import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
+---
+
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="same-origin" />
+    <title>Write-up Studio</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <main class="studio">
+      <header class="topbar">
+        <a class="wordmark" href="/admin/">CTF<span>//</span>WU <small>Studio</small></a>
+        <div class="top-actions">
+          <a href="/admin/import/">Import cả giải</a>
+          <a href="/admin/">CMS cũ</a>
+          <button type="button" class="publish" data-publish>Publish</button>
+        </div>
+      </header>
+
+      <aside class="library" aria-label="Thư viện write-up">
+        <div class="library-head">
+          <div>
+            <p class="eyebrow">Repository</p>
+            <strong data-repo>Đang đọc cấu hình…</strong>
+          </div>
+          <button type="button" title="Tải lại danh sách" aria-label="Tải lại danh sách" data-reload>↻</button>
+        </div>
+        <div class="token-box" data-token-box hidden>
+          <label for="token">GitHub token</label>
+          <input id="token" type="password" autocomplete="off" placeholder="github_pat_…" data-token />
+          <button type="button" data-connect>Kết nối</button>
+          <p>Token chỉ dùng trên trình duyệt này.</p>
+        </div>
+        <button type="button" class="new-file" data-new>+ Write-up mới</button>
+        <p class="library-note">Kéo ảnh hoặc file vào một thư mục bài ở giữa trang để đính kèm.</p>
+        <nav class="tree" aria-label="Danh sách bài" data-tree>
+          <p class="empty-tree">Kết nối GitHub để mở danh sách bài.</p>
+        </nav>
+      </aside>
+
+      <section class="workspace" aria-label="Soạn write-up">
+        <div class="metadata">
+          <label class="title-field"><span>Tiêu đề</span><input type="text" data-title placeholder="Tên challenge" /></label>
+          <label><span>Folder</span><input type="text" data-folder value="Dreamhack" placeholder="Dreamhack" /></label>
+          <label><span>Slug</span><input type="text" data-slug placeholder="ten-challenge" /></label>
+          <label><span>Ngày</span><input type="date" data-date /></label>
+          <label><span>CTF</span><input type="text" data-ctf placeholder="Dreamhack" /></label>
+          <label><span>Category</span><select data-category><option value="">Chưa chọn</option>{CATEGORIES.map((c) => <option value={c}>{c}</option>)}</select></label>
+          <label><span>Độ khó</span><select data-difficulty><option value="">Chưa chọn</option>{DIFFICULTIES.map((d) => <option value={d}>{d}</option>)}</select></label>
+          <label class="tags-field"><span>Tags</span><input type="text" data-tags placeholder="xss, svg, javascript" /></label>
+        </div>
+
+        <div class="editor-tools">
+          <strong data-file-label>Write-up chưa lưu</strong>
+          <span data-save-state>Local draft</span>
+          <button type="button" data-local>Chọn src/content/posts</button>
+          <button type="button" data-sync-local>Đồng bộ vào máy</button>
+        </div>
+
+        <div class="editor-grid">
+          <section class="source-pane">
+            <div class="pane-head"><span>Markdown</span><span>Ctrl+V ảnh để chèn</span></div>
+            <textarea spellcheck="false" data-body placeholder="# Đề bài&#10;&#10;Nội dung write-up…"></textarea>
+            <label class="asset-drop" data-drop>
+              <input type="file" multiple data-assets accept="image/*,.svg,.txt,.py,.js,.ts,.zip,.pdf" />
+              <span>Kéo thả file vào đây hoặc bấm để thêm vào folder bài</span>
+            </label>
+            <ul class="assets" data-assets-list></ul>
+          </section>
+          <section class="preview-pane">
+            <div class="pane-head"><span>Preview</span><span data-preview-state>Đang chờ nội dung</span></div>
+            <article class="preview" data-preview><p class="placeholder">Preview Markdown sẽ hiện ở đây.</p></article>
+          </section>
+        </div>
+        <p class="status" role="status" data-status></p>
+      </section>
+    </main>
+
+    <script>
+      import { marked } from 'marked';
+      import { codeToHtml } from 'shiki';
+      import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+
+      const $ = <T extends Element = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
+      const body = $<HTMLTextAreaElement>('[data-body]');
+      const title = $<HTMLInputElement>('[data-title]');
+      const folder = $<HTMLInputElement>('[data-folder]');
+      const slug = $<HTMLInputElement>('[data-slug]');
+      const date = $<HTMLInputElement>('[data-date]');
+      const ctf = $<HTMLInputElement>('[data-ctf]');
+      const category = $<HTMLSelectElement>('[data-category]');
+      const difficulty = $<HTMLSelectElement>('[data-difficulty]');
+      const tags = $<HTMLInputElement>('[data-tags]');
+      const preview = $('[data-preview]');
+      const previewState = $('[data-preview-state]');
+      const status = $('[data-status]');
+      const tokenInput = $<HTMLInputElement>('[data-token]');
+      const assetsInput = $<HTMLInputElement>('[data-assets]');
+
+      type Asset = { file: File; name: string; url: string };
+      type RepoFile = { path: string; sha: string };
+      let repo = { name: '', branch: 'main' };
+      let openFile: RepoFile | undefined;
+      let assets: Asset[] = [];
+      let renderVersion = 0;
+      let localDirectory: FileSystemDirectoryHandle | undefined;
+
+      function storedToken(): string {
+        try {
+          const user = JSON.parse(localStorage.getItem('sveltia-cms.user') ?? 'null') as { token?: unknown } | null;
+          return typeof user?.token === 'string' ? user.token : '';
+        } catch { return ''; }
+      }
+      const token = () => storedToken() || tokenInput.value.trim();
+      function setStatus(message: string, kind: 'info' | 'error' | 'ok' = 'info') {
+        status.textContent = message;
+        status.dataset.kind = kind;
+      }
+      async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+        const response = await fetch(`https://api.github.com/repos/${repo.name}${path}`, {
+          ...init,
+          headers: {
+            Accept: 'application/vnd.github+json', Authorization: `Bearer ${token()}`,
+            'X-GitHub-Api-Version': '2022-11-28', ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+          },
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({})) as { message?: string };
+          throw new Error(`GitHub ${response.status}: ${data.message ?? response.statusText}`);
+        }
+        return response.json() as Promise<T>;
+      }
+      const slugify = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const decode = (text: string) => new TextDecoder().decode(Uint8Array.from(atob(text.replace(/\n/g, '')), (c) => c.charCodeAt(0)));
+      const postRoot = 'src/content/posts';
+      const relativeFolder = () => folder.value.trim().replace(/^\/+|\/+$/g, '') || 'uncategorized';
+      const currentPath = () => openFile?.path ?? `${postRoot}/${relativeFolder()}/${slugify(slug.value || title.value || 'untitled')}/index.md`;
+      const articleDirectory = () => currentPath().replace(/\/[^/]+$/, '');
+      const assetUrl = (name: string) => {
+        const localAsset = assets.find((asset) => asset.name === name);
+        if (localAsset) return localAsset.url;
+        if (!openFile || !repo.name || name.includes('..')) return undefined;
+        const path = `${articleDirectory()}/${name}`.split('/').map(encodeURIComponent).join('/');
+        return `https://raw.githubusercontent.com/${repo.name}/${encodeURIComponent(repo.branch)}/${path}`;
+      };
+      function encodeBinary(bytes: Uint8Array) {
+        let binary = '';
+        for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+        return btoa(binary);
+      }
+
+      function parsePost(source: string) {
+        const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(source);
+        const fields = match ? (parseYaml(match[1]) ?? {}) as Record<string, unknown> : {};
+        return { fields, body: source.slice(match?.[0].length ?? 0) };
+      }
+      function composePost() {
+        const fields: Record<string, unknown> = { title: title.value.trim() || 'Untitled' };
+        if (date.value) fields.date = date.value;
+        if (ctf.value.trim()) fields.ctf = ctf.value.trim();
+        if (category.value) fields.category = category.value;
+        if (difficulty.value) fields.difficulty = difficulty.value;
+        const tagList = tags.value.split(',').map((tag) => tag.trim()).filter(Boolean);
+        if (tagList.length) fields.tags = tagList;
+        return `---\n${stringifyYaml(fields)}---\n\n${body.value.trim()}\n`;
+      }
+      function populate(source: string) {
+        const post = parsePost(source);
+        title.value = typeof post.fields.title === 'string' ? post.fields.title : '';
+        date.value = typeof post.fields.date === 'string' ? post.fields.date.slice(0, 10) : '';
+        ctf.value = typeof post.fields.ctf === 'string' ? post.fields.ctf : folder.value;
+        category.value = typeof post.fields.category === 'string' ? post.fields.category : '';
+        difficulty.value = typeof post.fields.difficulty === 'string' ? post.fields.difficulty : '';
+        tags.value = Array.isArray(post.fields.tags) ? post.fields.tags.join(', ') : typeof post.fields.tags === 'string' ? post.fields.tags : '';
+        body.value = post.body.trim();
+        slug.value = openFile?.path.match(/\/([^/]+)\/index\.md$/)?.[1] ?? slugify(title.value);
+        void renderPreview();
+      }
+      function resetEditor() {
+        openFile = undefined;
+        assets.forEach((asset) => URL.revokeObjectURL(asset.url)); assets = [];
+        title.value = ''; slug.value = ''; date.value = new Date().toISOString().slice(0, 10); ctf.value = folder.value;
+        category.value = ''; difficulty.value = ''; tags.value = ''; body.value = '';
+        $('[data-file-label]').textContent = 'Write-up mới';
+        $('[data-save-state]').textContent = 'Local draft';
+        renderAssets(); void renderPreview();
+      }
+      async function loadConfig() {
+        const config = parseYaml(await (await fetch('/admin/config.yml')).text()) as { backend?: { repo?: string; branch?: string } };
+        repo = { name: config.backend?.repo ?? '', branch: config.backend?.branch ?? 'main' };
+        $('[data-repo]').textContent = `${repo.name} / ${repo.branch}`;
+        $('[data-token-box]').hidden = Boolean(storedToken());
+        if (token()) void loadTree();
+      }
+      async function loadTree() {
+        if (!token()) { $('[data-token-box]').hidden = false; return; }
+        const tree = $('[data-tree]'); tree.innerHTML = '<p class="empty-tree">Đang tải write-up…</p>';
+        try {
+          const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
+          const data = await api<{ tree: Array<{ path: string; type: string; sha: string }> }>(`/git/trees/${ref.object.sha}?recursive=1`);
+          const files = data.tree.filter((item) => item.type === 'blob' && item.path.startsWith(`${postRoot}/`) && (item.path.endsWith('/index.md') || /\.md$/.test(item.path)))
+            .map((item) => ({ path: item.path, sha: item.sha })).sort((a, b) => a.path.localeCompare(b.path));
+          tree.replaceChildren(...files.map((file) => {
+            const button = document.createElement('button'); button.type = 'button'; button.className = 'tree-file';
+            const bits = file.path.split('/'); button.innerHTML = `<span>${bits.at(-2) === 'posts' ? bits.at(-1) : bits.at(-2) ?? bits.at(-1)}</span><small>${file.path.replace(`${postRoot}/`, '')}</small>`;
+            button.addEventListener('click', () => void openPost(file)); return button;
+          }));
+          if (!files.length) tree.innerHTML = '<p class="empty-tree">Chưa có write-up.</p>';
+        } catch (error) { tree.innerHTML = ''; setStatus(error instanceof Error ? error.message : String(error), 'error'); }
+      }
+      async function openPost(file: RepoFile) {
+        try {
+          setStatus('Đang mở write-up…');
+          const content = await api<{ content: string; sha: string }>(`/contents/${file.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repo.branch)}`);
+          openFile = { path: file.path, sha: content.sha };
+          const parts = file.path.replace(`${postRoot}/`, '').split('/');
+          folder.value = parts.slice(0, -2).join('/') || 'uncategorized';
+          $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
+          $('[data-save-state]').textContent = 'Đã mở từ GitHub';
+          populate(decode(content.content)); setStatus('');
+        } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
+      }
+      function renderAssets() {
+        const list = $('[data-assets-list]');
+        list.replaceChildren(...assets.map((asset) => {
+          const item = document.createElement('li');
+          item.innerHTML = `<span>${asset.name}</span><button type="button" aria-label="Bỏ ${asset.name}">×</button>`;
+          item.querySelector('button')!.addEventListener('click', () => {
+            URL.revokeObjectURL(asset.url); assets = assets.filter((entry) => entry !== asset); renderAssets(); void renderPreview();
+          }); return item;
+        }));
+      }
+      function insertText(text: string) {
+        const start = body.selectionStart; const end = body.selectionEnd;
+        body.setRangeText(text, start, end, 'end'); body.focus(); void renderPreview();
+      }
+      function addFiles(files: FileList | File[]) {
+        for (const file of Array.from(files)) {
+          const safe = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-');
+          const name = assets.some((asset) => asset.name === safe) ? `${Date.now()}-${safe}` : safe;
+          assets.push({ file, name, url: URL.createObjectURL(file) });
+          if (file.type.startsWith('image/')) insertText(`![${name}](./${name})`);
+        }
+        renderAssets(); void renderPreview();
+      }
+      const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+      async function renderPreview() {
+        const version = ++renderVersion;
+        const source = body.value.replace(/^\[TOC\]\s*$/gim, '').replace(/\]\(\.\/([^\s)]+)\)/g, (all, name) => assetUrl(name) ? `](${assetUrl(name)})` : all);
+        if (!source.trim()) { preview.innerHTML = '<p class="placeholder">Preview Markdown sẽ hiện ở đây.</p>'; previewState.textContent = 'Đang chờ nội dung'; return; }
+        previewState.textContent = 'Đang render…';
+        preview.innerHTML = marked.parse(source, { gfm: true, breaks: true }) as string;
+        const codeBlocks = [...preview.querySelectorAll<HTMLElement>('pre > code')];
+        await Promise.all(codeBlocks.map(async (code) => {
+          const language = [...code.classList].find((name) => name.startsWith('language-'))?.slice(9) || 'text';
+          try {
+            const html = await codeToHtml(code.textContent ?? '', { lang: language, theme: 'github-dark-default' });
+            if (version === renderVersion) code.parentElement?.replaceWith(Object.assign(document.createElement('template'), { innerHTML: html }).content.firstElementChild!);
+          } catch {
+            code.innerHTML = escapeHtml(code.textContent ?? '');
+          }
+        }));
+        if (version === renderVersion) previewState.textContent = 'Live preview';
+      }
+      async function publish() {
+        if (!token()) { $('[data-token-box]').hidden = false; return setStatus('Nhập GitHub token trước khi publish.', 'error'); }
+        if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
+        if (!slugify(slug.value || title.value)) return setStatus('Slug chưa hợp lệ.', 'error');
+        const filePath = currentPath();
+        try {
+          setStatus('Đang tạo commit…');
+          const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
+          const parent = await api<{ tree: { sha: string } }>(`/git/commits/${ref.object.sha}`);
+          const blobEntries = await Promise.all(assets.map(async (asset) => {
+            const binary = new Uint8Array(await asset.file.arrayBuffer());
+            const encoded = encodeBinary(binary);
+            const blob = await api<{ sha: string }>('/git/blobs', { method: 'POST', body: JSON.stringify({ content: encoded, encoding: 'base64' }) });
+            return { path: `${articleDirectory()}/${asset.name}`, mode: '100644', type: 'blob', sha: blob.sha };
+          }));
+          const tree = await api<{ sha: string }>('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: parent.tree.sha, tree: [
+            { path: filePath, mode: '100644', type: 'blob', content: composePost() }, ...blobEntries,
+          ] }) });
+          const commit = await api<{ sha: string; html_url: string }>('/git/commits', { method: 'POST', body: JSON.stringify({ message: `content: ${openFile ? 'sửa' : 'thêm'} "${title.value.trim()}"`, tree: tree.sha, parents: [ref.object.sha] }) });
+          await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+          openFile = { path: filePath, sha: '' }; $('[data-file-label]').textContent = filePath.replace(`${postRoot}/`, '');
+          $('[data-save-state]').textContent = 'Đã publish';
+          const localSynced = await syncLocal({ quiet: true });
+          setStatus(localSynced
+            ? 'Đã push GitHub, đồng bộ thư mục local và kích hoạt Cloudflare Pages build.'
+            : 'Đã push GitHub. Cloudflare Pages sẽ tự build blog trong ít phút; chọn src/content/posts để lần Push sau đồng bộ local.', 'ok');
+          void loadTree();
+        } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
+      }
+      async function chooseLocalFolder() {
+        type DirectoryPickerWindow = Window & {
+          showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
+        };
+        const picker = (window as DirectoryPickerWindow).showDirectoryPicker;
+        if (!picker) return setStatus('Trình duyệt này không hỗ trợ đồng bộ folder local. Dùng Chrome hoặc Edge desktop.', 'error');
+        try {
+          const selectedDirectory = await picker.call(window, { mode: 'readwrite' });
+          localDirectory = selectedDirectory;
+          setStatus(`Đã chọn ${selectedDirectory.name}. Mỗi lần Publish sẽ đồng bộ bài hiện tại vào đây.`, 'ok');
+        }
+        catch { /* người dùng đóng hộp chọn folder */ }
+      }
+      async function syncLocal({ quiet = false }: { quiet?: boolean } = {}) {
+        if (!localDirectory) {
+          if (!quiet) await chooseLocalFolder();
+          return false;
+        }
+        try {
+          let target = localDirectory;
+          for (const part of relativeFolder().split('/')) target = await target.getDirectoryHandle(part, { create: true });
+          target = await target.getDirectoryHandle(slugify(slug.value || title.value || 'untitled'), { create: true });
+          const write = async (name: string, data: File | string) => { const handle = await target.getFileHandle(name, { create: true }); const stream = await handle.createWritable(); await stream.write(data); await stream.close(); };
+          await write('index.md', composePost()); for (const asset of assets) await write(asset.name, asset.file);
+          if (!quiet) setStatus('Đã đồng bộ write-up và file đính kèm vào folder local.', 'ok');
+          return true;
+        } catch (error) {
+          if (!quiet) setStatus(error instanceof Error ? error.message : String(error), 'error');
+          return false;
+        }
+      }
+      $('[data-new]').addEventListener('click', resetEditor);
+      $('[data-reload]').addEventListener('click', () => void loadTree());
+      $('[data-connect]').addEventListener('click', () => void loadTree());
+      $('[data-publish]').addEventListener('click', () => void publish());
+      $('[data-local]').addEventListener('click', () => void chooseLocalFolder());
+      $('[data-sync-local]').addEventListener('click', () => void syncLocal());
+      title.addEventListener('input', () => { if (!openFile && !slug.value) slug.value = slugify(title.value); void renderPreview(); });
+      [body, folder, slug, date, ctf, category, difficulty, tags].forEach((input) => input.addEventListener('input', () => void renderPreview()));
+      body.addEventListener('paste', (event) => { const images = [...(event.clipboardData?.items ?? [])].filter((item) => item.type.startsWith('image/')).map((item) => item.getAsFile()).filter((file): file is File => Boolean(file)); if (images.length) { event.preventDefault(); addFiles(images); } });
+      assetsInput.addEventListener('change', () => { if (assetsInput.files) addFiles(assetsInput.files); assetsInput.value = ''; });
+      const drop = $('[data-drop]');
+      drop.addEventListener('dragover', (event) => { event.preventDefault(); drop.dataset.over = ''; });
+      drop.addEventListener('dragleave', () => delete drop.dataset.over);
+      drop.addEventListener('drop', (event) => { event.preventDefault(); delete drop.dataset.over; if (event.dataTransfer?.files) addFiles(event.dataTransfer.files); });
+      void loadConfig(); resetEditor();
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  :root { color-scheme: dark; --bg:#131017; --surface:#1b1720; --surface-2:#24202a; --line:#36303e; --text:#f1ebf8; --muted:#a89fb4; --accent:#f472b6; --accent-soft:#f472b624; --ok:#86efac; --error:#fca5a5; font-family:'JetBrains Mono Variable',ui-monospace,monospace; }
+  * { box-sizing:border-box; } body { margin:0; min-height:100dvh; background:var(--bg); color:var(--text); }
+  button,input,select,textarea { font:inherit; } button,a { -webkit-tap-highlight-color:transparent; } button { cursor:pointer; }
+  .studio { display:grid; grid-template-columns:17rem minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); min-height:100dvh; }
+  .topbar { grid-column:1/-1; display:flex; min-height:4rem; align-items:center; justify-content:space-between; gap:1rem; padding:.75rem 1rem; border-bottom:1px solid var(--line); background:var(--surface); }
+  .wordmark { color:var(--text); font-size:1rem; font-weight:800; letter-spacing:.12em; text-decoration:none; white-space:nowrap; } .wordmark span { color:var(--accent); } .wordmark small { color:var(--muted); font-size:.65rem; font-weight:500; letter-spacing:.08em; }
+  .top-actions { display:flex; align-items:center; gap:.5rem; } .top-actions a,.top-actions button,.editor-tools button { min-height:2.3rem; padding:.45rem .7rem; border:1px solid var(--line); border-radius:.45rem; background:transparent; color:var(--text); text-decoration:none; font-size:.75rem; } .top-actions a:hover,.editor-tools button:hover { border-color:var(--accent); color:var(--accent); } .top-actions .publish { background:var(--accent); border-color:var(--accent); color:#260c1a; font-weight:800; }
+  .library { min-height:0; overflow:auto; padding:1rem; border-right:1px solid var(--line); background:#16121a; } .library-head { display:flex; align-items:start; justify-content:space-between; gap:.5rem; } .eyebrow { margin:0 0 .25rem; color:var(--muted); font-size:.62rem; letter-spacing:.14em; text-transform:uppercase; } .library-head strong { display:block; max-width:12rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; } .library-head button { border:0; background:transparent; color:var(--muted); font-size:1.1rem; }
+  .token-box { display:grid; gap:.45rem; margin:1rem 0; padding:.75rem; border:1px solid var(--line); border-radius:.5rem; background:var(--surface); font-size:.75rem; } .token-box input,.metadata input,.metadata select { width:100%; min-width:0; border:1px solid var(--line); border-radius:.35rem; padding:.5rem; background:#0f0c12; color:var(--text); } .token-box button { border:1px solid var(--accent); border-radius:.35rem; padding:.45rem; background:var(--accent-soft); color:var(--accent); } .token-box p { margin:0; color:var(--muted); font-size:.65rem; line-height:1.45; }
+  .new-file { width:100%; margin:1rem 0 .6rem; padding:.55rem; border:1px dashed color-mix(in srgb,var(--accent) 55%,var(--line)); border-radius:.45rem; background:var(--accent-soft); color:var(--accent); text-align:left; } .library-note,.empty-tree { color:var(--muted); font: .68rem/1.5 var(--font-mono,inherit); } .tree { display:grid; gap:.2rem; } .tree-file { display:grid; gap:.12rem; width:100%; padding:.55rem .45rem; border:0; border-left:2px solid transparent; background:transparent; color:var(--text); text-align:left; } .tree-file:hover { border-left-color:var(--accent); background:var(--accent-soft); } .tree-file span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.75rem; } .tree-file small { overflow:hidden; color:var(--muted); font-size:.6rem; text-overflow:ellipsis; white-space:nowrap; }
+  .workspace { min-width:0; min-height:0; display:flex; flex-direction:column; } .metadata { display:grid; grid-template-columns:2fr repeat(3,minmax(7rem,1fr)); gap:.55rem; padding:1rem; border-bottom:1px solid var(--line); background:var(--surface); } .metadata label { display:grid; gap:.28rem; min-width:0; color:var(--muted); font-size:.62rem; letter-spacing:.08em; text-transform:uppercase; } .metadata .title-field { grid-column:span 2; } .metadata .tags-field { grid-column:span 2; }
+  .editor-tools { display:flex; align-items:center; gap:.7rem; min-height:3.5rem; padding:.6rem 1rem; border-bottom:1px solid var(--line); } .editor-tools strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.75rem; } .editor-tools span { margin-right:auto; color:var(--muted); font-size:.67rem; }
+  .editor-grid { min-height:0; flex:1; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .source-pane,.preview-pane { min-width:0; min-height:0; display:flex; flex-direction:column; } .source-pane { border-right:1px solid var(--line); background:#121016; } .preview-pane { background:#1a171f; } .pane-head { display:flex; justify-content:space-between; padding:.65rem .85rem; border-bottom:1px solid var(--line); color:var(--muted); font-size:.65rem; letter-spacing:.08em; text-transform:uppercase; }
+  [data-body] { min-height:20rem; flex:1; resize:none; border:0; outline:0; padding:1rem; background:transparent; color:#dfd3e9; font: .86rem/1.7 'JetBrains Mono Variable',ui-monospace,monospace; tab-size:2; } .asset-drop { display:block; margin:.75rem; padding:.75rem; border:1px dashed var(--line); border-radius:.45rem; color:var(--muted); font-size:.7rem; text-align:center; } .asset-drop[data-over] { border-color:var(--accent); color:var(--accent); } .asset-drop input { position:absolute; width:1px; height:1px; opacity:0; } .assets { display:grid; gap:.25rem; margin:0 .75rem 1rem; padding:0; list-style:none; } .assets li { display:flex; align-items:center; gap:.5rem; min-width:0; padding:.35rem .5rem; background:var(--surface-2); color:var(--muted); font-size:.65rem; } .assets li span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .assets li button { margin-left:auto; border:0; background:none; color:var(--muted); font-size:1rem; }
+  .preview { overflow:auto; max-height:calc(100dvh - 15rem); padding:1.25rem clamp(1rem,3vw,3rem) 4rem; font:1rem/1.8 system-ui,sans-serif; color:#d8cfdf; } .preview .placeholder { color:var(--muted); } .preview h1,.preview h2,.preview h3 { color:var(--text); line-height:1.25; } .preview h1 { font-size:1.8rem; } .preview h2 { margin-top:2rem; font-size:1.35rem; } .preview a { color:var(--accent); } .preview img { max-width:100%; height:auto; border:1px solid var(--line); border-radius:.5rem; } .preview pre { overflow:auto; padding:1rem; border:1px solid var(--line); border-radius:.5rem; } .preview pre.shiki { background:#0d1117 !important; } .preview code { padding:.1em .3em; border-radius:.25rem; background:#0004; } .preview pre code { padding:0; background:transparent; } .preview table { border-collapse:collapse; } .preview th,.preview td { padding:.4rem .6rem; border:1px solid var(--line); }
+  .status { min-height:1.6rem; margin:0; padding:.35rem 1rem; background:var(--surface); color:var(--muted); font-size:.72rem; } .status[data-kind='ok'] { color:var(--ok); } .status[data-kind='error'] { color:var(--error); }
+  @media (max-width:58rem) { .studio { grid-template-columns:1fr; } .library { display:none; } .metadata { grid-template-columns:1fr 1fr; } .metadata .title-field,.metadata .tags-field { grid-column:span 2; } .editor-grid { grid-template-columns:1fr; } .source-pane { min-height:50dvh; border-right:0; border-bottom:1px solid var(--line); } .preview { max-height:none; min-height:40dvh; } }
+  @media (max-width:38rem) { .topbar { align-items:start; flex-direction:column; } .top-actions { width:100%; } .top-actions > * { flex:1; text-align:center; } .metadata { grid-template-columns:1fr; } .metadata .title-field,.metadata .tags-field { grid-column:auto; } .editor-tools { flex-wrap:wrap; } .editor-tools span { order:3; width:100%; } }
+</style>
