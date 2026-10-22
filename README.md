@@ -479,6 +479,8 @@ với trình duyệt không phải tiếng Anh — chỉ là fetch JSON, không 
 `X-Robots-Tag: noindex`, `<meta name="robots" content="noindex">` và `Disallow: /admin` trong
 `robots.txt`. CSP của trang public không thay đổi. `/admin/import/` nằm dưới cùng CSP này: script của
 trang được bundle thành `/_astro/*.js` (`script-src 'self'`) và chỉ gọi `api.github.com`.
+Riêng `/admin/studio/*` cho phép thêm `'wasm-unsafe-eval'` để Shiki khởi tạo WebAssembly
+và tô màu code trong Preview; quyền này không áp dụng cho Sveltia CMS hay `/admin/import/`.
 
 ---
 
