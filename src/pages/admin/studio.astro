@@ -41,7 +41,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           <button type="button" data-connect>Kết nối</button>
           <p>Token được lưu trong trình duyệt này để Studio publish vào repository.</p>
         </div>
-        <button type="button" class="new-file" data-new>+ Bài viết mới</button>
+        <button type="button" class="new-file" data-new data-sidebar-new hidden>+ Bài viết mới</button>
         <nav class="tree" aria-label="Danh sách bài" data-tree>
           <p class="empty-tree">Kết nối GitHub để mở danh sách bài.</p>
         </nav>
@@ -50,11 +50,22 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       <section class="workspace" aria-label="Soạn write-up">
         <section class="library-home" data-library-home>
           <div class="browser-head">
-            <div><p class="eyebrow" data-library-path>Workspace / WU</p><h1 data-library-title>Thư mục write-up</h1></div>
-            <div class="browser-actions"><button type="button" class="back-folder" data-folder-back hidden>← Tất cả folder</button><button type="button" class="create-folder" data-new>+ Tạo write-up</button></div>
+            <div class="browser-title"><nav class="crumbs" aria-label="Đường dẫn folder" data-library-path></nav><h1 data-library-title>Thư mục write-up</h1></div>
+            <div class="browser-actions">
+              <button type="button" class="back-folder" data-folder-back hidden>← Lên trên</button>
+              <button type="button" class="create-subfolder" data-folder-create>+ Folder mới</button>
+              <button type="button" class="create-folder" data-new data-folder-new hidden>+ Tạo write-up</button>
+            </div>
           </div>
+          <div class="selection-bar" data-selection-bar hidden>
+            <span data-selection-summary></span>
+            <button type="button" data-folder-rename>Đổi tên folder</button>
+            <button type="button" data-selection-clear>Bỏ chọn</button>
+          </div>
+          <p class="status library-status" role="status" data-library-status></p>
           <div class="folder-grid" data-folder-grid><p class="empty-tree">Kết nối GitHub để tải thư mục.</p></div>
-          <section class="folder-posts" data-folder-posts hidden><h2>Bài trong folder</h2><div class="recent-grid" data-folder-files></div></section>
+          <div class="library-empty" data-folder-empty hidden><strong>Folder này đang trống</strong><span>Tạo folder con hoặc write-up đầu tiên ngay bên trong.</span></div>
+          <section class="folder-posts" data-folder-posts hidden><h2 data-folder-posts-title>Bài trong folder</h2><div class="recent-grid" data-folder-files></div></section>
           <section class="recent-posts" data-recent-section><h2>Bài viết gần đây</h2><div class="recent-grid" data-recent-posts></div></section>
         </section>
 
@@ -105,10 +116,25 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       </section>
     </main>
 
+    <dialog class="name-dialog" data-name-dialog aria-labelledby="name-dialog-title">
+      <form class="name-form" data-name-form>
+        <p class="eyebrow" data-name-kicker></p>
+        <h2 id="name-dialog-title" data-name-title></h2>
+        <label for="name-dialog-input"><span data-name-label>Tên folder</span></label>
+        <input id="name-dialog-input" type="text" maxlength="80" autocomplete="off" spellcheck="false" data-name-input />
+        <p class="name-hint" role="status" data-name-hint></p>
+        <div class="name-actions">
+          <button type="button" data-name-cancel>Huỷ</button>
+          <button type="submit" class="primary" data-name-submit>Xác nhận</button>
+        </div>
+      </form>
+    </dialog>
+
     <script>
       import { marked } from 'marked';
       import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
       import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+      import { STUDIO_REPO, STUDIO_TOKEN_KEY } from '../../lib/studio';
       import { EditorState } from '@codemirror/state';
       import { EditorView, lineNumbers } from '@codemirror/view';
       import { markdown } from '@codemirror/lang-markdown';
@@ -128,6 +154,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       const preview = $('[data-preview]');
       const previewState = $('[data-preview-state]');
       const status = $('[data-status]');
+      const libraryStatus = $('[data-library-status]');
       const tokenInput = $<HTMLInputElement>('[data-token]');
       const assetsInput = $<HTMLInputElement>('[data-assets]');
 
@@ -154,8 +181,9 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       let applyingSyncedScroll = false;
       let githubConnected = false;
       let activeFolder: string | undefined;
-      let selectedFiles = new Set<string>();
-      let selectedFolders = new Set<string>();
+      const selectedFiles = new Set<string>();
+      const selectedFolders = new Set<string>();
+      let folderSet = new Set<string>();
       let draftTimer: ReturnType<typeof setTimeout> | undefined;
 
       const editorSource = () => editor.state.doc.toString();
@@ -204,10 +232,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
 
       function storedToken(): string {
         try {
-          const studioToken = localStorage.getItem('ctf-wu.studio-token');
-          if (studioToken) return studioToken;
-          const user = JSON.parse(localStorage.getItem('sveltia-cms.user') ?? 'null') as { token?: unknown } | null;
-          return typeof user?.token === 'string' ? user.token : '';
+          return localStorage.getItem(STUDIO_TOKEN_KEY) ?? '';
         } catch { return ''; }
       }
       const token = () => storedToken() || tokenInput.value.trim();
@@ -270,8 +295,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         pill.querySelector('span')!.textContent = githubConnected ? 'Đã kết nối' : 'GitHub';
       }
       function setStatus(message: string, kind: 'info' | 'error' | 'ok' = 'info') {
-        status.textContent = message;
-        status.dataset.kind = kind;
+        for (const target of [status, libraryStatus]) { target.textContent = message; target.dataset.kind = kind; }
       }
       async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
         const response = await fetch(`https://api.github.com/repos/${repo.name}${path}`, {
@@ -342,9 +366,8 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         $('[data-save-state]').textContent = 'Chưa publish';
         renderAssets(); void renderPreview();
       }
-      async function loadConfig() {
-        const config = parseYaml(await (await fetch('/admin/config.yml')).text()) as { backend?: { repo?: string; branch?: string } };
-        repo = { name: config.backend?.repo ?? '', branch: config.backend?.branch ?? 'main' };
+      function loadConfig() {
+        repo = { name: STUDIO_REPO.name, branch: STUDIO_REPO.branch };
         $('[data-repo]').textContent = `${repo.name} / ${repo.branch}`;
         $('[data-token-box]').hidden = Boolean(storedToken());
         updateConnection();
@@ -435,22 +458,23 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           setStatus('Đang mở write-up…');
           const content = await api<{ content: string; sha: string }>(`/contents/${file.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repo.branch)}`);
           openFile = { path: file.path, sha: content.sha };
-          const parts = file.path.replace(`${postRoot}/`, '').split('/');
-          folder.value = parts.slice(0, -2).join('/') || 'uncategorized';
+          folder.value = folderOf(file) || 'uncategorized';
           $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
           const reconciled = await reconcileLocalArticle(file.path, decode(content.content));
           $('[data-save-state]').textContent = 'Đã mở bài';
           populate(reconciled.source);
           if (restoreDraft()) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok'); else setStatus(reconciled.message, reconciled.message.startsWith('Xung đột') ? 'error' : 'info');
-          activeFolder = relativeFolder(); renderSidebar(); showComposer();
+          activeFolder = folderOf(file) || undefined; renderSidebar(); showComposer();
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }
       function showComposer() {
+        $('[data-sidebar-new]').removeAttribute('hidden');
         $('[data-library-home]').setAttribute('hidden', '');
         $('[data-composer]').removeAttribute('hidden');
         setTimeout(() => editor.focus(), 0);
       }
       function showLibrary() {
+        $('[data-sidebar-new]').setAttribute('hidden', '');
         $('[data-composer]').setAttribute('hidden', '');
         $('[data-library-home]').removeAttribute('hidden');
       }
@@ -464,67 +488,217 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         $('[data-metadata]').setAttribute('open', '');
         title.focus();
       }
-      const articleName = (file: RepoFile) => file.path.replace(`${postRoot}/`, '').split('/').at(-2) ?? 'Write-up';
-      const folderOf = (file: RepoFile) => file.path.replace(`${postRoot}/`, '').split('/').slice(0, -2).join('/') || 'Chưa phân loại';
-      function toggleSelectedFile(path: string) { selectedFiles.has(path) ? selectedFiles.delete(path) : selectedFiles.add(path); renderFolderHome(repoFiles); renderSidebar(); }
-      function toggleSelectedFolder(folderName: string) {
-        const files = repoFiles.filter((file) => folderOf(file) === folderName);
-        const allSelected = files.every((file) => selectedFiles.has(file.path));
-        files.forEach((file) => allSelected ? selectedFiles.delete(file.path) : selectedFiles.add(file.path));
-        selectedFolders.has(folderName) ? selectedFolders.delete(folderName) : selectedFolders.add(folderName);
-        renderFolderHome(repoFiles); renderSidebar();
+      const KEEP_FILE = '.gitkeep';
+      const relPath = (path: string) => path.replace(`${postRoot}/`, '');
+      const isIndexFile = (file: RepoFile) => file.path.endsWith('/index.md');
+      const joinPath = (...parts: string[]) => parts.filter(Boolean).join('/');
+      const leafName = (path: string) => path.split('/').at(-1) ?? path;
+      const parentOf = (path: string) => path.split('/').slice(0, -1).join('/');
+      const folderOf = (file: RepoFile) => relPath(file.path).split('/').slice(0, isIndexFile(file) ? -2 : -1).join('/');
+      const articleName = (file: RepoFile) => {
+        const parts = relPath(file.path).split('/');
+        return isIndexFile(file) ? parts.at(-2) ?? 'Write-up' : (parts.at(-1) ?? 'Write-up').replace(/\.md$/, '');
+      };
+      const inFolder = (file: RepoFile, path: string) => { const own = folderOf(file); return own === path || own.startsWith(`${path}/`); };
+      const currentFolder = () => (activeFolder && folderSet.has(activeFolder) ? activeFolder : '');
+      const childFolders = (parent: string) => [...folderSet].filter((path) => parentOf(path) === parent).sort((x, y) => x.localeCompare(y));
+      const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+      function collectFolders() {
+        const set = new Set<string>();
+        const add = (directory: string) => { const parts = directory.split('/').filter(Boolean); parts.forEach((_, index) => set.add(parts.slice(0, index + 1).join('/'))); };
+        repoFiles.forEach((file) => add(folderOf(file)));
+        for (const item of repoTree) if (item.path.startsWith(`${postRoot}/`) && item.path.endsWith(`/${KEEP_FILE}`)) add(relPath(item.path).slice(0, -(KEEP_FILE.length + 1)));
+        return set;
       }
+      function openFolder(path: string) {
+        activeFolder = path || undefined; selectedFiles.clear(); selectedFolders.clear();
+        renderFolderHome(); renderSidebar();
+      }
+      function toggleSelectedFile(path: string) { if (selectedFiles.has(path)) selectedFiles.delete(path); else selectedFiles.add(path); renderFolderHome(); renderSidebar(); }
+      function toggleSelectedFolder(path: string) { if (selectedFolders.has(path)) selectedFolders.delete(path); else selectedFolders.add(path); renderFolderHome(); }
       function makeFileCard(file: RepoFile, className = 'recent-card') {
         const card = document.createElement('article'); card.className = className; card.draggable = true;
         card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="file-open"><span class="file-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="file-sheet" d="M8 3.5h10l7 7v17a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-23a1 1 0 0 1 1-1z"/><path class="file-fold" d="M18 3.5v7h7"/><path class="file-lines" d="M11 16h10M11 20h10M11 24h7"/></svg></span><strong></strong><small></small></button>`;
-        card.querySelector('strong')!.textContent = articleName(file); card.querySelector('small')!.textContent = folderOf(file);
+        card.querySelector('strong')!.textContent = articleName(file); card.querySelector('small')!.textContent = folderOf(file) || 'Chưa phân loại';
+        card.dataset.selected = String(selectedFiles.has(file.path));
         card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFile(file.path); });
         card.querySelector('.file-open')!.addEventListener('click', () => void openPost(file));
         card.addEventListener('dragstart', () => { if (!selectedFiles.has(file.path)) { selectedFiles.clear(); selectedFiles.add(file.path); } });
         return card;
       }
+      function makeFolderCard(path: string) {
+        const postCount = repoFiles.filter((file) => inFolder(file, path)).length;
+        const subCount = childFolders(path).length;
+        const card = document.createElement('article'); card.className = 'folder-card'; card.dataset.selected = String(selectedFolders.has(path));
+        card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn folder">${selectedFolders.has(path) ? '■' : '□'}</button><button type="button" class="folder-open"><span class="folder-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="folder-back" d="M4.5 8.5h8l3 3h12v13a2 2 0 0 1-2 2h-19a2 2 0 0 1-2-2z"/><path class="folder-front" d="M4.5 12.5h23l-2 11a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-2z"/></svg></span><strong></strong><small></small></button>`;
+        card.querySelector('strong')!.textContent = leafName(path); card.title = path;
+        card.querySelector('small')!.textContent = `${postCount} bài viết${subCount ? ` · ${subCount} folder con` : ''}`;
+        card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFolder(path); });
+        card.querySelector('.folder-open')!.addEventListener('click', () => openFolder(path));
+        card.addEventListener('dragover', (event) => { event.preventDefault(); card.dataset.drop = ''; });
+        card.addEventListener('dragleave', () => delete card.dataset.drop);
+        card.addEventListener('drop', (event) => { event.preventDefault(); delete card.dataset.drop; void moveSelectionTo(path); });
+        return card;
+      }
       function renderSidebar() {
         const tree = $('[data-tree]');
-        const scope = activeFolder ? repoFiles.filter((file) => folderOf(file) === activeFolder) : [];
-        if (!activeFolder) { tree.innerHTML = '<p class="empty-tree">Mở một folder hoặc một bài để xem các bài cùng folder.</p>'; return; }
-        tree.replaceChildren(...scope.map((file) => {
+        if (!githubConnected) return;
+        const here = currentFolder();
+        const rows: HTMLElement[] = [];
+        const path = document.createElement('p'); path.className = 'tree-path'; path.textContent = here || 'Thư mục gốc'; rows.push(path);
+        const navigate = (target: string) => { showLibrary(); openFolder(target); };
+        if (here) {
+          const up = document.createElement('button'); up.type = 'button'; up.className = 'tree-folder tree-up'; up.textContent = '↰ Lên trên';
+          up.addEventListener('click', () => navigate(parentOf(here))); rows.push(up);
+        }
+        for (const child of childFolders(here)) {
+          const row = document.createElement('button'); row.type = 'button'; row.className = 'tree-folder';
+          row.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4.5 8.5h8l3 3h12v13a2 2 0 0 1-2 2h-19a2 2 0 0 1-2-2z"/></svg><span></span>';
+          row.querySelector('span')!.textContent = leafName(child); row.title = child;
+          row.addEventListener('click', () => navigate(child)); rows.push(row);
+        }
+        for (const file of repoFiles.filter((entry) => folderOf(entry) === here)) {
           const item = document.createElement('div'); item.className = 'tree-file';
           item.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="tree-open"><span></span><small></small></button>`;
-          item.querySelector('span')!.textContent = articleName(file); item.querySelector('small')!.textContent = file.path.replace(`${postRoot}/`, '');
+          item.querySelector('span')!.textContent = articleName(file); item.querySelector('small')!.textContent = relPath(file.path);
           item.querySelector('.selection-checkbox')!.addEventListener('click', () => toggleSelectedFile(file.path));
-          item.querySelector('.tree-open')!.addEventListener('click', () => void openPost(file)); return item;
+          item.querySelector('.tree-open')!.addEventListener('click', () => void openPost(file)); rows.push(item);
+        }
+        if (rows.length === 1) { const empty = document.createElement('p'); empty.className = 'empty-tree'; empty.textContent = 'Folder này chưa có gì.'; rows.push(empty); }
+        tree.replaceChildren(...rows);
+      }
+      function renderCrumbs(here: string) {
+        const parts = here ? here.split('/') : [];
+        const crumbs: Array<[string, string]> = [['WU', ''], ...parts.map((part, index): [string, string] => [part, parts.slice(0, index + 1).join('/')])];
+        $('[data-library-path]').replaceChildren(...crumbs.flatMap(([label, path], index) => {
+          const last = index === crumbs.length - 1;
+          const crumb = document.createElement(last ? 'span' : 'button'); crumb.textContent = label;
+          if (last) crumb.setAttribute('aria-current', 'page');
+          else { (crumb as HTMLButtonElement).type = 'button'; crumb.addEventListener('click', () => openFolder(path)); }
+          if (!index) return [crumb];
+          const divider = document.createElement('i'); divider.textContent = '/'; divider.setAttribute('aria-hidden', 'true');
+          return [divider, crumb];
         }));
       }
-      function renderFolderHome(files: RepoFile[]) {
-        const folderMap = new Map<string, RepoFile[]>();
-        for (const file of files) {
-          const parts = file.path.replace(`${postRoot}/`, '').split('/');
-          const folderName = parts.length > 2 ? parts.slice(0, -2).join('/') : 'Chưa phân loại';
-          folderMap.set(folderName, [...(folderMap.get(folderName) ?? []), file]);
-        }
+      function renderSelectionBar() {
+        const parts = [selectedFolders.size ? `${selectedFolders.size} folder` : '', selectedFiles.size ? `${selectedFiles.size} bài` : ''].filter(Boolean);
+        const bar = $('[data-selection-bar]'); bar.toggleAttribute('hidden', !parts.length);
+        $('[data-selection-summary]').textContent = parts.length ? `Đã chọn ${parts.join(' và ')}` : '';
+        const rename = $<HTMLButtonElement>('[data-folder-rename]');
+        rename.disabled = selectedFolders.size !== 1;
+        rename.title = selectedFolders.size === 1 ? 'Đổi tên folder đang chọn' : 'Chọn đúng một folder để đổi tên';
+      }
+      function renderFolderHome(files: RepoFile[] = repoFiles) {
+        folderSet = collectFolders();
+        const here = currentFolder();
+        const subfolders = childFolders(here);
+        const posts = files.filter((file) => folderOf(file) === here);
         const grid = $('[data-folder-grid]');
-        grid.replaceChildren(...[...folderMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, folderFiles]) => {
-          const card = document.createElement('article'); card.className = 'folder-card'; card.draggable = true;
-          card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn folder">${selectedFolders.has(name) ? '■' : '□'}</button><button type="button" class="folder-open"><span class="folder-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="folder-back" d="M4.5 8.5h8l3 3h12v13a2 2 0 0 1-2 2h-19a2 2 0 0 1-2-2z"/><path class="folder-front" d="M4.5 12.5h23l-2 11a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-2z"/></svg></span><strong></strong><small>${folderFiles.length} bài viết</small></button>`;
-          card.querySelector('strong')!.textContent = name;
-          card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFolder(name); });
-          card.querySelector('.folder-open')!.addEventListener('click', () => { activeFolder = name; renderFolderHome(repoFiles); renderSidebar(); });
-          card.addEventListener('dragstart', () => { if (!selectedFolders.has(name)) { selectedFolders.clear(); selectedFolders.add(name); } });
-          card.addEventListener('dragover', (event) => { event.preventDefault(); card.dataset.drop = ''; });
-          card.addEventListener('dragleave', () => delete card.dataset.drop);
-          card.addEventListener('drop', (event) => { event.preventDefault(); delete card.dataset.drop; void moveSelectionTo(name); });
-          return card;
-        }));
-        const folderPosts = $('[data-folder-posts]'); const folderFiles = $('[data-folder-files]');
-        const isFolderOpen = Boolean(activeFolder && folderMap.has(activeFolder));
-        grid.toggleAttribute('hidden', isFolderOpen);
-        folderPosts.toggleAttribute('hidden', !isFolderOpen); $('[data-recent-section]').toggleAttribute('hidden', isFolderOpen);
-        $('[data-folder-back]').toggleAttribute('hidden', !isFolderOpen);
-        $('[data-library-path]').textContent = isFolderOpen ? `Workspace / WU / ${activeFolder}` : 'Workspace / WU';
-        $('[data-library-title]').textContent = isFolderOpen ? activeFolder! : 'Thư mục write-up';
-        if (isFolderOpen) folderFiles.replaceChildren(...folderMap.get(activeFolder!)!.map((file) => makeFileCard(file, 'folder-file-card')));
-        const recent = $('[data-recent-posts]');
-        recent.replaceChildren(...files.slice(-8).reverse().map((file) => makeFileCard(file)));
+        grid.replaceChildren(...subfolders.map(makeFolderCard));
+        grid.toggleAttribute('hidden', !subfolders.length);
+        $('[data-folder-posts]').toggleAttribute('hidden', !posts.length);
+        $('[data-folder-posts-title]').textContent = here ? 'Bài trong folder' : 'Bài chưa phân loại';
+        $('[data-folder-files]').replaceChildren(...posts.map((file) => makeFileCard(file, 'folder-file-card')));
+        $('[data-folder-empty]').toggleAttribute('hidden', !here || Boolean(subfolders.length || posts.length));
+        $('[data-recent-section]').toggleAttribute('hidden', Boolean(here) || !files.length);
+        $('[data-folder-back]').toggleAttribute('hidden', !here);
+        $('[data-folder-new]').toggleAttribute('hidden', !here);
+        $('[data-folder-create]').textContent = here ? '+ Folder con' : '+ Folder mới';
+        $('[data-library-title]').textContent = here ? leafName(here) : 'Thư mục write-up';
+        renderCrumbs(here); renderSelectionBar();
+        $('[data-recent-posts]').replaceChildren(...files.slice(-8).reverse().map((file) => makeFileCard(file)));
+      }
+
+      type TreeEntry = { path: string; mode: '100644'; type: 'blob'; sha?: string | null; content?: string };
+      async function commitEntries(entries: TreeEntry[], message: string) {
+        const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
+        const parent = await api<{ tree: { sha: string } }>(`/git/commits/${ref.object.sha}`);
+        const tree = await api<{ sha: string }>('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: parent.tree.sha, tree: entries }) });
+        const commit = await api<{ sha: string }>('/git/commits', { method: 'POST', body: JSON.stringify({ message, tree: tree.sha, parents: [ref.object.sha] }) });
+        await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+      }
+      function validateFolderName(name: string) {
+        if (!name) return 'Nhập tên folder.';
+        if (/[\\/]/.test(name)) return 'Tên folder không được chứa dấu / hoặc \\.';
+        if (name.startsWith('.')) return 'Tên folder không được bắt đầu bằng dấu chấm (loader bỏ qua folder ẩn).';
+        if (/[<>:"|?*\u0000-\u001f]/.test(name) || /[. ]$/.test(name)) return 'Tên folder chứa ký tự không hợp lệ trên Windows.';
+        return '';
+      }
+      type NameRequest = { kicker: string; title: string; label: string; value: string; hint: string; submit: string };
+      function askName(request: NameRequest): Promise<string | null> {
+        const dialog = $<HTMLDialogElement>('[data-name-dialog]'); const form = $('[data-name-form]'); const input = $<HTMLInputElement>('[data-name-input]');
+        const hint = $('[data-name-hint]'); const cancel = $('[data-name-cancel]');
+        $('[data-name-kicker]').textContent = request.kicker; $('[data-name-title]').textContent = request.title;
+        $('[data-name-label]').textContent = request.label; $('[data-name-submit]').textContent = request.submit;
+        input.value = request.value; hint.textContent = request.hint; delete hint.dataset.kind;
+        return new Promise((resolve) => {
+          let result: string | null = null;
+          const submit = (event: Event) => {
+            event.preventDefault();
+            const value = input.value.trim(); const problem = validateFolderName(value);
+            if (problem) { hint.textContent = problem; hint.dataset.kind = 'error'; return; }
+            result = value; dialog.close();
+          };
+          const dismiss = () => dialog.close();
+          dialog.addEventListener('close', () => { form.removeEventListener('submit', submit); cancel.removeEventListener('click', dismiss); resolve(result); }, { once: true });
+          form.addEventListener('submit', submit); cancel.addEventListener('click', dismiss);
+          dialog.showModal(); input.focus(); input.select();
+        });
+      }
+      function retargetCtf(source: string, from: string, to: string) {
+        const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(source);
+        if (!match) return source;
+        const head = match[1].replace(/^ctf:[ \t]*(.*?)[ \t]*$/m, (line, value: string) => (value.replace(/^(["'])(.*)\1$/, '$2') === from ? stringifyYaml({ ctf: to }).trimEnd() : line));
+        return head === match[1] ? source : source.replace(match[1], () => head);
+      }
+      async function createFolder() {
+        if (!token()) return setStatus('Cần kết nối GitHub để tạo folder.', 'error');
+        const here = currentFolder();
+        const name = await askName({ kicker: here ? `Trong ${here}` : 'Thư mục gốc', title: here ? 'Thêm folder con' : 'Thêm folder mới', label: 'Tên folder', value: '', hint: 'Folder rỗng được giữ trên GitHub bằng file .gitkeep.', submit: 'Tạo folder' });
+        if (!name) return;
+        const path = joinPath(here, name);
+        if ([...folderSet].some((existing) => existing.toLowerCase() === path.toLowerCase())) return setStatus(`Đã có folder "${path}".`, 'error');
+        if (repoFiles.some((file) => file.path.startsWith(`${postRoot}/${path}/`))) return setStatus(`"${path}" đang là thư mục của một bài viết.`, 'error');
+        try {
+          setStatus(`Đang tạo folder "${path}"…`);
+          const blob = await api<{ sha: string }>('/git/blobs', { method: 'POST', body: JSON.stringify({ content: '', encoding: 'utf-8' }) });
+          await commitEntries([{ path: `${postRoot}/${path}/${KEEP_FILE}`, mode: '100644', type: 'blob', sha: blob.sha }], `content: tạo folder "${path}"`);
+          setStatus(`Đã tạo folder "${path}".`, 'ok');
+          await loadTree();
+        } catch (error) { setStatus(errorMessage(error), 'error'); }
+      }
+      async function renameSelectedFolder() {
+        const [oldPath] = [...selectedFolders];
+        if (selectedFolders.size !== 1 || !oldPath) return setStatus('Chọn đúng một folder để đổi tên.', 'info');
+        if (!token()) return setStatus('Cần kết nối GitHub để đổi tên folder.', 'error');
+        const oldName = leafName(oldPath);
+        const name = await askName({ kicker: 'Đổi tên folder', title: oldName, label: 'Tên mới', value: oldName, hint: `Vị trí: ${oldPath}. Frontmatter ctf trùng tên cũ sẽ được cập nhật theo.`, submit: 'Đổi tên' });
+        if (!name || name === oldName) return;
+        const newPath = joinPath(parentOf(oldPath), name);
+        if ([...folderSet].some((existing) => existing !== oldPath && existing.toLowerCase() === newPath.toLowerCase())) return setStatus(`Đã có folder "${newPath}".`, 'error');
+        if (repoFiles.some((file) => file.path.startsWith(`${postRoot}/${newPath}/`) && !folderSet.has(newPath))) return setStatus(`"${newPath}" đang là thư mục của một bài viết.`, 'error');
+        const prefix = `${postRoot}/${oldPath}/`;
+        const items = repoTree.filter((item) => item.path.startsWith(prefix));
+        if (!items.length) return setStatus('Folder này chưa có file nào trên GitHub để đổi tên.', 'error');
+        try {
+          setStatus(`Đang đổi tên "${oldPath}" thành "${newPath}"…`);
+          let retargeted = 0;
+          const entries = (await Promise.all(items.map(async (item): Promise<TreeEntry[]> => {
+            const target = `${postRoot}/${newPath}/${item.path.slice(prefix.length)}`;
+            const removal: TreeEntry = { path: item.path, mode: '100644', type: 'blob', sha: null };
+            if (item.path.endsWith('.md')) {
+              const source = decode((await api<{ content: string }>(`/git/blobs/${item.sha}`)).content);
+              const updated = retargetCtf(source, oldName, name);
+              if (updated !== source) { retargeted += 1; return [removal, { path: target, mode: '100644', type: 'blob', content: updated }]; }
+            }
+            return [removal, { path: target, mode: '100644', type: 'blob', sha: item.sha }];
+          }))).flat();
+          await commitEntries(entries, `content: đổi tên folder "${oldPath}" thành "${newPath}"`);
+          selectedFolders.clear(); selectedFiles.clear();
+          if (activeFolder === oldPath || activeFolder?.startsWith(`${oldPath}/`)) activeFolder = newPath + activeFolder.slice(oldPath.length);
+          setStatus(`Đã đổi tên "${oldPath}" thành "${newPath}"${retargeted ? `, cập nhật ctf trong ${retargeted} bài` : ''}. Chạy git pull để lấy thay đổi về local.`, 'ok');
+          await loadTree();
+        } catch (error) { setStatus(errorMessage(error), 'error'); }
       }
       async function moveSelectionTo(targetFolder: string) {
         const files = repoFiles.filter((file) => selectedFiles.has(file.path)).filter((file) => folderOf(file) !== targetFolder);
@@ -534,23 +708,20 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         if (conflict) return setStatus(`Folder đích đã có bài trùng tên: ${articleName(conflict)}.`, 'error');
         try {
           setStatus(`Đang chuyển ${files.length} bài vào ${targetFolder}…`);
-          const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
-          const parent = await api<{ tree: { sha: string } }>(`/git/commits/${ref.object.sha}`);
-          const entries: Array<{ path: string; mode: string; type: string; sha: string | null }> = [];
+          const entries: TreeEntry[] = [];
           for (const file of files) {
             const oldDirectory = file.path.replace(/\/[^/]+$/, '');
-            const newDirectory = `${postRoot}/${targetFolder}/${articleName(file)}`;
-            for (const item of repoTree.filter((entry) => entry.path === oldDirectory || entry.path.startsWith(`${oldDirectory}/`))) {
-              entries.push({ path: item.path.replace(oldDirectory, newDirectory), mode: '100644', type: 'blob', sha: item.sha });
-              entries.push({ path: item.path, mode: '100644', type: 'blob', sha: null });
+            const moved = isIndexFile(file)
+              ? repoTree.filter((entry) => entry.path === oldDirectory || entry.path.startsWith(`${oldDirectory}/`)).map((entry) => ({ item: entry, target: `${joinPath(postRoot, targetFolder, articleName(file))}${entry.path.slice(oldDirectory.length)}` }))
+              : repoTree.filter((entry) => entry.path === file.path).map((entry) => ({ item: entry, target: joinPath(postRoot, targetFolder, leafName(entry.path)) }));
+            for (const { item, target } of moved) {
+              entries.push({ path: target, mode: '100644', type: 'blob', sha: item.sha }, { path: item.path, mode: '100644', type: 'blob', sha: null });
             }
           }
-          const tree = await api<{ sha: string }>('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: parent.tree.sha, tree: entries }) });
-          const commit = await api<{ sha: string }>('/git/commits', { method: 'POST', body: JSON.stringify({ message: `content: chuyển ${files.length} write-up vào ${targetFolder}`, tree: tree.sha, parents: [ref.object.sha] }) });
-          await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+          await commitEntries(entries, `content: chuyển ${files.length} write-up vào ${targetFolder}`);
           selectedFiles.clear(); selectedFolders.clear(); activeFolder = targetFolder;
           setStatus(`Đã chuyển ${files.length} bài vào ${targetFolder}.`, 'ok'); void loadTree();
-        } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
+        } catch (error) { setStatus(errorMessage(error), 'error'); }
       }
       function renderAssets() {
         const list = $('[data-assets-list]');
@@ -870,16 +1041,19 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           return false;
         }
       }
-      document.querySelectorAll<HTMLButtonElement>('[data-new]').forEach((button) => button.addEventListener('click', () => startNewInFolder(activeFolder || folder.value || 'Dreamhack')));
+      document.querySelectorAll<HTMLButtonElement>('[data-new]').forEach((button) => button.addEventListener('click', () => startNewInFolder(currentFolder() || folder.value || 'Dreamhack')));
       $('[data-reload]').addEventListener('click', () => void loadTree());
       $('[data-local-connect]').addEventListener('click', () => void connectLocalFolder());
       $('[data-connect]').addEventListener('click', () => {
-        if (tokenInput.value.trim()) localStorage.setItem('ctf-wu.studio-token', tokenInput.value.trim());
+        if (tokenInput.value.trim()) localStorage.setItem(STUDIO_TOKEN_KEY, tokenInput.value.trim());
         githubConnected = false; updateConnection(); void loadTree();
       });
       $('[data-publish]').addEventListener('click', () => void publish());
       $('[data-library]').addEventListener('click', showLibrary);
-      $('[data-folder-back]').addEventListener('click', () => { activeFolder = undefined; renderFolderHome(repoFiles); renderSidebar(); });
+      $('[data-folder-back]').addEventListener('click', () => openFolder(parentOf(currentFolder())));
+      $('[data-folder-create]').addEventListener('click', () => void createFolder());
+      $('[data-folder-rename]').addEventListener('click', () => void renameSelectedFolder());
+      $('[data-selection-clear]').addEventListener('click', () => { selectedFiles.clear(); selectedFolders.clear(); renderFolderHome(); renderSidebar(); });
       $('[data-auto-tags]').addEventListener('click', autoTags);
       $('[data-metadata-toggle]').addEventListener('click', () => {
         const metadata = $<HTMLDetailsElement>('[data-metadata]'); metadata.open = !metadata.open;
@@ -936,7 +1110,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       initEditor();
       editor.scrollDOM.addEventListener('scroll', () => syncScroll(editor.scrollDOM, preview), { passive: true });
       if (localStorage.getItem('ctf-wu.studio-sidebar-collapsed') === 'true') document.querySelector('.studio')!.setAttribute('data-sidebar-collapsed', '');
-      void loadConfig(); resetEditor();
+      loadConfig(); resetEditor();
     </script>
   </body>
 </html>
@@ -964,4 +1138,18 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
   .preview pre { max-width:100%; white-space:pre; } .preview pre.shiki { overflow:auto; max-width:100%; } .preview pre.shiki code { display:block; width:max-content; min-width:100%; }
   @media (max-width:58rem) { .studio,.studio[data-sidebar-collapsed] { grid-template-columns:1fr; } .library { display:none; } .metadata-fields { grid-template-columns:1fr 1fr; } .metadata .title-field,.metadata .tags-field { grid-column:span 2; } .editor-grid { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) .55rem minmax(0,1fr); } .resize-handle { display:flex; width:auto; height:.55rem; cursor:row-resize; } .sync-scroll { position:absolute; width:2.4rem; height:2.4rem; } .source-pane { min-height:0; border-bottom:1px solid var(--line); } .preview { max-height:none; min-height:0; } .studio-toc { top:.25rem; } .studio-toc-rail { flex-direction:row; align-items:center; width:auto; max-width:9rem; max-height:none; min-height:2.4rem; gap:.3rem; padding:.4rem .6rem; opacity:.92; } .studio-toc-label { display:inline; margin-right:.2rem; font-size:.62rem; letter-spacing:.08em; text-transform:uppercase; } .studio-toc-bar { display:none; } .studio-toc-pop { top:calc(100% + .4rem); max-height:min(55svh,22rem); } }
   @media (max-width:38rem) { .topbar { align-items:center; flex-direction:row; min-height:3.1rem; } .top-actions { width:auto; } .top-actions > * { flex:none; text-align:center; } .top-actions a { display:none; } .connection-pill span { display:none; } .browser-head { align-items:stretch; flex-direction:column; } .create-folder { width:100%; } .folder-grid,.recent-grid { grid-template-columns:1fr; } .metadata { top:2.65rem; right:.35rem; width:calc(100vw - .7rem); max-height:calc(100dvh - 8rem); overflow:auto; } .metadata-fields { grid-template-columns:1fr; } .metadata .title-field,.metadata .tags-field { grid-column:auto; } .editor-tools { flex-wrap:nowrap; overflow-x:auto; min-height:2.55rem; padding:.25rem .45rem; } .editor-tools strong { max-width:34vw; } .editor-tools span { order:initial; width:auto; } .editor-tools button { flex:none; } }
+  /* Library polish: breadcrumb, selection bar, name dialog, empty state */
+  .new-file[hidden],.create-folder[hidden],.back-folder[hidden],.selection-bar[hidden],.library-empty[hidden],.folder-grid[hidden],.folder-posts[hidden],.recent-posts[hidden] { display:none; }
+  .library-home { padding:1.6rem clamp(1.2rem,4vw,3.5rem) 3rem; } .browser-head { align-items:flex-end; margin-bottom:1.4rem; padding-bottom:1.2rem; border-bottom:1px solid var(--line); } .browser-title { min-width:0; } .browser-head h1 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1.7rem; }
+  .crumbs { display:flex; flex-wrap:wrap; align-items:center; gap:.15rem .35rem; margin:0 0 .5rem; color:var(--muted); font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; } .crumbs button { padding:.1rem .25rem; border:0; border-radius:.25rem; background:transparent; color:var(--muted); font:inherit; letter-spacing:inherit; text-transform:inherit; } .crumbs button:hover { background:var(--accent-soft); color:#e2bbff; } .crumbs i { color:#5d606b; font-style:normal; } .crumbs [aria-current] { padding:.1rem .25rem; color:var(--text); }
+  .create-subfolder { min-height:2.5rem; padding:.55rem .85rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); color:var(--text); font-weight:700; } .create-subfolder:hover { border-color:var(--accent); color:#e2bbff; } .create-folder { background:var(--accent); border-color:#b05be8; color:#21152b; } .create-folder:hover { background:#d28cff; } .back-folder:hover { border-color:var(--accent); color:var(--text); }
+  .selection-bar { position:sticky; top:-1.6rem; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #7b4aa3; border-radius:.55rem; background:#2e2339f2; box-shadow:0 .6rem 1.6rem #0006; backdrop-filter:blur(6px); } .selection-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .selection-bar button { min-height:2rem; padding:.3rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; } .selection-bar button:hover:not(:disabled) { border-color:var(--accent); color:#e2bbff; } .selection-bar button:disabled { opacity:.4; cursor:not-allowed; } .selection-bar [data-folder-rename]:not(:disabled) { border-color:#b05be8; background:var(--accent-soft); color:#e9ccff; font-weight:700; }
+  .library-status { min-height:0; margin:0 0 1rem; padding:0; background:transparent; } .library-status:not(:empty) { padding:.5rem .75rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); }
+  .library-empty { display:grid; justify-items:center; gap:.35rem; padding:3rem 1rem; border:1px dashed #5a5c68; border-radius:.7rem; color:var(--muted); text-align:center; font-size:.72rem; } .library-empty strong { color:var(--text); font:650 1rem/1.3 system-ui,sans-serif; }
+  .folder-grid { gap:.9rem; } .folder-card { min-height:8.6rem; overflow:hidden; } .folder-card::before { content:''; position:absolute; inset:0 0 auto; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:0; transition:opacity .15s ease; } .folder-card:hover { transform:translateY(-1px); box-shadow:0 .7rem 1.6rem #0005; } .folder-card:hover::before,.folder-card[data-selected='true']::before { opacity:1; } .folder-open { min-height:8.6rem; padding:1.1rem 1.2rem; } .folder-card[data-selected='true'],.recent-card[data-selected='true'],.folder-file-card[data-selected='true'] { border-color:var(--accent); background:#33283d; box-shadow:0 0 0 1px #c674ff55; } .folder-card strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .folder-card[data-drop] { border-style:dashed; background:#3a2c47; }
+  .selection-checkbox { border-radius:.3rem; transition:color .12s ease, background .12s ease; } .selection-checkbox:hover { background:var(--accent-soft); color:#fff; } .recent-card:hover,.folder-file-card:hover { transform:translateY(-1px); } .recent-card,.folder-file-card { transition:border-color .15s ease, transform .15s ease, background .15s ease; }
+  .library-head { padding-bottom:.9rem; border-bottom:1px solid var(--line); } .tree { gap:.12rem; margin-top:.35rem; } .tree-path { margin:.2rem 0 .35rem; padding:0 .35rem; overflow:hidden; color:var(--muted); font-size:.6rem; letter-spacing:.1em; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; }
+  .tree-folder { display:flex; align-items:center; gap:.5rem; width:100%; padding:.42rem .45rem; border:0; border-left:2px solid transparent; border-radius:.25rem; background:transparent; color:var(--text); font-size:.73rem; text-align:left; } .tree-folder:hover { border-left-color:var(--accent); background:var(--accent-soft); } .tree-folder svg { flex:none; width:1rem; height:1rem; fill:#b879ec38; stroke:#c48bfa; stroke-width:2; stroke-linejoin:round; } .tree-folder span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tree-up { color:var(--muted); }
+  .name-dialog { width:min(26rem,calc(100vw - 2rem)); padding:0; border:1px solid #6a4a86; border-radius:.7rem; background:var(--panel); color:var(--text); box-shadow:0 1.5rem 4rem #000a; } .name-dialog::backdrop { background:#0009; backdrop-filter:blur(2px); } .name-form { display:grid; gap:.55rem; padding:1.3rem; } .name-form h2 { margin:0 0 .4rem; overflow:hidden; font:700 1.25rem/1.25 system-ui,sans-serif; text-overflow:ellipsis; white-space:nowrap; } .name-form label { color:var(--muted); font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; } .name-form input { width:100%; padding:.65rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:#1d1e21; color:var(--text); } .name-form input:focus { border-color:var(--accent); outline:2px solid #c674ff33; } .name-hint { min-height:1.9rem; margin:0; color:var(--muted); font-size:.64rem; line-height:1.5; } .name-hint[data-kind='error'] { color:var(--error); } .name-actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:.3rem; } .name-actions button { min-height:2.2rem; padding:.4rem .9rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.72rem; } .name-actions button:hover { border-color:var(--accent); } .name-actions .primary { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; }
+  @media (max-width:38rem) { .browser-head { align-items:stretch; } .browser-actions { flex-wrap:wrap; } .browser-actions > * { flex:1 1 auto; } .selection-bar { top:-1.2rem; } }
 </style>

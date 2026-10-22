@@ -3,7 +3,7 @@ import { CATEGORIES } from '../../lib/content/constants';
 
 // Công cụ admin: import MỘT file .md của cả giải CTF → tách thành nhiều bài theo `#` (category) / `##` (challenge)
 // rồi commit tất cả trong một commit qua GitHub API. Chạy hoàn toàn trên trình duyệt (không cần server),
-// dùng lại token GitHub mà Sveltia CMS đã lưu khi đăng nhập ở /admin/.
+// dùng lại token GitHub mà Write-up Studio đã lưu.
 ---
 
 <!doctype html>
@@ -20,7 +20,7 @@ import { CATEGORIES } from '../../lib/content/constants';
     <main>
       <header>
         <h1>Import &amp; tách write-up</h1>
-        <a href="/admin/">← Về CMS</a>
+        <a href="/admin/studio/">← Về Studio</a>
       </header>
       <p class="lead">
         Chọn <b>một</b> file <code>.md</code> của cả giải CTF. Mỗi <code># Heading 1</code> là một category (Web, Pwn, Crypto…),
@@ -79,10 +79,10 @@ import { CATEGORIES } from '../../lib/content/constants';
     </template>
 
     <script>
-      import { parse as parseYaml } from 'yaml';
       import type { Category } from '../../lib/content/constants';
       import { assignSlugs, buildPostFile, ctfFolderName, slugFromRepoPath, splitCtfMarkdown, type SplitPost } from '../../lib/content/split-ctf';
       import { slugify, slugifyOrHash } from '../../lib/content/slug';
+      import { STUDIO_REPO, STUDIO_TOKEN_KEY } from '../../lib/studio';
 
       const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
       const fileInput = $<HTMLInputElement>('[data-file]');
@@ -131,11 +131,10 @@ import { CATEGORIES } from '../../lib/content/constants';
         return (await res.json()) as T;
       };
 
-      /** Token mà Sveltia CMS lưu trong localStorage khi đăng nhập ở /admin/ (cùng origin). */
+      /** Token mà Write-up Studio lưu trong localStorage (cùng origin). */
       function storedToken(): string {
         try {
-          const user = JSON.parse(localStorage.getItem('sveltia-cms.user') ?? 'null') as { token?: unknown } | null;
-          return typeof user?.token === 'string' ? user.token : '';
+          return localStorage.getItem(STUDIO_TOKEN_KEY) ?? '';
         } catch {
           return '';
         }
@@ -157,13 +156,8 @@ import { CATEGORIES } from '../../lib/content/constants';
 
       async function loadConfig() {
         const repoEl = $('[data-repo]');
-        try {
-          const cfg = parseYaml(await (await fetch('/admin/config.yml')).text()) as { backend?: { repo?: string; branch?: string } };
-          repo = { name: cfg.backend?.repo ?? '', branch: cfg.backend?.branch ?? 'main' };
-          repoEl.textContent = `Repo: ${repo.name} · nhánh ${repo.branch}`;
-        } catch {
-          repoEl.textContent = 'Không đọc được /admin/config.yml';
-        }
+        repo = { name: STUDIO_REPO.name, branch: STUDIO_REPO.branch };
+        repoEl.textContent = `Repo: ${repo.name} · nhánh ${repo.branch}`;
         $('[data-token-box]').hidden = Boolean(storedToken());
       }
 
@@ -285,8 +279,8 @@ import { CATEGORIES } from '../../lib/content/constants';
 
       async function commit() {
         const chosen = rows.filter((r) => r.include);
-        if (!token()) return setStatus('Cần GitHub token (đăng nhập /admin/ hoặc nhập token ở trên).', 'error');
-        if (!repo.name) return setStatus('Chưa cấu hình backend.repo trong /admin/config.yml.', 'error');
+        if (!token()) return setStatus('Cần GitHub token (đăng nhập ở Studio hoặc nhập token ở trên).', 'error');
+        if (!repo.name) return setStatus('Chưa cấu hình STUDIO_REPO trong src/lib/studio.ts.', 'error');
         busy = true;
         render();
         try {
@@ -376,6 +370,7 @@ import { CATEGORIES } from '../../lib/content/constants';
         render();
       });
       tokenInput.addEventListener('change', () => {
+        try { if (tokenInput.value.trim()) localStorage.setItem(STUDIO_TOKEN_KEY, tokenInput.value.trim()); } catch { /* localStorage bị chặn: token chỉ dùng trong phiên */ }
         loadExisting(true)
           .then(() => {
             recomputeSlugs();

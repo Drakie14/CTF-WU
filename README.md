@@ -9,7 +9,7 @@ tự build lại. Không database, không server, không serverless function, ch
   `lang!`… (xem [HackMD syntax](#hackmd-syntax)).
 - Frontmatter **không bắt buộc**; tag/CTF hoàn toàn dynamic; ảnh remote được tải về lúc build.
 - Mục lục tự tạo từ heading `#`, `##`, `###` (thu gọn ở góc phải bài).
-- Tìm kiếm Pagefind, sitemap, RSS feed `/rss.xml` (không có link trên giao diện), `/admin` (Sveltia CMS)
+- Tìm kiếm Pagefind, sitemap, RSS feed `/rss.xml` (không có link trên giao diện), `/admin` (Write-up Studio)
   không cần server.
 - `/admin/import/`: import **một** file `.md` của cả giải → tự tách thành từng bài theo `# Category` /
   `## Challenge` (xem [Import một file .md nhiều bài](#import-một-file-md-nhiều-bài)).
@@ -24,7 +24,7 @@ tự build lại. Không database, không server, không serverless function, ch
 - [Tags](#tags)
 - [Code block](#code-block)
 - [HackMD syntax](#hackmd-syntax)
-- [Admin (Sveltia CMS)](#admin-sveltia-cms)
+- [Admin (Write-up Studio)](#admin-write-up-studio)
   - [Import một file .md nhiều bài](#import-một-file-md-nhiều-bài)
 - [Lệnh npm](#lệnh-npm)
 - [Kiểm tra chất lượng](#kiểm-tra-chất-lượng)
@@ -95,7 +95,7 @@ npm run verify    # quét dist/: XSS, ảnh remote, link hỏng, SEO/RSS/sitemap
 4. Cloudflare Pages tự build (1–2 phút) → website cập nhật: bài xuất hiện ở trang chủ, `/ctf/...`,
    `/category/...`, `/tags/...`, `/archive`, RSS, sitemap và search.
 
-Có thể dùng [`/admin`](#admin-sveltia-cms) thay cho bước 2–3. Note HackMD chứa **cả giải** (nhiều
+Có thể dùng [`/admin/studio/`](#admin-write-up-studio) thay cho bước 2–3. Note HackMD chứa **cả giải** (nhiều
 challenge trong một file)? Dùng [`/admin/import/`](#import-một-file-md-nhiều-bài) để tự tách thành
 từng bài riêng, phân loại theo heading `#`.
 
@@ -209,7 +209,7 @@ bước build tự chạy `git fetch --unshallow` (chỉ khi phát hiện `CF_PA
 - **Không commit** token, password, API key, cookie, flag của giải đang diễn ra hay bất kỳ secret nào.
   Nếu lỡ commit: coi như đã lộ → **thu hồi/đổi ngay**; xóa khỏi history là chưa đủ.
 - **Không commit challenge file có bản quyền** (binary, source, đề bài) nếu tác giả không cho phép.
-- Không có secret nào trong `public/admin/config.yml`, `.env` hay build output. Token của `/admin`
+- Không có secret nào trong `src/lib/studio.ts`, `.env` hay build output. Token của `/admin`
   chỉ nằm trong trình duyệt của bạn.
 - Bật **2FA** cho tài khoản GitHub và Cloudflare.
 
@@ -242,7 +242,7 @@ tags: [xss, javascript, dom]
 tags: "sqli, jwt"          # chuỗi cũng được, tự tách theo dấu phẩy
 ```
 
-- Thêm tag mới trực tiếp trong Markdown hoặc trong CMS → build → trang `/tags/<tag>` tự xuất hiện.
+- Thêm tag mới trực tiếp trong Markdown hoặc trong Studio → build → trang `/tags/<tag>` tự xuất hiện.
   **Không cần sửa source code.**
 - Chuẩn hóa: bỏ khoảng trắng thừa, không phân biệt hoa thường (`SQLi` và `sqli` là một tag, hiển
   thị theo cách viết xuất hiện nhiều nhất).
@@ -332,78 +332,31 @@ Cú pháp bên trong code block/inline code không bao giờ bị xử lý.
 
 ---
 
-## Admin (Sveltia CMS)
+## Admin (Write-up Studio)
 
-`/admin/` là Sveltia CMS **self-host**: `npm run dev`/`npm run build` tự chạy `scripts/copy-cms.mjs`
-để chép bundle từ `node_modules/@sveltia/cms` (version khóa trong `package-lock.json`) vào
-`public/admin/`. Không tải CMS từ CDN; JavaScript của CMS chỉ nạp ở `/admin`. File bundle đã được
-gitignore. Ngoài CMS còn có trang [`/admin/import/`](#import-một-file-md-nhiều-bài) để import một file
-`.md` nhiều bài.
+`/admin/studio/` là trang soạn write-up tự viết, chạy hoàn toàn trên trình duyệt và ghi thẳng lên GitHub
+qua API (không cần server). Repo/nhánh được khai báo trong `src/lib/studio.ts` (hiện là `Drakie14/CTF-WU`,
+nhánh `main`); `/admin/import/` dùng chung cấu hình này.
 
-### Trước khi dùng trên production
-
-`backend.repo` trong `public/admin/config.yml` phải là `<tài-khoản-github>/<tên-repo>` của bạn (hiện là
-`Drakie14/CTF-WU`, nhánh `main`). Đổi repo thì sửa ở đây, commit và push — `/admin/import/` cũng đọc
-repo/nhánh từ file này.
-
-### Authentication — không cần OAuth proxy / server
-
-Sveltia CMS hiện **chưa hỗ trợ PKCE** với GitHub (GitHub chưa cho phép), còn OAuth thông thường cần
-một server trung gian. Vì vậy `/admin` chỉ bật **đăng nhập bằng GitHub Personal Access Token**
-(`auth_methods: [token]`), chạy hoàn toàn trên trình duyệt:
-
-1. Mở `https://<site>/admin/` → **Sign In Using Access Token**.
-2. Tạo token **fine-grained** trên GitHub (*Settings → Developer settings → Personal access tokens →
-   Fine-grained tokens*): **Repository access** chỉ chọn repo blog; **Permissions → Contents:
-   Read and write**. Đặt thời hạn ngắn và gia hạn khi cần.
-3. Dán token vào hộp thoại. Token được lưu trong `localStorage` của trình duyệt đó, gửi thẳng tới
-   `api.github.com`; **không** nằm trong repo, `config.yml`, `.env` hay build output.
-4. Đăng xuất (menu tài khoản → **Sign Out**) trên máy lạ để xóa token.
-5. **Bật 2FA cho GitHub** (*Settings → Password and authentication → Two-factor authentication*):
-   ai có quyền vào tài khoản đều có thể tạo token sửa blog.
-
-Khi chạy local (`npm run dev`, mở `http://localhost:4321/admin/index.html` — dev server của Astro
-không tự trả `index.html` cho thư mục trong `public/`, nên `/admin/` sẽ ra 404; bản build/`npm run preview`
-và Cloudflare Pages thì mở `/admin/` bình thường) có thể chọn
-**Work with Local Repository** (Chrome/Edge) để sửa trực tiếp thư mục project, không cần token.
-
-### Tạo và sửa bài
-
-1. **Write-ups** → **New**.
-2. **Title** (bắt buộc trên form CMS — chỉ ở CMS; file Markdown không có title vẫn build được).
-3. **Phân loại**: chọn **Category** và **Difficulty** trong dropdown, nhập **Points**, **Date**
-   (bỏ trống → ngày commit đầu tiên).
-4. **Tags**: bấm **Add tag** để thêm, sửa trực tiếp trong ô, bấm **×** để xóa. Gõ tag chưa từng có
-   cũng được — trang `/tags/<tag>` tự xuất hiện sau khi build.
-5. **CTF**:
-   - CTF **có sẵn** dạng thư mục: chọn ở ô **Parent Folder** đầu form (bài trong thư mục CTF tự nhận
-     tên CTF, để trống ô CTF).
-   - **CTF mới**: gõ tên vào ô **CTF** → trang `/ctf/<slug>` tự được tạo.
-6. **Tạo bài từ HackMD**: HackMD → copy toàn bộ Markdown (hoặc mở file `.md` đã tải) → dán vào ô
-   **Nội dung (Markdown/HackMD)**. Nếu nội dung HackMD có sẵn frontmatter, bỏ khối `---…---` đó và
-   điền các ô tương ứng trên form.
-7. **Ảnh**: upload ở ô **Ảnh trong bài** (nhiều ảnh) hoặc **Cover**; ảnh được lưu **cạnh `index.md`**
-   của bài. Chèn vào thân bài bằng `![](./ten-anh.png)`. Key `images:` mà CMS ghi vào frontmatter chỉ
-   để CMS quản lý ảnh; website bỏ qua key này. Ảnh remote của HackMD (`https://hackmd.io/_uploads/…`)
-   để nguyên — build tự tải về.
-8. **Save** → CMS commit lên GitHub → Cloudflare tự build.
-
-Lọc bài: cây thư mục CTF bên trái; menu **Filter** → “Chưa phân loại”, “Chưa có CTF”, “Category: …”;
-menu **Group** → CTF / Category / Difficulty.
+- Duyệt folder theo cây (folder lồng nhau), breadcrumb ở đầu trang, sidebar liệt kê folder con và bài.
+- `+ Folder mới` / `+ Folder con`: tạo folder rỗng (giữ trên GitHub bằng file `.gitkeep`, loader bỏ qua).
+- Chọn một folder bằng ô vuông ở góc card rồi bấm `Đổi tên folder`: Studio chuyển toàn bộ file sang
+  đường dẫn mới trong một commit và cập nhật `ctf:` trong frontmatter nếu trùng tên cũ.
+- Kéo thả bài đã chọn vào folder khác để chuyển bài. Nút `+ Bài viết mới` ở sidebar chỉ hiện khi đang mở
+  một bài; trong folder dùng `+ Tạo write-up`.
+- `/admin/import/` import một file `.md` nhiều bài (xem [bên dưới](#import-một-file-md-nhiều-bài)).
 
 ### Import một file .md nhiều bài
 
 Note HackMD thường gom **cả giải** vào một file: mỗi `# Category` là một mảng, mỗi `## Challenge` là
 một bài. Trang `/admin/import/` tách file đó thành từng bài riêng và commit tất cả trong **một commit**:
 
-1. Đăng nhập `/admin/` một lần trên trình duyệt đó — trang import dùng lại token Sveltia đã lưu. Chưa
-   đăng nhập thì trang hiện ô nhập token (fine-grained, **Contents: Read and write**); token này chỉ
-   dùng trong trang, không được lưu.
-2. Mở `https://<site>/admin/import/` (link cũng có trong mô tả collection **Write-ups**) → kéo thả
+1. Trang import dùng lại token mà Studio đã lưu trên trình duyệt đó. Chưa có thì trang hiện ô nhập token
+   (fine-grained, **Contents: Read and write**); token nhập ở đây cũng được lưu để Studio dùng chung.
+2. Mở `https://<site>/admin/import/` → kéo thả
    file `.md`, hoặc paste Markdown từ HackMD.
 3. Xem trước: sửa **CTF**, **Ngày**, và title / category / slug của từng bài; bỏ tick bài không muốn đăng.
-4. **Commit N bài lên GitHub** → Cloudflare tự build. Bài mới cũng hiện trong CMS (collection
-   **Write-ups**, thư mục CTF).
+4. **Commit N bài lên GitHub** → Cloudflare tự build. Bài mới hiện trong thư viện của Studio.
 
 ```markdown
 ---
@@ -436,51 +389,30 @@ frontmatter `title`, `ctf`, `category` (và `date`, `tags` nếu file gốc có)
   có vẻ **đã import rồi**, dừng lại nếu repo vừa thay đổi giữa lúc xem trước và lúc commit, và khóa
   nút sau khi commit xong (chọn file khác để import tiếp).
 - Công cụ chỉ **thêm** file. Nếu bản gộp của giải đã nằm trong repo (ví dụ `posts/CTF/NNS CTF.md`),
-  xóa nó (CMS → **Write-ups (file .md đơn)**, hoặc GitHub) để không có hai bản.
+  xóa nó (trên GitHub) để không có hai bản.
 - Ảnh đường dẫn tương đối (`![](./a.png)`) không được chép theo → trang cảnh báo; upload lại ảnh qua
-  CMS. Ảnh HackMD (`https://hackmd.io/_uploads/…`) không bị ảnh hưởng.
+  Studio. Ảnh HackMD (`https://hackmd.io/_uploads/…`) không bị ảnh hưởng.
 - Chạy local: `npm run dev` → `http://localhost:4321/admin/import/`. Commit vẫn ghi thẳng lên repo
-  GitHub trong `backend.repo`, kể cả khi chạy local.
+  GitHub trong `STUDIO_REPO` (`src/lib/studio.ts`), kể cả khi chạy local.
 - Logic tách nằm ở `src/lib/content/split-ctf.ts` (test: `tests/content/split-ctf.test.ts`); trang ở
   `src/pages/admin/import.astro`.
 
-### Giới hạn về cấu trúc thư mục (mục 66.5-C)
 
-| Cấu trúc | Collection | Ghi chú |
-| --- | --- | --- |
-| `posts/<slug>/index.md` | **Write-ups** | Bài mới luôn được tạo ở đây (hoặc trong thư mục CTF chọn ở Parent Folder). |
-| `posts/<ctf>/<slug>/index.md` | **Write-ups** | Thư mục CTF hiện thành cây bên trái. Bài tạo bởi `/admin/import/` có dạng này. |
-| `posts/<slug>.md`, `posts/<ctf>/<slug>.md` | **Write-ups (file .md đơn)** | Chỉ sửa, không tạo mới. |
+### Authentication
 
-- Collection dạng thư mục lồng (nested) của Sveltia không đọc được file `.md` đơn, nên dạng
-  `<slug>.md` được quản lý bằng collection thứ hai. Collection này chỉ đọc sâu 2 cấp
-  (`nested.depth: 2`); để 3 thì các bài `<ctf>/<slug>/index.md` cũng khớp và bị liệt kê hai lần.
-- Sveltia **không tạo được thư mục CTF mới**. CTF mới được tạo bằng ô **CTF** (bài lưu ở
-  `posts/<slug>/index.md` với `ctf:` trong frontmatter). Muốn gom vào thư mục CTF riêng, tạo thư mục
-  qua GitHub Web UI — hoặc dùng [`/admin/import/`](#import-một-file-md-nhiều-bài), trang này tự tạo
-  thư mục `posts/<CTF>/`.
-
-### CMS không viết lại Markdown HackMD
-
-Thân bài dùng widget `text` (văn bản thô), **không** dùng Markdown/rich-text editor, nên callout,
-spoiler, code fence, `[TOC]`, `{%youtube%}`, raw HTML… được giữ nguyên từng byte. Chỉ khối
-frontmatter được Sveltia ghi lại (ví dụ `tags: [a, b]` thành danh sách nhiều dòng); key lạ như
-`description`, `lang` vẫn được giữ. Sveltia luôn ghi file với xuống dòng LF — `.gitattributes`
-ép LF cho `*.md` để tránh diff toàn file trên Windows. Test: `tests/cms/roundtrip.test.ts`.
+Studio chỉ dùng **GitHub Personal Access Token**: tạo token fine-grained trên GitHub (*Settings →
+Developer settings → Personal access tokens → Fine-grained tokens*), **Repository access** chỉ chọn repo
+blog, **Permissions → Contents: Read and write**, đặt thời hạn ngắn. Dán token ở Studio (hoặc ở hộp thoại
+khi bấm `Admin` trên sidebar); token lưu trong `localStorage` của trình duyệt, gửi thẳng tới
+`api.github.com`, **không** nằm trong repo hay build output. Bật 2FA cho GitHub.
 
 ### CSP của `/admin`
 
 `/admin/*` có CSP riêng trong `public/_headers` (tách khỏi CSP public bằng `! Content-Security-Policy`):
-`script-src 'self'` (không `unsafe-inline`/`unsafe-eval`), `connect-src` cho `api.github.com`,
-`www.githubstatus.com` và `unpkg.com/@sveltia/` (bundle không kèm bản dịch giao diện: Sveltia tải
-`locales/vi.json`… từ unpkg theo ngôn ngữ trình duyệt; bị chặn thì CMS retry vô hạn và treo trang trắng
-với trình duyệt không phải tiếng Anh — chỉ là fetch JSON, không phải script), `img-src` cho `*.githubusercontent.com`, `font-src` cho `cdn.jsdelivr.net`
-(font giao diện mà bundle Sveltia tham chiếu cố định; chỉ là font, không phải script), kèm
-`X-Robots-Tag: noindex`, `<meta name="robots" content="noindex">` và `Disallow: /admin` trong
-`robots.txt`. CSP của trang public không thay đổi. `/admin/import/` nằm dưới cùng CSP này: script của
-trang được bundle thành `/_astro/*.js` (`script-src 'self'`) và chỉ gọi `api.github.com`.
-Riêng `/admin/studio/*` cho phép thêm `'wasm-unsafe-eval'` để Shiki khởi tạo WebAssembly
-và tô màu code trong Preview; quyền này không áp dụng cho Sveltia CMS hay `/admin/import/`.
+`script-src 'self'` (không `unsafe-inline`/`unsafe-eval`), `connect-src` chỉ cho `api.github.com`,
+`img-src` cho `*.githubusercontent.com`, kèm `X-Robots-Tag: noindex`, `<meta name="robots" content="noindex">`
+và `Disallow: /admin` trong `robots.txt`. Riêng `/admin/studio/*` cho phép thêm `'wasm-unsafe-eval'` để
+Shiki khởi tạo WebAssembly và tô màu code trong Preview. Test: `tests/admin/headers.test.ts`.
 
 ---
 
@@ -503,13 +435,12 @@ và tô màu code trong Preview; quyền này không áp dụng cho Sveltia CMS 
 ## Kiểm tra chất lượng
 
 - **Test** (`tests/`): pipeline Markdown/HackMD, alias ngôn ngữ, XSS, frontmatter, tag, múi giờ,
-  round-trip CMS, config CMS/CSP, tách file CTF cho `/admin/import/`.
+  CSP của `/admin`, tách file CTF cho `/admin/import/`.
 - **Lighthouse**: `npm run lighthouse` cần Chrome/Chromium. Nếu không tự tìm thấy, đặt
   `CHROME_PATH` tới file chạy của Chrome. Mục tiêu ≥ 95 cho Performance/Accessibility/Best
   Practices/SEO (chế độ mobile).
 - **Fixtures**: `npm run build:fixtures` để thử danh sách cong và hiệu năng build với 200 bài.
-- **Knip**: `npx knip` tìm dependency/file/export không dùng (cấu hình ở `knip.json`; `@sveltia/cms`
-  được dùng qua `scripts/copy-cms.mjs` nên được khai báo ngoại lệ).
+- **Knip**: `npx knip` tìm dependency/file/export không dùng (cấu hình ở `knip.json`).
 
 ## Version
 
@@ -522,7 +453,6 @@ Version thực tế đang dùng (khóa trong `package-lock.json`, không tự ý
 | @astrojs/markdown-remark | 7.3.1 |
 | @astrojs/rss | 4.0.19 |
 | @astrojs/sitemap | 3.7.4 |
-| @sveltia/cms | 0.221.1 |
 | shiki | 4.4.3 |
 | sharp | 0.35.4 |
 | pagefind | 1.5.2 |

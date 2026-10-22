@@ -35,11 +35,6 @@ pnpm-debug.log*
 Thumbs.db
 .idea/
 
-# Sveltia CMS bundle (chép từ node_modules bởi scripts/copy-cms.mjs)
-public/admin/sveltia-cms.js
-public/admin/sveltia-cms.LICENSE.txt
-public/admin/chunks/
-
 # Profile Chrome tạm của Lighthouse khi chạy trong WSL (chrome-launcher tạo thư mục mang tên đường dẫn Windows)
 /C:*
 

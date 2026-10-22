@@ -8,8 +8,6 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "predev": "node scripts/copy-cms.mjs",
-    "prebuild": "node scripts/copy-cms.mjs",
     "build": "astro build && pagefind --site dist",
     "preview": "astro preview",
     "check": "astro check",
@@ -35,7 +33,6 @@
     "@codemirror/view": "6.38.3",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
     "@fontsource-variable/lexend": "5.3.0",
-    "@sveltia/cms": "0.221.1",
     "astro": "7.3.5",
     "katex": "0.16.22",
     "marked": "18.1.1",

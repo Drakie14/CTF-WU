@@ -37,8 +37,6 @@ const TAG_RE = /<([a-zA-Z][\w:-]*)((?:\s+[^\s"'>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'
 const ATTR_RE = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
 const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'poster', 'data', 'xlink:href']);
 const ALLOWED_SCRIPT_PREFIXES = ['/_astro/', '/pagefind/'];
-// Trang /admin (Sveltia CMS, có CSP riêng) được phép nạp bundle CMS self-host.
-const ADMIN_SCRIPTS = ['/admin/sveltia-cms.js'];
 
 const files = walk(dist).filter((f) => f.endsWith('.html'));
 const problems = { xss: [], remote: [], links: [], seo: [] };
@@ -80,7 +78,6 @@ for (const file of files) {
   for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
     const src = /\ssrc="([^"]*)"/i.exec(m[1])?.[1];
     if (!src || m[2].trim()) problems.xss.push(`${rel}: inline <script>`);
-    else if (rel.startsWith('admin/') && ADMIN_SCRIPTS.includes(src)) continue;
     else if (!ALLOWED_SCRIPT_PREFIXES.some((p) => src.startsWith(p))) problems.xss.push(`${rel}: <script src="${src}">`);
   }
 

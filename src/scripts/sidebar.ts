@@ -6,6 +6,7 @@
  */
 
 import { setupSidebarSearch } from './search';
+import { STUDIO_REPO, STUDIO_TOKEN_KEY } from '../lib/studio';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const supportsScrollTimeline = CSS.supports('animation-timeline: view()');
@@ -270,15 +271,11 @@ function onPageLoad(): void {
   firstLoad = false;
 }
 
-const STUDIO_TOKEN_KEY = 'ctf-wu.studio-token';
-
 function savedAdminTokens(): string[] {
   const values: string[] = [];
   try {
     const studioToken = localStorage.getItem(STUDIO_TOKEN_KEY);
     if (studioToken) values.push(studioToken);
-    const user = JSON.parse(localStorage.getItem('sveltia-cms.user') ?? 'null') as { token?: unknown } | null;
-    if (typeof user?.token === 'string' && user.token && !values.includes(user.token)) values.push(user.token);
   } catch {
     // localStorage có thể bị chặn; lúc đó yêu cầu nhập PAT trong form.
   }
@@ -286,11 +283,7 @@ function savedAdminTokens(): string[] {
 }
 
 async function verifyAdminToken(token: string): Promise<void> {
-  const configResponse = await fetch('/admin/config.yml', { cache: 'no-store' });
-  if (!configResponse.ok) throw new Error('Không đọc được cấu hình repository của Studio.');
-  const config = await configResponse.text();
-  const repo = /^\s{2}repo:\s*([^#\s]+)\s*$/m.exec(config)?.[1];
-  if (!repo) throw new Error('Không tìm thấy repository trong cấu hình Studio.');
+  const repo = STUDIO_REPO.name;
 
   const headers = {
     Accept: 'application/vnd.github+json',
