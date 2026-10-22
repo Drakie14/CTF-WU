@@ -22,6 +22,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         </div>
         <div class="top-actions">
           <a href="/admin/import/">Import cả giải</a>
+          <button type="button" class="local-root" data-local-connect title="Chọn thư mục D:\Hiếu\Blog\src\content\posts để đồng bộ bài local">Local chưa kết nối</button>
           <button type="button" class="publish" data-publish>Publish</button>
         </div>
       </header>
@@ -132,16 +133,21 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
 
       type Asset = { file: File; name: string; url: string };
       type RepoFile = { path: string; sha: string };
+      type LocalDirectoryHandle = FileSystemDirectoryHandle & {
+        queryPermission: (options?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+        requestPermission: (options?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+      };
       type Draft = { title: string; folder: string; date: string; ctf: string; category: string; difficulty: string; tags: string; source: string };
       type MermaidApi = { initialize: (config: Record<string, unknown>) => void; run: (config: { nodes: NodeListOf<Element> }) => Promise<void> };
       let repo = { name: '', branch: 'main' };
       let openFile: RepoFile | undefined;
       let assets: Asset[] = [];
       let renderVersion = 0;
-      let localDirectory: FileSystemDirectoryHandle | undefined;
+      let localDirectory: LocalDirectoryHandle | undefined;
       let editor!: EditorView;
       let repoFiles: RepoFile[] = [];
       let repoTree: Array<{ path: string; sha: string; type: string }> = [];
+      let localPermission: PermissionState = 'prompt';
       let mermaidReady: Promise<MermaidApi> | undefined;
       let syncScrollEnabled = false;
       let syncScrollFrame = 0;
@@ -205,6 +211,58 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         } catch { return ''; }
       }
       const token = () => storedToken() || tokenInput.value.trim();
+      const localHandleKey = 'posts-root';
+      const localBaselineKey = (path: string) => `ctf-wu.studio.sync-baseline.${path}`;
+      function localHandleDb(): Promise<IDBDatabase> {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open('ctf-wu-studio-local', 1);
+          request.onupgradeneeded = () => request.result.createObjectStore('handles');
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+      async function saveLocalHandle(handle: LocalDirectoryHandle): Promise<void> {
+        const db = await localHandleDb();
+        await new Promise<void>((resolve, reject) => {
+          const transaction = db.transaction('handles', 'readwrite');
+          transaction.objectStore('handles').put(handle, localHandleKey);
+          transaction.oncomplete = () => resolve();
+          transaction.onerror = () => reject(transaction.error);
+        });
+        db.close();
+      }
+      async function getLocalHandle(): Promise<LocalDirectoryHandle | undefined> {
+        const db = await localHandleDb();
+        const handle = await new Promise<FileSystemDirectoryHandle | undefined>((resolve, reject) => {
+          const request = db.transaction('handles').objectStore('handles').get(localHandleKey);
+          request.onsuccess = () => resolve(request.result as LocalDirectoryHandle | undefined);
+          request.onerror = () => reject(request.error);
+        });
+        db.close();
+        return handle as LocalDirectoryHandle | undefined;
+      }
+      function updateLocalButton() {
+        const button = document.querySelector<HTMLButtonElement>('[data-local-connect]');
+        if (!button) return;
+        button.textContent = !localDirectory ? 'Local chưa kết nối' : localPermission === 'granted' ? `Local: ${localDirectory.name}` : 'Local: cấp lại quyền';
+        button.dataset.connected = String(Boolean(localDirectory && localPermission === 'granted'));
+        button.title = 'Chọn thư mục D:\\Hiếu\\Blog\\src\\content\\posts để đồng bộ bài local. Không chọn D:\\Hiếu\\CTF.';
+      }
+      async function restoreLocalDirectory() {
+        try {
+          localDirectory = await getLocalHandle();
+          if (!localDirectory) return updateLocalButton();
+          localPermission = await localDirectory.queryPermission({ mode: 'readwrite' });
+          updateLocalButton();
+        } catch { updateLocalButton(); }
+      }
+      async function requestLocalPermission(): Promise<boolean> {
+        if (!localDirectory) return false;
+        localPermission = await localDirectory.queryPermission({ mode: 'readwrite' });
+        if (localPermission !== 'granted') localPermission = await localDirectory.requestPermission({ mode: 'readwrite' });
+        updateLocalButton();
+        return localPermission === 'granted';
+      }
       function updateConnection() {
         const pill = $('[data-connection]');
         pill.dataset.connected = String(githubConnected);
@@ -290,6 +348,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         $('[data-repo]').textContent = `${repo.name} / ${repo.branch}`;
         $('[data-token-box]').hidden = Boolean(storedToken());
         updateConnection();
+        void restoreLocalDirectory();
         if (token()) void loadTree();
       }
       async function loadTree() {
@@ -315,6 +374,62 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           setStatus(message, 'error');
         }
       }
+      function localRelativePath(path: string) {
+        if (!path.startsWith(`${postRoot}/`)) throw new Error('Đường dẫn bài không nằm trong thư mục posts của repository.');
+        return path.slice(postRoot.length + 1);
+      }
+      async function hashText(value: string): Promise<string> {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+        return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+      }
+      async function readLocalArticle(path: string): Promise<string | undefined> {
+        if (!localDirectory || await localDirectory.queryPermission({ mode: 'readwrite' }) !== 'granted') return undefined;
+        const parts = localRelativePath(path).split('/');
+        let target: FileSystemDirectoryHandle = localDirectory;
+        try {
+          for (const part of parts.slice(0, -1)) target = await target.getDirectoryHandle(part);
+          const file = await target.getFileHandle(parts.at(-1)!);
+          return await (await file.getFile()).text();
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'NotFoundError') return undefined;
+          throw error;
+        }
+      }
+      async function writeLocalArticle(path: string, source: string): Promise<boolean> {
+        if (!localDirectory || await localDirectory.queryPermission({ mode: 'readwrite' }) !== 'granted') return false;
+        const parts = localRelativePath(path).split('/');
+        let target: FileSystemDirectoryHandle = localDirectory;
+        for (const part of parts.slice(0, -1)) target = await target.getDirectoryHandle(part, { create: true });
+        const handle = await target.getFileHandle(parts.at(-1)!, { create: true });
+        const writable = await handle.createWritable();
+        await writable.write(source);
+        await writable.close();
+        return true;
+      }
+      async function reconcileLocalArticle(path: string, remoteSource: string): Promise<{ source: string; message: string }> {
+        const remoteHash = await hashText(remoteSource);
+        const localSource = await readLocalArticle(path);
+        if (localSource === undefined) {
+          const copied = await writeLocalArticle(path, remoteSource).catch(() => false);
+          if (copied) localStorage.setItem(localBaselineKey(path), remoteHash);
+          return { source: remoteSource, message: copied ? 'Đã tải bản GitHub về thư mục posts local.' : 'Chưa kết nối được thư mục posts local.' };
+        }
+        const localHash = await hashText(localSource);
+        if (localHash === remoteHash) {
+          localStorage.setItem(localBaselineKey(path), remoteHash);
+          return { source: remoteSource, message: 'Bản local và GitHub đã đồng bộ.' };
+        }
+        const baseline = localStorage.getItem(localBaselineKey(path));
+        if (baseline && localHash === baseline) {
+          const copied = await writeLocalArticle(path, remoteSource).catch(() => false);
+          if (copied) localStorage.setItem(localBaselineKey(path), remoteHash);
+          return { source: remoteSource, message: copied ? 'GitHub có bản mới hơn; đã cập nhật file local.' : 'GitHub có bản mới hơn nhưng chưa cấp quyền ghi thư mục local.' };
+        }
+        if (baseline && remoteHash === baseline) {
+          return { source: localSource, message: 'Phát hiện chỉnh sửa local chưa publish; đang mở bản local.' };
+        }
+        return { source: localSource, message: 'Xung đột đồng bộ: cả local và GitHub đều đổi. Đang giữ bản local để bạn rà soát trước khi Publish.' };
+      }
       async function openPost(file: RepoFile) {
         try {
           setStatus('Đang mở write-up…');
@@ -323,9 +438,10 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           const parts = file.path.replace(`${postRoot}/`, '').split('/');
           folder.value = parts.slice(0, -2).join('/') || 'uncategorized';
           $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
-          $('[data-save-state]').textContent = 'Đã mở từ GitHub';
-          populate(decode(content.content));
-          if (restoreDraft()) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok'); else setStatus('');
+          const reconciled = await reconcileLocalArticle(file.path, decode(content.content));
+          $('[data-save-state]').textContent = 'Đã mở bài';
+          populate(reconciled.source);
+          if (restoreDraft()) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok'); else setStatus(reconciled.message, reconciled.message.startsWith('Xung đột') ? 'error' : 'info');
           activeFolder = relativeFolder(); renderSidebar(); showComposer();
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }
@@ -665,7 +781,6 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         if (!token()) { $('[data-token-box]').hidden = false; return setStatus('Nhập GitHub token trước khi publish.', 'error'); }
         if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
         if (!slugify(title.value)) return setStatus('Tiêu đề chưa tạo được tên folder hợp lệ.', 'error');
-        if (!localDirectory && !await chooseLocalFolder()) return;
         const filePath = currentPath();
         try {
           setStatus('Đang tạo commit…');
@@ -687,38 +802,57 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           activeFolder = relativeFolder();
           $('[data-save-state]').textContent = 'Đã publish';
           const localSynced = await syncLocal({ quiet: true });
+          if (localSynced) localStorage.setItem(localBaselineKey(filePath), await hashText(composePost()));
           setStatus(localSynced
-            ? 'Đã publish GitHub, đồng bộ folder local và kích hoạt Cloudflare Pages build.'
-            : 'Đã publish GitHub. Không thể đồng bộ folder local trong lần này.', localSynced ? 'ok' : 'error');
+            ? 'Đã publish GitHub và đồng bộ file trong src/content/posts local.'
+            : 'Đã publish GitHub. Kết nối thư mục src/content/posts để đồng bộ local.', 'ok');
           void loadTree();
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }
       async function chooseLocalFolder(): Promise<boolean> {
         type DirectoryPickerWindow = Window & {
-          showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
+          showDirectoryPicker?: (options?: { id?: string; mode?: 'read' | 'readwrite'; startIn?: FileSystemHandle }) => Promise<LocalDirectoryHandle>;
         };
         const picker = (window as DirectoryPickerWindow).showDirectoryPicker;
         if (!picker) { setStatus('Trình duyệt này không hỗ trợ đồng bộ folder local. Dùng Chrome hoặc Edge desktop.', 'error'); return false; }
         try {
-          const selectedDirectory = await picker.call(window, { mode: 'readwrite' });
+          const selectedDirectory = await picker.call(window, { id: 'ctf-wu-blog-posts', mode: 'readwrite', ...(localDirectory ? { startIn: localDirectory } : {}) });
+          if (selectedDirectory.name.toLowerCase() !== 'posts') {
+            setStatus('Hãy chọn đúng thư mục D:\\Hiếu\\Blog\\src\\content\\posts. Thư mục D:\\Hiếu\\CTF chỉ chứa source và file bài tập.', 'error');
+            return false;
+          }
           localDirectory = selectedDirectory;
-          setStatus(`Đã chọn ${selectedDirectory.name}. Publish sẽ đồng bộ bài hiện tại vào đây.`, 'ok');
+          localPermission = await selectedDirectory.requestPermission({ mode: 'readwrite' });
+          if (localPermission !== 'granted') { updateLocalButton(); setStatus('Chưa được cấp quyền đọc và ghi thư mục posts.', 'error'); return false; }
+          await saveLocalHandle(selectedDirectory);
+          updateLocalButton();
+          setStatus('Đã kết nối thư mục posts. Bài local sẽ được đối chiếu với GitHub khi mở và sau khi Publish.', 'ok');
           return true;
         }
         catch { return false; }
       }
+      async function connectLocalFolder() {
+        if (!localDirectory) { await chooseLocalFolder(); return; }
+        try {
+          localPermission = await localDirectory.requestPermission({ mode: 'readwrite' });
+          updateLocalButton();
+          setStatus(localPermission === 'granted' ? 'Đã kết nối lại thư mục posts local.' : 'Chưa được cấp quyền đọc và ghi thư mục posts.', localPermission === 'granted' ? 'ok' : 'error');
+        } catch { await chooseLocalFolder(); }
+      }
       async function syncLocal({ quiet = false }: { quiet?: boolean } = {}) {
         if (!localDirectory) {
-          if (!quiet) await chooseLocalFolder();
+          if (!quiet) return chooseLocalFolder();
           return false;
         }
         try {
-          let target = localDirectory;
-          for (const part of relativeFolder().split('/')) target = await target.getDirectoryHandle(part, { create: true });
-          target = await target.getDirectoryHandle(slugify(title.value || 'untitled'), { create: true });
+          if (!await requestLocalPermission()) throw new Error('Cần cấp lại quyền thư mục posts local.');
+          const filePath = currentPath();
+          const parts = localRelativePath(filePath).split('/');
+          let target: FileSystemDirectoryHandle = localDirectory;
+          for (const part of parts.slice(0, -1)) target = await target.getDirectoryHandle(part, { create: true });
           const write = async (name: string, data: File | string) => { const handle = await target.getFileHandle(name, { create: true }); const stream = await handle.createWritable(); await stream.write(data); await stream.close(); };
-          await write('index.md', composePost()); for (const asset of assets) await write(asset.name, asset.file);
-          if (!quiet) setStatus('Đã đồng bộ write-up và file đính kèm vào folder local.', 'ok');
+          await write(parts.at(-1)!, composePost()); for (const asset of assets) await write(asset.name, asset.file);
+          if (!quiet) setStatus('Đã đồng bộ write-up và file đính kèm vào src/content/posts local.', 'ok');
           return true;
         } catch (error) {
           if (!quiet) setStatus(error instanceof Error ? error.message : String(error), 'error');
@@ -727,6 +861,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       }
       document.querySelectorAll<HTMLButtonElement>('[data-new]').forEach((button) => button.addEventListener('click', () => startNewInFolder(activeFolder || folder.value || 'Dreamhack')));
       $('[data-reload]').addEventListener('click', () => void loadTree());
+      $('[data-local-connect]').addEventListener('click', () => void connectLocalFolder());
       $('[data-connect]').addEventListener('click', () => {
         if (tokenInput.value.trim()) localStorage.setItem('ctf-wu.studio-token', tokenInput.value.trim());
         githubConnected = false; updateConnection(); void loadTree();
@@ -792,7 +927,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
   .studio { display:grid; grid-template-columns:19rem minmax(0,1fr); grid-template-rows:3.35rem minmax(0,1fr); min-height:100dvh; transition:grid-template-columns .18s ease; } .studio[data-sidebar-collapsed] { grid-template-columns:0 minmax(0,1fr); }
   .topbar { grid-column:1/-1; display:flex; min-height:3.35rem; align-items:center; justify-content:space-between; gap:.7rem; padding:.4rem .75rem; border-bottom:1px solid var(--line); background:#25262a; } .brand-actions,.top-actions { display:flex; align-items:center; gap:.45rem; min-width:0; } .icon-button { display:grid; width:2rem; height:2rem; place-items:center; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--muted); font-size:.9rem; } .wordmark { color:var(--text); font-size:.9rem; font-weight:800; letter-spacing:.1em; text-decoration:none; white-space:nowrap; } .wordmark span { color:var(--accent); } .wordmark small { color:var(--muted); font-size:.58rem; font-weight:500; letter-spacing:.06em; }
   .connection-pill { display:flex; align-items:center; gap:.4rem; min-height:1.85rem; padding:0 .55rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--muted); font-size:.64rem; } .connection-pill i { width:.48rem; height:.48rem; border-radius:50%; background:#777; } .connection-pill[data-connected='true'] { border-color:#4c8b67; color:#a5e4bb; } .connection-pill[data-connected='true'] i { background:var(--ok); box-shadow:0 0 0 .16rem #68d39122; }
-  .top-actions a,.top-actions button,.editor-tools button,.markdown-tools button { min-height:2.25rem; padding:.42rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); text-decoration:none; font-size:.72rem; white-space:nowrap; } .top-actions a:hover,.editor-tools button:hover,.markdown-tools button:hover { border-color:var(--accent); color:#e2bbff; } .top-actions .publish { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; }
+  .top-actions a,.top-actions button,.editor-tools button,.markdown-tools button { min-height:2.25rem; padding:.42rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); text-decoration:none; font-size:.72rem; white-space:nowrap; } .top-actions a:hover,.editor-tools button:hover,.markdown-tools button:hover { border-color:var(--accent); color:#e2bbff; } .top-actions .local-root[data-connected='true'] { border-color:#55a975; color:#a6edbd; } .top-actions .publish { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; }
   .library { min-height:0; overflow:auto; padding:1rem; border-right:1px solid var(--line); background:#25262a; transition:opacity .16s ease; } .studio[data-sidebar-collapsed] .library { overflow:hidden; padding:0; opacity:0; pointer-events:none; } .library-head { display:flex; align-items:start; justify-content:space-between; gap:.5rem; } .eyebrow { margin:0 0 .3rem; color:var(--muted); font-size:.6rem; letter-spacing:.12em; text-transform:uppercase; } .library-head strong { display:block; max-width:14rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.72rem; } .library-head button { border:0; background:transparent; color:var(--muted); font-size:1.1rem; }
   .token-box { display:grid; gap:.5rem; margin:1rem 0; padding:.75rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); font-size:.72rem; } .token-box[hidden] { display:none; } .token-box input,.metadata input,.metadata select { width:100%; min-width:0; border:1px solid var(--line); border-radius:.35rem; padding:.55rem; background:#1d1e21; color:var(--text); } .token-box button { border:1px solid #b05be8; border-radius:.35rem; padding:.45rem; background:var(--accent-soft); color:#e2bbff; } .token-box p { margin:0; color:var(--muted); font-size:.62rem; line-height:1.45; }
   .new-file { width:100%; margin:1rem 0; padding:.65rem .75rem; border:1px solid #ad63e6; border-radius:.45rem; background:#a85ce01f; color:#e1bdff; text-align:left; font-weight:700; } .empty-tree { color:var(--muted); font:.68rem/1.5 inherit; } .tree { display:grid; gap:.18rem; } .tree-file { display:grid; grid-template-columns:1.65rem minmax(0,1fr); gap:.2rem; width:100%; padding:.35rem; border-left:2px solid transparent; border-radius:.25rem; background:transparent; } .tree-file:hover { border-left-color:var(--accent); background:var(--accent-soft); } .tree-open { display:grid; gap:.12rem; min-width:0; border:0; background:transparent; color:var(--text); text-align:left; } .tree-file span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.73rem; } .tree-file small { overflow:hidden; color:var(--muted); font-size:.59rem; text-overflow:ellipsis; white-space:nowrap; }
