@@ -1,5 +1,12 @@
 ---
 title: PTML
+date: 2026-10-21
+ctf: Dreamhack
+difficulty: medium
+tags:
+  - XSS
+  - SVG
+  - cookie
 ---
 
 # Đề bài
