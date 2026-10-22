@@ -115,10 +115,6 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       import { oneDark } from '@codemirror/theme-one-dark';
       import katex from 'katex';
       import 'katex/dist/katex.min.css';
-      // Mermaid's pre-bundled browser build avoids the Vite dependency resolver
-      // walking optional language-server modules used only by Mermaid's tooling.
-      // @ts-expect-error The package does not publish a declaration for this bundle.
-      import mermaid from 'mermaid/dist/mermaid.min.js';
 
       const $ = <T extends Element = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
       const title = $<HTMLInputElement>('[data-title]');
@@ -137,6 +133,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       type Asset = { file: File; name: string; url: string };
       type RepoFile = { path: string; sha: string };
       type Draft = { title: string; folder: string; date: string; ctf: string; category: string; difficulty: string; tags: string; source: string };
+      type MermaidApi = { initialize: (config: Record<string, unknown>) => void; run: (config: { nodes: NodeListOf<Element> }) => Promise<void> };
       let repo = { name: '', branch: 'main' };
       let openFile: RepoFile | undefined;
       let assets: Asset[] = [];
@@ -145,6 +142,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       let editor: EditorView;
       let repoFiles: RepoFile[] = [];
       let repoTree: Array<{ path: string; sha: string; type: string }> = [];
+      let mermaidReady: Promise<MermaidApi> | undefined;
       let activeFolder: string | undefined;
       let selectedFiles = new Set<string>();
       let selectedFolders = new Set<string>();
@@ -166,7 +164,6 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           }),
           parent: $('[data-editor]'),
         });
-        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
         editor.contentDOM.addEventListener('paste', (event) => {
           const images = [...(event.clipboardData?.items ?? [])].filter((item) => item.type.startsWith('image/')).map((item) => item.getAsFile()).filter((file): file is File => Boolean(file));
           if (images.length) { event.preventDefault(); addFiles(images); }
@@ -526,6 +523,24 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           link.replaceWith(frame);
         }
       }
+      async function renderMermaidDiagrams() {
+        const nodes = preview.querySelectorAll('.mermaid');
+        if (!nodes.length) return;
+        try {
+          // The pre-bundled browser file has no published TypeScript declaration.
+          // @ts-expect-error Mermaid does not type this browser bundle.
+          mermaidReady ??= import('mermaid/dist/mermaid.min.js').then((module) => module.default as unknown as MermaidApi);
+          const mermaid = await mermaidReady;
+          mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+          await mermaid.run({ nodes });
+        } catch (error) {
+          nodes.forEach((node) => {
+            node.classList.add('mermaid-error');
+            node.setAttribute('title', 'Không render được sơ đồ Mermaid.');
+          });
+          console.error('Mermaid preview failed:', error);
+        }
+      }
       function prepareExtensions(source: string) {
         const footnotes: string[] = [];
         const withoutDefinitions = source.replace(/^\[\^(\d+)\]:\s*(.+)$/gim, (_all, id, content) => { footnotes[Number(id) - 1] = content; return ''; });
@@ -559,7 +574,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
             code.innerHTML = escapeHtml(code.textContent ?? '');
           }
         }));
-        if (version === renderVersion) await mermaid.run({ nodes: preview.querySelectorAll('.mermaid') });
+        if (version === renderVersion) await renderMermaidDiagrams();
         if (version === renderVersion) previewState.textContent = 'Live preview';
       }
       async function publish() {
