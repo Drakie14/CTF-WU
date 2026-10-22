@@ -270,6 +270,112 @@ function onPageLoad(): void {
   firstLoad = false;
 }
 
+const STUDIO_TOKEN_KEY = 'ctf-wu.studio-token';
+
+function savedAdminTokens(): string[] {
+  const values: string[] = [];
+  try {
+    const studioToken = localStorage.getItem(STUDIO_TOKEN_KEY);
+    if (studioToken) values.push(studioToken);
+    const user = JSON.parse(localStorage.getItem('sveltia-cms.user') ?? 'null') as { token?: unknown } | null;
+    if (typeof user?.token === 'string' && user.token && !values.includes(user.token)) values.push(user.token);
+  } catch {
+    // localStorage có thể bị chặn; lúc đó yêu cầu nhập PAT trong form.
+  }
+  return values;
+}
+
+async function verifyAdminToken(token: string): Promise<void> {
+  const configResponse = await fetch('/admin/config.yml', { cache: 'no-store' });
+  if (!configResponse.ok) throw new Error('Không đọc được cấu hình repository của Studio.');
+  const config = await configResponse.text();
+  const repo = /^\s{2}repo:\s*([^#\s]+)\s*$/m.exec(config)?.[1];
+  if (!repo) throw new Error('Không tìm thấy repository trong cấu hình Studio.');
+
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  const userResponse = await fetch('https://api.github.com/user', { headers });
+  if (!userResponse.ok) {
+    const result = await userResponse.json().catch(() => ({})) as { message?: string };
+    throw new Error(`GitHub ${userResponse.status}: ${result.message ?? 'PAT không hợp lệ.'}`);
+  }
+
+  const response = await fetch(`https://api.github.com/repos/${repo}`, {
+    headers,
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({})) as { message?: string };
+    throw new Error(`GitHub ${response.status}: ${result.message ?? response.statusText}`);
+  }
+  const result = await response.json() as { permissions?: { push?: boolean } };
+  if (result.permissions?.push !== true) {
+    throw new Error('PAT hợp lệ nhưng chưa có quyền ghi repository. Hãy cấp Contents: Read and write rồi thử lại.');
+  }
+}
+
+function setupAdminGate(): void {
+  const dialog = document.querySelector<HTMLDialogElement>('[data-admin-auth]');
+  const form = dialog?.querySelector<HTMLFormElement>('[data-admin-auth-form]');
+  const input = dialog?.querySelector<HTMLInputElement>('[data-admin-token]');
+  const error = dialog?.querySelector<HTMLElement>('[data-admin-auth-error]');
+  const submit = dialog?.querySelector<HTMLButtonElement>('[data-admin-auth-submit]');
+  const close = dialog?.querySelector<HTMLButtonElement>('[data-admin-auth-close]');
+  if (!dialog || !form || !input || !error || !submit || !close || dialog.dataset.ready) return;
+  dialog.dataset.ready = 'true';
+
+  const openDialog = (message = '') => {
+    error.textContent = message;
+    if (!dialog.open) dialog.showModal();
+    input.focus();
+  };
+  close.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const token = input.value.trim();
+    if (!token) { input.focus(); return; }
+    submit.disabled = true;
+    submit.textContent = 'Đang xác thực…';
+    error.textContent = '';
+    try {
+      await verifyAdminToken(token);
+      localStorage.setItem(STUDIO_TOKEN_KEY, token);
+      dialog.close();
+      window.location.assign('/admin/studio/');
+    } catch (reason) {
+      error.textContent = reason instanceof Error ? reason.message : String(reason);
+      input.focus();
+    } finally {
+      submit.disabled = false;
+      submit.textContent = 'Kiểm tra và tiếp tục';
+    }
+  });
+
+  document.addEventListener('click', async (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const link = target.closest<HTMLAnchorElement>('[data-admin-link]');
+    if (!link) return;
+    event.preventDefault();
+
+    const tokens = savedAdminTokens();
+    for (const token of tokens) {
+      try {
+        await verifyAdminToken(token);
+        localStorage.setItem(STUDIO_TOKEN_KEY, token);
+        window.location.assign(link.href);
+        return;
+      } catch {
+        // Nếu không có PAT đã xác thực, mở form để đăng nhập hoặc sửa token cũ.
+      }
+    }
+    openDialog(tokens.length ? 'Phiên GitHub cũ không còn quyền truy cập. Nhập lại PAT để tiếp tục.' : '');
+  });
+}
+
 // Khi ClientRouter chuyển phần tử `transition:persist` sang document mới, trình duyệt
 // reset vị trí cuộn của nó (DOM được gắn lại) → lưu trước khi swap, khôi phục ngay sau.
 let swapState: { list: HTMLElement; scrollTop: number } | null = null;
@@ -283,4 +389,5 @@ document.addEventListener('astro:after-swap', () => {
   swapState = null;
 });
 
+setupAdminGate();
 document.addEventListener('astro:page-load', onPageLoad);
