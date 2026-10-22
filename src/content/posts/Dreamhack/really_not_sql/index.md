@@ -6,7 +6,8 @@ category: web
 difficulty: medium
 tags:
   - PHP
-  - RCE
+  - .htaccess
+  - DAV
 ---
 
 # Đề bài
