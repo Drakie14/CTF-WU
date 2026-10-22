@@ -1,5 +1,12 @@
 ---
 title: Really not SQL, Just JSON
+date: 2026-10-18
+ctf: Dreamhack
+category: web
+difficulty: medium
+tags:
+  - PHP
+  - RCE
 ---
 
 # Đề bài
