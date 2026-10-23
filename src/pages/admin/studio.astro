@@ -210,6 +210,9 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       let applyingSyncedScroll = false;
       let githubConnected = false;
       let activeFolder: string | undefined;
+      const treeOpenKey = 'ctf-wu.studio.tree-open';
+      const treeOpen = new Set<string>((() => { try { return JSON.parse(localStorage.getItem(treeOpenKey) ?? '[]') as string[]; } catch { return []; } })());
+      const saveTreeOpen = () => { try { localStorage.setItem(treeOpenKey, JSON.stringify([...treeOpen])); } catch { /* storage unavailable */ } };
       const selectedFiles = new Set<string>();
       const selectedFolders = new Set<string>();
       let folderSet = new Set<string>();
@@ -963,33 +966,52 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         const tree = $('[data-tree]');
         if (!githubConnected) return;
         const here = currentFolder();
+        const opened = currentPath();
+        // Ancestors of the active folder always stay expanded so the current branch is visible.
+        for (let at = here; at; at = parentOf(at)) treeOpen.add(at);
         const rows: HTMLElement[] = [];
         const path = document.createElement('p'); path.className = 'tree-path'; path.textContent = here || 'Thư mục gốc'; rows.push(path);
-        const navigate = (target: string) => { showLibrary(); openFolder(target); };
-        if (here) {
-          const up = document.createElement('button'); up.type = 'button'; up.className = 'tree-folder tree-up'; up.textContent = '↰ Lên trên';
-          up.dataset.dropFolder = parentOf(here); up.addEventListener('click', () => navigate(parentOf(here))); rows.push(up);
-        }
-        for (const child of childFolders(here)) {
-          const row = document.createElement('button'); row.type = 'button'; row.className = 'tree-folder';
-          row.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4.5 8.5h8l3 3h12v13a2 2 0 0 1-2 2h-19a2 2 0 0 1-2-2z"/></svg><span></span>';
-          row.querySelector('span')!.textContent = leafName(child); row.title = child; row.dataset.dropFolder = child;
-          row.addEventListener('click', () => navigate(child)); rows.push(row);
-        }
-        for (const file of repoFiles.filter((entry) => folderOf(entry) === here)) {
-          const item = document.createElement('div'); item.className = 'tree-file';
-          item.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="tree-open"><span></span><small></small></button>`;
-          item.querySelector('span')!.textContent = articleName(file); item.querySelector('small')!.textContent = relPath(file.path) + (hiddenOf(file) ? ' · Đã ẩn' : '');
-          item.querySelector('.selection-checkbox')!.addEventListener('click', () => toggleSelectedFile(file.path));
-          item.querySelector('.tree-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFile(file.path); else void openPost(file); }); rows.push(item);
-        }
-        for (const file of localOnly.filter((entry) => folderOf(entry) === here)) {
-          const item = document.createElement('div'); item.className = 'tree-file'; item.dataset.local = '';
-          item.innerHTML = '<span class="selection-checkbox" aria-hidden="true"></span><button type="button" class="tree-open"><span></span><small></small></button>';
-          item.querySelector('span:not(.selection-checkbox)')!.textContent = articleName(file); item.querySelector('small')!.textContent = `${relPath(file.path)} · Chưa publish`;
-          item.querySelector('.tree-open')!.addEventListener('click', () => void openLocalPost(file)); rows.push(item);
-        }
-        if (rows.length === 1) { const empty = document.createElement('p'); empty.className = 'empty-tree'; empty.textContent = 'Folder này chưa có gì.'; rows.push(empty); }
+        const navigate = (target: string) => { treeOpen.add(target); saveTreeOpen(); showLibrary(); openFolder(target); };
+        const indent = (row: HTMLElement, depth: number) => row.style.setProperty('--depth', String(depth));
+        const addFiles = (parent: string, depth: number) => {
+          for (const file of repoFiles.filter((entry) => folderOf(entry) === parent)) {
+            const item = document.createElement('div'); item.className = 'tree-file'; indent(item, depth);
+            if (file.path === opened) item.dataset.current = '';
+            item.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="tree-open"><span></span><small></small></button>`;
+            item.querySelector('span')!.textContent = articleName(file); item.querySelector('small')!.textContent = leafName(parentOf(file.path)) + (hiddenOf(file) ? ' · Đã ẩn' : '');
+            item.title = relPath(file.path);
+            item.querySelector('.selection-checkbox')!.addEventListener('click', () => toggleSelectedFile(file.path));
+            item.querySelector('.tree-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFile(file.path); else void openPost(file); }); rows.push(item);
+          }
+          for (const file of localOnly.filter((entry) => folderOf(entry) === parent)) {
+            const item = document.createElement('div'); item.className = 'tree-file'; item.dataset.local = ''; indent(item, depth);
+            if (file.path === opened) item.dataset.current = '';
+            item.innerHTML = '<span class="selection-checkbox" aria-hidden="true"></span><button type="button" class="tree-open"><span></span><small></small></button>';
+            item.querySelector('span:not(.selection-checkbox)')!.textContent = articleName(file); item.querySelector('small')!.textContent = `${leafName(parentOf(file.path))} · Chưa publish`;
+            item.title = relPath(file.path);
+            item.querySelector('.tree-open')!.addEventListener('click', () => void openLocalPost(file)); rows.push(item);
+          }
+        };
+        const addBranch = (parent: string, depth: number) => {
+          for (const child of childFolders(parent)) {
+            const expanded = treeOpen.has(child);
+            const hasChildren = childFolders(child).length > 0 || [...repoFiles, ...localOnly].some((file) => folderOf(file) === child);
+            const row = document.createElement('div'); row.className = 'tree-branch'; indent(row, depth);
+            row.innerHTML = '<button type="button" class="tree-toggle"></button><button type="button" class="tree-folder"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4.5 8.5h8l3 3h12v13a2 2 0 0 1-2 2h-19a2 2 0 0 1-2-2z"/></svg><span></span></button>';
+            const toggle = row.querySelector<HTMLButtonElement>('.tree-toggle')!;
+            toggle.textContent = hasChildren ? (expanded ? '▾' : '▸') : '';
+            toggle.disabled = !hasChildren;
+            toggle.setAttribute('aria-label', expanded ? 'Thu gọn' : 'Mở rộng'); toggle.setAttribute('aria-expanded', String(expanded));
+            toggle.addEventListener('click', () => { if (expanded) treeOpen.delete(child); else treeOpen.add(child); saveTreeOpen(); renderSidebar(); });
+            const folderButton = row.querySelector<HTMLButtonElement>('.tree-folder')!;
+            folderButton.querySelector('span')!.textContent = leafName(child); folderButton.title = child; folderButton.dataset.dropFolder = child;
+            if (child === here) folderButton.setAttribute('aria-current', 'true');
+            folderButton.addEventListener('click', () => navigate(child)); rows.push(row);
+            if (expanded) { addBranch(child, depth + 1); addFiles(child, depth + 1); }
+          }
+        };
+        addBranch('', 0); addFiles('', 0);
+        if (rows.length === 1) { const empty = document.createElement('p'); empty.className = 'empty-tree'; empty.textContent = 'Chưa có folder nào.'; rows.push(empty); }
         tree.replaceChildren(...rows);
       }
       function renderCrumbs(here: string) {
@@ -1678,6 +1700,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
   .selection-checkbox { border-radius:.3rem; transition:color .12s ease, background .12s ease; } .selection-checkbox:hover { background:var(--accent-soft); color:#fff; } .recent-card:hover,.folder-file-card:hover { transform:translateY(-1px); } .recent-card,.folder-file-card { transition:border-color .15s ease, transform .15s ease, background .15s ease; }
   .library-head { padding-bottom:.9rem; border-bottom:1px solid var(--line); } .tree { gap:.12rem; margin-top:.35rem; } .tree-path { margin:.2rem 0 .35rem; padding:0 .35rem; overflow:hidden; color:var(--muted); font-size:.6rem; letter-spacing:.1em; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; }
   .tree-folder { display:flex; align-items:center; gap:.5rem; width:100%; padding:.42rem .45rem; border:0; border-left:2px solid transparent; border-radius:.25rem; background:transparent; color:var(--text); font-size:.73rem; text-align:left; } .tree-folder:hover { border-left-color:var(--accent); background:var(--accent-soft); } .tree-folder svg { flex:none; width:1rem; height:1rem; fill:#b879ec38; stroke:#c48bfa; stroke-width:2; stroke-linejoin:round; } .tree-folder span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tree-up { color:var(--muted); }
+  .tree-branch { display:grid; grid-template-columns:1.1rem minmax(0,1fr); align-items:center; padding-left:calc(var(--depth,0) * .85rem); } .tree-file { padding-left:calc(.35rem + var(--depth,0) * .85rem); } .tree-toggle { width:1.1rem; height:1.6rem; padding:0; border:0; border-radius:.2rem; background:transparent; color:var(--muted); font-size:.7rem; } .tree-toggle:hover:not(:disabled) { color:#fff; background:var(--accent-soft); } .tree-toggle:disabled { cursor:default; } .tree-folder[aria-current] { border-left-color:var(--accent); background:var(--accent-soft); color:#fff; font-weight:650; } .tree-file[data-current] { border-left-color:var(--accent); background:var(--accent-soft); } .tree-file[data-local] small { color:#7cc496; }
   .name-dialog { width:min(26rem,calc(100vw - 2rem)); padding:0; border:1px solid #6a4a86; border-radius:.7rem; background:var(--panel); color:var(--text); box-shadow:0 1.5rem 4rem #000a; } .name-dialog::backdrop { background:#0009; backdrop-filter:blur(2px); } .name-form { display:grid; gap:.55rem; padding:1.3rem; } .name-form h2 { margin:0 0 .4rem; overflow:hidden; font:700 1.25rem/1.25 system-ui,sans-serif; text-overflow:ellipsis; white-space:nowrap; } .name-form label { color:var(--muted); font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; } .name-form input { width:100%; padding:.65rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:#1d1e21; color:var(--text); } .name-form input:focus { border-color:var(--accent); outline:2px solid #c674ff33; } .name-hint { min-height:1.9rem; margin:0; color:var(--muted); font-size:.64rem; line-height:1.5; } .name-hint[data-kind='error'] { color:var(--error); } .name-actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:.3rem; } .name-actions button { min-height:2.2rem; padding:.4rem .9rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.72rem; } .name-actions button:hover { border-color:var(--accent); } .name-actions .primary { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; }
   @media (max-width:38rem) { .browser-head { align-items:stretch; } .browser-actions { flex-wrap:wrap; } .browser-actions > * { flex:1 1 auto; } .selection-bar { top:-1.2rem; } }
 
