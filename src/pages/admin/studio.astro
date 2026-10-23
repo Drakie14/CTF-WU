@@ -64,6 +64,8 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           </div>
           <div class="selection-bar" data-selection-bar hidden>
             <span data-selection-summary></span>
+            <button type="button" data-visibility="hide">Ẩn khỏi blog</button>
+            <button type="button" data-visibility="show">Hiện trên blog</button>
             <button type="button" data-folder-rename>Đổi tên folder</button>
             <button type="button" data-selection-clear>Bỏ chọn</button>
           </div>
@@ -358,6 +360,8 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         if (difficulty.value) fields.difficulty = difficulty.value;
         const tagList = tags.value.split(',').map((tag) => tag.trim()).filter(Boolean);
         if (tagList.length) fields.tags = tagList;
+        const existing = repoFiles.find((file) => file.path === currentPath());
+        if (existing && hiddenOf(existing)) fields.draft = true;
         return `---\n${stringifyYaml(fields)}---\n\n${editorSource().trim()}\n`;
       }
       function populate(source: string) {
@@ -400,6 +404,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           $('[data-token-box]').hidden = true;
           updateConnection();
           refreshFolderView();
+          void loadHiddenStates();
         } catch (error) {
           tree.innerHTML = '';
           const message = error instanceof Error ? error.message : String(error);
@@ -524,6 +529,45 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         activeFolder = path || undefined; selectedFiles.clear(); selectedFolders.clear();
         renderFolderHome(); renderSidebar();
       }
+      const hiddenBySha = new Map<string, boolean>();
+      const hiddenOf = (file: RepoFile) => hiddenBySha.get(file.sha) === true;
+      const frontmatterRe = /^---\r?\n([\s\S]*?)\r?\n---/;
+      const isDraftSource = (source: string) => /^draft:\s*true\s*$/m.test(frontmatterRe.exec(source)?.[1] ?? '');
+      function withDraftFlag(source: string, hidden: boolean) {
+        const match = frontmatterRe.exec(source);
+        if (!match) return hidden ? `---\ndraft: true\n---\n\n${source}` : source;
+        const lines = match[1].split(/\r?\n/).filter((line) => !/^draft\s*:/.test(line));
+        if (hidden) lines.push('draft: true');
+        return `---\n${lines.join('\n')}\n---${source.slice(match[0].length)}`;
+      }
+      async function loadHiddenStates() {
+        const todo = remoteBlobs.filter((item) => item.path.startsWith(`${postRoot}/`) && item.path.endsWith('.md') && !hiddenBySha.has(item.sha));
+        for (let i = 0; i < todo.length; i += 8) {
+          await Promise.all(todo.slice(i, i + 8).map(async (item) => {
+            try { hiddenBySha.set(item.sha, isDraftSource(decode((await api<{ content: string }>(`/git/blobs/${item.sha}`)).content))); } catch { /* giữ trạng thái hiện */ }
+          }));
+        }
+        refreshFolderView();
+      }
+      async function setVisibility(hide: boolean) {
+        const picked = new Set(selectedFiles);
+        for (const path of selectedFolders) repoFiles.filter((file) => inFolder(file, path)).forEach((file) => picked.add(file.path));
+        const files = repoFiles.filter((file) => picked.has(file.path) && hiddenOf(file) !== hide);
+        if (!files.length) return setStatus(hide ? 'Các bài đã chọn đều đang ẩn.' : 'Các bài đã chọn đều đang hiện.', 'info');
+        if (!token()) return setStatus('Cần kết nối GitHub để đổi trạng thái bài.', 'error');
+        try {
+          setStatus(`Đang chuẩn bị ${files.length} bài…`);
+          const entries = await Promise.all(files.map(async (file): Promise<TreeEntry> => {
+            const source = decode((await api<{ content: string }>(`/git/blobs/${file.sha}`)).content);
+            const blob = await api<{ sha: string }>('/git/blobs', { method: 'POST', body: JSON.stringify({ content: withDraftFlag(source, hide), encoding: 'utf-8' }) });
+            hiddenBySha.set(blob.sha, hide);
+            return { path: file.path, mode: '100644', type: 'blob', sha: blob.sha };
+          }));
+          selectedFiles.clear(); selectedFolders.clear();
+          stageEntries(entries, `content: ${hide ? 'ẩn' : 'hiện'} ${files.length} write-up trên blog`);
+          setStatus(`Đã thêm việc ${hide ? 'ẩn' : 'hiện'} ${files.length} bài vào danh sách chờ. Bấm Save để commit.`, 'ok');
+        } catch (error) { setStatus(errorMessage(error), 'error'); }
+      }
       const selectionMode = () => selectedFiles.size > 0 || selectedFolders.size > 0;
       function toggleSelectedFile(path: string) { if (selectedFiles.has(path)) selectedFiles.delete(path); else selectedFiles.add(path); renderFolderHome(); renderSidebar(); }
       function toggleSelectedFolder(path: string) { if (selectedFolders.has(path)) selectedFolders.delete(path); else selectedFolders.add(path); renderFolderHome(); }
@@ -532,6 +576,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="file-open"><span class="file-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="file-sheet" d="M8 3.5h10l7 7v17a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-23a1 1 0 0 1 1-1z"/><path class="file-fold" d="M18 3.5v7h7"/><path class="file-lines" d="M11 16h10M11 20h10M11 24h7"/></svg></span><strong></strong><small></small></button>`;
         card.querySelector('strong')!.textContent = articleName(file); card.querySelector('small')!.textContent = folderOf(file) || 'Chưa phân loại';
         card.dataset.selected = String(selectedFiles.has(file.path));
+        if (hiddenOf(file)) { card.dataset.hidden = ''; card.querySelector('small')!.textContent += ' · Đã ẩn'; }
         card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFile(file.path); });
         card.querySelector('.file-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFile(file.path); else void openPost(file); });
         card.addEventListener('dragstart', () => { if (!selectedFiles.has(file.path)) { selectedFiles.clear(); selectedFiles.add(file.path); } });
@@ -571,7 +616,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         for (const file of repoFiles.filter((entry) => folderOf(entry) === here)) {
           const item = document.createElement('div'); item.className = 'tree-file';
           item.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="tree-open"><span></span><small></small></button>`;
-          item.querySelector('span')!.textContent = articleName(file); item.querySelector('small')!.textContent = relPath(file.path);
+          item.querySelector('span')!.textContent = articleName(file); item.querySelector('small')!.textContent = relPath(file.path) + (hiddenOf(file) ? ' · Đã ẩn' : '');
           item.querySelector('.selection-checkbox')!.addEventListener('click', () => toggleSelectedFile(file.path));
           item.querySelector('.tree-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFile(file.path); else void openPost(file); }); rows.push(item);
         }
@@ -596,6 +641,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         const bar = $('[data-selection-bar]'); bar.toggleAttribute('hidden', !parts.length);
         $('[data-selection-summary]').textContent = parts.length ? `Đã chọn ${parts.join(' và ')}` : '';
         const rename = $<HTMLButtonElement>('[data-folder-rename]');
+        document.querySelectorAll<HTMLButtonElement>('[data-visibility]').forEach((button) => { button.disabled = !selectedFiles.size && !selectedFolders.size; });
         rename.disabled = selectedFolders.size !== 1;
         rename.title = selectedFolders.size === 1 ? 'Đổi tên folder đang chọn' : 'Chọn đúng một folder để đổi tên';
       }
@@ -1109,6 +1155,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       $('[data-library]').addEventListener('click', showLibrary);
       $('[data-folder-back]').addEventListener('click', () => openFolder(parentOf(currentFolder())));
       $('[data-folder-create]').addEventListener('click', () => void createFolder());
+      document.querySelectorAll<HTMLButtonElement>('[data-visibility]').forEach((button) => button.addEventListener('click', () => void setVisibility(button.dataset.visibility === 'hide')));
       $('[data-folder-rename]').addEventListener('click', () => void renameSelectedFolder());
       $('[data-pending-save]').addEventListener('click', () => void savePending());
       $('[data-pending-discard]').addEventListener('click', discardPending);
@@ -1203,7 +1250,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
   .crumbs { display:flex; flex-wrap:wrap; align-items:center; gap:.15rem .35rem; margin:0 0 .5rem; color:var(--muted); font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; } .crumbs button { padding:.1rem .25rem; border:0; border-radius:.25rem; background:transparent; color:var(--muted); font:inherit; letter-spacing:inherit; text-transform:inherit; } .crumbs button:hover { background:var(--accent-soft); color:#e2bbff; } .crumbs i { color:#5d606b; font-style:normal; } .crumbs [aria-current] { padding:.1rem .25rem; color:var(--text); }
   .create-subfolder { min-height:2.5rem; padding:.55rem .85rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); color:var(--text); font-weight:700; } .create-subfolder:hover { border-color:var(--accent); color:#e2bbff; } .create-folder { background:var(--accent); border-color:#b05be8; color:#21152b; } .create-folder:hover { background:#d28cff; } .back-folder:hover { border-color:var(--accent); color:var(--text); }
   .pending-bar { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #b05be8; border-radius:.55rem; background:var(--accent-soft); } .pending-bar[hidden] { display:none; } .pending-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .pending-bar button { min-height:2rem; padding:.3rem .8rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; font-weight:700; } .pending-bar [data-pending-save] { background:var(--accent); border-color:#b05be8; color:#21152b; }
-  .selection-bar { position:sticky; top:-1.6rem; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #7b4aa3; border-radius:.55rem; background:#2e2339f2; box-shadow:0 .6rem 1.6rem #0006; backdrop-filter:blur(6px); } .selection-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .selection-bar button { min-height:2rem; padding:.3rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; } .selection-bar button:hover:not(:disabled) { border-color:var(--accent); color:#e2bbff; } .selection-bar button:disabled { opacity:.4; cursor:not-allowed; } .selection-bar [data-folder-rename]:not(:disabled) { border-color:#b05be8; background:var(--accent-soft); color:#e9ccff; font-weight:700; }
+  .selection-bar { position:sticky; top:-1.6rem; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #7b4aa3; border-radius:.55rem; background:#2e2339f2; box-shadow:0 .6rem 1.6rem #0006; backdrop-filter:blur(6px); } .selection-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .selection-bar button { min-height:2rem; padding:.3rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; } .selection-bar button:hover:not(:disabled) { border-color:var(--accent); color:#e2bbff; } .recent-card[data-hidden],.folder-file-card[data-hidden] { opacity:.55; border-style:dashed; } .selection-bar button:disabled { opacity:.4; cursor:not-allowed; } .selection-bar [data-folder-rename]:not(:disabled) { border-color:#b05be8; background:var(--accent-soft); color:#e9ccff; font-weight:700; }
   .library-status { min-height:0; margin:0 0 1rem; padding:0; background:transparent; } .library-status:not(:empty) { padding:.5rem .75rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); }
   .library-empty { display:grid; justify-items:center; gap:.35rem; padding:3rem 1rem; border:1px dashed #5a5c68; border-radius:.7rem; color:var(--muted); text-align:center; font-size:.72rem; } .library-empty strong { color:var(--text); font:650 1rem/1.3 system-ui,sans-serif; }
   .folder-grid { gap:.9rem; } .folder-card { min-height:8.6rem; overflow:hidden; } .folder-card::before { content:''; position:absolute; inset:0 0 auto; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:0; transition:opacity .15s ease; } .folder-card:hover { transform:translateY(-1px); box-shadow:0 .7rem 1.6rem #0005; } .folder-card:hover::before,.folder-card[data-selected='true']::before { opacity:1; } .folder-open { min-height:8.6rem; padding:1.1rem 1.2rem; } .folder-card[data-selected='true'],.recent-card[data-selected='true'],.folder-file-card[data-selected='true'] { border-color:var(--accent); background:#33283d; box-shadow:0 0 0 1px #c674ff55; } .folder-card strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .folder-card[data-drop] { border-style:dashed; background:#3a2c47; }
