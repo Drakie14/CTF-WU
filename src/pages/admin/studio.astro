@@ -240,7 +240,12 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       }
 
       const draftKey = () => `ctf-wu.studio.draft.${openFile?.path ?? `new:${relativeFolder()}`}`;
-      function scheduleDraft() { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 450); }
+      function scheduleDraft() { clearTimeout(draftTimer); draftTimer = setTimeout(() => { draftTimer = undefined; saveDraft(); }, 450); }
+      /** Ghi nốt nháp đang chờ và đợi chuỗi ghi file local xong trước khi đổi bài, để không ghi nội dung bài này vào thư mục bài kia. */
+      async function settleDraft() {
+        if (draftTimer) { clearTimeout(draftTimer); draftTimer = undefined; saveDraft(); }
+        await localWrite;
+      }
       function saveDraft() {
         if ($('[data-composer]').hasAttribute('hidden') || !(title.value.trim() || editorSource().trim())) return;
         if (!openFile) { queueLocalSave(); if (localDraftPath) return; }
@@ -532,6 +537,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         return { source: localSource, message: 'Xung đột đồng bộ: cả local và GitHub đều đổi. Đang giữ bản local để bạn rà soát trước khi Publish.' };
       }
       async function openPost(file: RepoFile) {
+        await settleDraft();
         try {
           setStatus('Đang mở write-up…');
           const content = await api<{ content: string; sha: string }>(`/contents/${file.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repo.branch)}`);
@@ -546,6 +552,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }
       async function openLocalPost(file: RepoFile) {
+        await settleDraft();
         try {
           const source = await readLocalArticle(file.path);
           if (source === undefined) return setStatus('Không đọc được file local. Kiểm tra quyền thư mục posts.', 'error');
@@ -587,6 +594,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       async function newWriteup() {
         const folderName = currentFolder() || folder.value || 'Dreamhack';
         const ready = localDirectory ? await requestLocalPermission().catch(() => false) : await chooseLocalFolder();
+        await settleDraft();
         startNewInFolder(folderName);
         setStatus(ready
           ? 'Nhập tiêu đề để tạo file trong thư mục posts local. Bài chỉ lên GitHub khi bấm Publish.'
@@ -599,6 +607,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         setTimeout(() => editor.focus(), 0);
       }
       function showLibrary() {
+        void settleDraft();
         $('[data-sidebar-new]').setAttribute('hidden', '');
         $('[data-composer]').setAttribute('hidden', '');
         $('[data-library-home]').removeAttribute('hidden');
@@ -1225,7 +1234,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       function updateTagOptions() {
         const typed = tags.value;
         const cut = typed.lastIndexOf(',');
-        const prefix = cut < 0 ? '' : `${typed.slice(0, cut + 1).trimEnd()} `;
+        const prefix = cut < 0 ? '' : typed.slice(0, cut + 1) + (/^\s*/.exec(typed.slice(cut + 1))?.[0] ?? '');
         const needle = typed.slice(cut + 1).trim().toLowerCase();
         const used = new Set(typed.slice(0, Math.max(cut, 0)).split(',').map((tag) => tag.trim().toLowerCase()));
         const options = [...tagVocabulary().values()]
@@ -1430,8 +1439,11 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
         if (!slugify(title.value)) return setStatus('Tiêu đề chưa tạo được tên folder hợp lệ.', 'error');
         if (!(await savePending())) return;
-        clearTimeout(draftTimer); await localWrite;
+        await settleDraft();
         const filePath = currentPath();
+        if (!openFile && remoteBlobs.some((item) => item.path.startsWith(`${articleDirectory()}/`))) {
+          return setStatus(`GitHub đã có ${relPath(articleDirectory())}; đổi tiêu đề hoặc folder để không ghi đè bài khác.`, 'error');
+        }
         try {
           setStatus('Đang tạo commit…');
           const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
