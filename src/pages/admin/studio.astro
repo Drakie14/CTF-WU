@@ -571,6 +571,45 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       const selectionMode = () => selectedFiles.size > 0 || selectedFolders.size > 0;
       function toggleSelectedFile(path: string) { if (selectedFiles.has(path)) selectedFiles.delete(path); else selectedFiles.add(path); renderFolderHome(); renderSidebar(); }
       function toggleSelectedFolder(path: string) { if (selectedFolders.has(path)) selectedFolders.delete(path); else selectedFolders.add(path); renderFolderHome(); }
+      function makeDragStack(count: number, label: string) {
+        const stack = document.createElement('div');
+        stack.style.cssText = 'position:fixed;top:-500px;left:-500px;width:180px;height:80px;pointer-events:none;';
+        const layers = Math.min(count, 3);
+        for (let i = layers - 1; i >= 0; i--) {
+          const sheet = document.createElement('div');
+          sheet.style.cssText = `position:absolute;inset:0;padding:.7rem .8rem;border:1px solid #a860db;border-radius:.5rem;background:#33283d;color:#f1e6fa;font:600 .74rem system-ui,sans-serif;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;box-shadow:0 .4rem 1rem #0007;transform:translate(${i * 6}px,${i * 5}px) rotate(${i * 3 * (i % 2 ? 1 : -1)}deg);`;
+          if (i === 0) sheet.textContent = label;
+          stack.append(sheet);
+        }
+        if (count > 1) {
+          const badge = document.createElement('span');
+          badge.textContent = String(count);
+          badge.style.cssText = 'position:absolute;top:-8px;right:-8px;min-width:1.5rem;height:1.5rem;padding:0 .35rem;display:grid;place-items:center;border-radius:999px;background:#b05be8;color:#fff;font:700 .72rem system-ui,sans-serif;box-shadow:0 .2rem .6rem #0008;';
+          stack.append(badge);
+        }
+        document.body.append(stack);
+        setTimeout(() => stack.remove(), 0);
+        return stack;
+      }
+      function selectedCards() {
+        return [...document.querySelectorAll<HTMLElement>('.recent-card,.folder-file-card')].filter((el) => el.dataset.selected === 'true');
+      }
+      function gatherSelectedCards(origin: HTMLElement) {
+        const target = origin.getBoundingClientRect();
+        setTimeout(() => {
+          for (const el of selectedCards()) {
+            if (el === origin) continue;
+            const box = el.getBoundingClientRect();
+            el.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1), opacity .42s ease';
+            el.style.transform = `translate(${target.left - box.left}px,${target.top - box.top}px) scale(.8) rotate(${(Math.random() - .5) * 8}deg)`;
+            el.style.opacity = '.35';
+          }
+        }, 0);
+      }
+      function releaseSelectedCards() {
+        for (const el of selectedCards()) { el.style.transition = 'transform .3s ease, opacity .3s ease'; el.style.transform = ''; el.style.opacity = ''; }
+        setTimeout(() => selectedCards().forEach((el) => { el.style.transition = ''; }), 320);
+      }
       function makeFileCard(file: RepoFile, className = 'recent-card') {
         const card = document.createElement('article'); card.className = className; card.draggable = true;
         card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="file-open"><span class="file-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="file-sheet" d="M8 3.5h10l7 7v17a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-23a1 1 0 0 1 1-1z"/><path class="file-fold" d="M18 3.5v7h7"/><path class="file-lines" d="M11 16h10M11 20h10M11 24h7"/></svg></span><strong></strong><small></small></button>`;
@@ -583,8 +622,10 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         card.addEventListener('dragstart', (event) => {
           if (!selectedFiles.has(file.path)) { selectedFiles.clear(); selectedFolders.clear(); selectedFiles.add(file.path); }
           event.dataTransfer?.setData('text/plain', [...selectedFiles].join('\n'));
-          if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+          if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setDragImage(makeDragStack(selectedFiles.size, articleName(file)), 90, 40); }
+          gatherSelectedCards(card);
         });
+        card.addEventListener('dragend', releaseSelectedCards);
         return card;
       }
       function makeFolderCard(path: string) {
