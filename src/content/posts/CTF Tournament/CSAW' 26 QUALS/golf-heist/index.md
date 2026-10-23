@@ -96,10 +96,7 @@ Có mật khẩu, `/api/vault/enter` cho vào tầng "privileged" và gợi ý C
 }
 ```
 
-`copy_headers` copy `X-User-*` từ phản hồi auth service xuống backend. CVE GHSA-7r4p-vjf4-gxv4: Caddy dính lỗi không strip header do client gửi lên trước khi forward. `/auth` không set `X-User-Role`, nên header `X-User-Role: admin` client tự nhét vào được giữ nguyên và backend tin tưởng — đúng như gợi ý *"The caddy doesn't strip what the auth service doesn't set."*
-
-> Bản source chạy thẳng uvicorn (không có Caddy trước), nên header gửi trực tiếp tới FastAPI luôn được nhận. Trên server thật có Caddy nhưng dính CVE nên header vẫn xuyên qua -> cùng một exploit chạy được ở cả hai nơi.
-
+`copy_headers` copy `X-User-*` từ phản hồi auth service xuống backend. CVE GHSA-7r4p-vjf4-gxv4: Caddy dính lỗi không strip header do client gửi lên trước khi forward. `/auth` không set `X-User-Role`, nên header `X-User-Role: admin` client tự nhét vào được giữ nguyên và backend tin tưởng
 ### Chuỗi khai thác
 1. `clubs/balls/bags` decode base64 thu được `R1,R2,R3` 
 2. `enigma` có được `WORDS`, ghép thành `PHRASE` 
@@ -189,7 +186,7 @@ Output:
 [+] FLAG: csaw{el3gant_sw1ng_n3ver_c4ught}
 ```
 
-Toàn bộ chuỗi khai thác cũng làm được hoàn toàn trong trình duyệt, không cần chạy lệnh ngoài: 
+Toàn bộ chuỗi khai thác cũng có thể làm được hoàn toàn trong trình duyệt, không cần chạy lệnh ngoài: 
 mở DevTools -> Console và dán đoạn tự-chứa dưới (fetch rotor từ header -> tính `enigma` -> `POST` kèm header injection):
 
 ```javascript!
