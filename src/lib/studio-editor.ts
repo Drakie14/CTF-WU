@@ -1,3 +1,4 @@
+import { type Completion, type CompletionContext, type CompletionResult, type CompletionSource } from '@codemirror/autocomplete';
 import { EditorSelection, type EditorState, type TransactionSpec } from '@codemirror/state';
 
 /** Gõ ký tự mở khi đang bôi đen thì bọc vùng chọn, như VS Code. Giữ vùng chọn bên trong để gõ `*` lần nữa ra chữ đậm. */
@@ -112,4 +113,39 @@ export function insertIndent(state: EditorState): TransactionSpec | null {
   const stop = code ? 4 : 2;
   const spaces = ' '.repeat(stop - ((main.head - line.from) % stop));
   return typed({ changes: { from: main.head, insert: spaces }, selection: { anchor: main.head + spaces.length } });
+}
+
+export type FenceLanguage = { id: string; name: string; aliases?: readonly string[] };
+
+const FENCE_OPEN = /^\s*(?:`{3,}|~{3,})[\w+#.-]*$/;
+const FENCE_TYPED = /[\w+#.-]*$/;
+
+/**
+ * Gợi ý tên ngôn ngữ khi đang gõ dòng mở code fence (```py → python, py, ...).
+ * Gợi ý xếp theo chữ đầu trước, rồi tới chữ nằm giữa tên. Không gợi ý khi:
+ * - dòng đó là fence đóng (đếm số fence phía trên là số lẻ);
+ * - chưa gõ chữ nào (trừ khi bấm Ctrl+Space);
+ * - đã gõ đúng tên và không còn tên nào dài hơn để gợi ý, để Enter xuống dòng luôn.
+ */
+export function codeFenceLanguages(languages: readonly FenceLanguage[], aliases: Readonly<Record<string, string>>): CompletionSource {
+  const names = new Map<string, string>();
+  for (const language of languages) {
+    names.set(language.id, language.name);
+    for (const alias of language.aliases ?? []) names.set(alias, language.name);
+  }
+  for (const [alias, target] of Object.entries(aliases)) names.set(alias, names.get(target) ?? target);
+  const options: Completion[] = [...names].map(([label, detail]) => ({ label, detail, type: 'constant' }));
+
+  return (context: CompletionContext): CompletionResult | null => {
+    const match = context.matchBefore(FENCE_OPEN);
+    if (!match || insideFence(context.state, context.state.doc.lineAt(context.pos).number)) return null;
+    const partial = FENCE_TYPED.exec(match.text)![0];
+    if (!partial && !context.explicit) return null;
+    const needle = partial.toLowerCase();
+    const others = options.filter((option) => option.label !== needle);
+    const starts = others.filter((option) => option.label.startsWith(needle));
+    const inside = others.filter((option) => !option.label.startsWith(needle) && option.label.includes(needle));
+    const matches = [...starts, ...inside];
+    return matches.length ? { from: context.pos - partial.length, options: matches, filter: false } : null;
+  };
 }

@@ -152,7 +152,9 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
       import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
       import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
-      import { insertIndent, insertLink, pasteLink, toggleMark, wrapSelection } from '../../lib/studio-editor';
+      import { codeFenceLanguages, insertIndent, insertLink, pasteLink, toggleMark, wrapSelection } from '../../lib/studio-editor';
+      import { LANGUAGE_ALIASES } from '../../config/code-languages';
+      import { acceptCompletion, autocompletion } from '@codemirror/autocomplete';
       import { markdown } from '@codemirror/lang-markdown';
       import { languages } from '@codemirror/language-data';
       import { oneDark } from '@codemirror/theme-one-dark';
@@ -233,6 +235,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
           lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(), history(), search({ top: true }), highlightSelectionMatches(),
           EditorView.lineWrapping, oneDark,
           markdown({ codeLanguages: languages }),
+          autocompletion({ override: [codeFenceLanguages(bundledLanguagesInfo, LANGUAGE_ALIASES)] }),
           EditorView.inputHandler.of((view, _from, _to, text) => {
             const spec = wrapSelection(view.state, text);
             if (spec) view.dispatch(spec);
@@ -246,7 +249,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
             },
           })),
           Prec.high(keymap.of([
-            { key: 'Tab', run: (view) => run(view, insertIndent(view.state)) || indentMore(view), shift: indentLess },
+            { key: 'Tab', run: (view) => acceptCompletion(view) || run(view, insertIndent(view.state)) || indentMore(view), shift: indentLess },
             { key: 'Mod-b', run: (view) => run(view, toggleMark(view.state, '**')) },
             { key: 'Mod-i', run: (view) => run(view, toggleMark(view.state, '*')) },
             { key: 'Mod-e', run: (view) => run(view, toggleMark(view.state, '`')) },

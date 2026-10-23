@@ -1,6 +1,7 @@
+import { CompletionContext } from '@codemirror/autocomplete';
 import { EditorSelection, EditorState, type TransactionSpec } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
-import { insertIndent, insertLink, pasteLink, toggleMark, wrapSelection } from '../../src/lib/studio-editor';
+import { codeFenceLanguages, insertIndent, insertLink, pasteLink, toggleMark, wrapSelection } from '../../src/lib/studio-editor';
 
 /** `|` đánh dấu con trỏ, `[...]` đánh dấu vùng chọn (một vùng). */
 function stateOf(marked: string) {
@@ -91,5 +92,43 @@ describe('insertIndent', () => {
     expect(apply('```py\nif x:\n|\n```', insertIndent)).toBe('```py\nif x:\n    |\n```');
     expect(apply('```py\n- a\n|- b\n```', insertIndent)).toBe('```py\n- a\n    |- b\n```');
     expect(apply('abc|', insertIndent)).toBe('abc |');
+  });
+});
+
+describe('codeFenceLanguages', () => {
+  const source = codeFenceLanguages([
+    { id: 'python', name: 'Python' },
+    { id: 'javascript', name: 'JavaScript', aliases: ['js'] },
+    { id: 'html', name: 'HTML' },
+    { id: 'bash', name: 'Shell Script' },
+  ], { py: 'python', sh: 'bash' });
+  /** `|` đánh dấu con trỏ; trả về các label gợi ý, hoặc null khi không có popup. */
+  const labels = (marked: string, explicit = false) => {
+    const at = marked.indexOf('|');
+    const state = EditorState.create({ doc: marked.replace('|', '') });
+    const result = source(new CompletionContext(state, at, explicit));
+    return result instanceof Promise || !result ? null : result.options.map((option) => option.label);
+  };
+
+  it('suggests languages matching the letters typed after an opening fence, prefix matches first', () => {
+    expect(labels('```py|')).toEqual(['python']);
+    expect(labels('```ja|')).toEqual(['javascript']);
+    expect(labels('~~~sh|')).toEqual(['bash']);
+    expect(labels('```ht|')).toEqual(['html']);
+    expect(labels('```ash|')).toEqual(['bash']);
+  });
+
+  it('stays quiet outside an opening fence, on closing fences, and on a bare fence', () => {
+    expect(labels('ta gõ py|')).toBeNull();
+    expect(labels('```\nprint(1)\n```py|')).toBeNull();
+    expect(labels('```|')).toBeNull();
+    expect(labels('```|', true)).not.toBeNull();
+    expect(labels('```html!|')).toBeNull();
+  });
+
+  it('closes once the typed name is exact and nothing longer matches, so Enter still breaks the line', () => {
+    expect(labels('```python|')).toBeNull();
+    expect(labels('```js|')).toBeNull();
+    expect(labels('```py|')).toEqual(['python']);
   });
 });
