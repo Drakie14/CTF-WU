@@ -1,36 +1,30 @@
 ---
 import { SITE } from '../config/site';
-import type { PostGroup } from '../lib/posts';
+import { branchKeys, type PostFolder } from '../lib/post-tree';
+import type { Post } from '../lib/posts';
 import PixelCat from './PixelCat.astro';
-import PostRow from './PostRow.astro';
+import SidebarFolder from './SidebarFolder.astro';
 
 interface Props {
-  groups: PostGroup[];
+  /** Cây thư mục theo đường dẫn bài (Dreamhack ▸ Class / C1 …). */
+  tree: PostFolder<Post>[];
   /** Tổng số bài / CTF của toàn site (không hard-code, mục 33). */
   stats: { posts: number; ctfs: number };
   currentSlug?: string | undefined;
   /** Bộ lọc đang áp dụng (trang /ctf, /category, /tags). */
   filter?: { kind: string; label: string } | undefined;
-  /** Số dòng render sẵn (mục 22); phần còn lại nằm trong <template> và được JS hiện dần. */
-  initialLimit?: number;
 }
 
-const { groups, stats, currentSlug, filter, initialLimit = 50 } = Astro.props;
-const total = groups.reduce((n, g) => n + g.posts.length, 0);
-const CHUNK = 25;
+const { tree, stats, currentSlug, filter } = Astro.props;
+const total = tree.reduce((n, node) => n + node.count, 0);
 
-// Chia mỗi nhóm thành phần hiển thị ngay + các khối <template> (tối đa CHUNK dòng).
-let shown = 0;
-const renderGroups = groups.map((group) => {
-  const visibleCount = Math.max(0, Math.min(group.posts.length, initialLimit - shown));
-  shown += visibleCount;
-  const visible = group.posts.slice(0, visibleCount);
-  const rest = group.posts.slice(visibleCount);
-  const chunks = [];
-  for (let i = 0; i < rest.length; i += CHUNK) chunks.push(rest.slice(i, i + CHUNK));
-  return { group, visible, chunks };
-});
-const hasMore = shown < total;
+// Mặc định chỉ mở một nhánh cho đỡ ngợp: nhánh của bài đang đọc, hoặc nhánh có
+// bài mới nhất ở trang chủ. Trang lọc thì ít bài nên mở hết.
+const openKeys = new Set<string>(currentSlug ? branchKeys(tree, currentSlug) : []);
+if (!openKeys.size) {
+  for (let node = tree[0]; node; node = node.children[0]) openKeys.add(node.key);
+}
+const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
 ---
 
 <aside class="sidebar" aria-label="Danh sách write-up" data-sidebar>
@@ -94,39 +88,8 @@ const hasMore = shown < total;
   <nav class="sb-list" aria-label="Write-ups" data-list data-rbar>
     <div data-list-results hidden aria-live="polite"></div>
     <div data-list-groups>
-      {
-        renderGroups.map(({ group, visible, chunks }) => (
-          <details class:list={['group', { 'group-unsorted': group.unsorted }]} open data-group={group.key}>
-            <summary class="group-head">
-              <span class="group-diamond" aria-hidden="true" />
-              <span class="group-label">{group.label}</span>
-              <span class="group-line" aria-hidden="true" />
-              <span class="group-count">{group.posts.length}</span>
-              <span class="group-chevron" aria-hidden="true" />
-            </summary>
-            <ul class="rows">
-              {visible.map((post) => (
-                <PostRow post={post} current={post.id === currentSlug} />
-              ))}
-              {chunks.map((chunk) => (
-                <template data-more>
-                  {chunk.map((post) => (
-                    <PostRow post={post} current={post.id === currentSlug} />
-                  ))}
-                </template>
-              ))}
-            </ul>
-          </details>
-        ))
-      }
+      {tree.map((node) => <SidebarFolder node={node} currentSlug={currentSlug} open={isOpen} />)}
       {total === 0 && <p class="sb-empty">Chưa có write-up nào.</p>}
-      {
-        hasMore && (
-          <p class="sb-more" data-more-sentinel>
-            <a href="/archive/">Xem toàn bộ {total} write-up trong Archive →</a>
-          </p>
-        )
-      }
     </div>
     <div data-list-alt hidden></div>
   </nav>
@@ -415,15 +378,6 @@ const hasMore = shown < total;
     text-transform: uppercase;
     color: var(--muted);
   }
-  .sb-more {
-    margin: 1rem 0 0;
-    padding: 0 1rem;
-    font-size: 0.8rem;
-  }
-  .sb-more a {
-    color: var(--accent);
-  }
-
   :global(.group-head) {
     position: sticky;
     top: 0;
@@ -439,10 +393,38 @@ const hasMore = shown < total;
     font-weight: 700;
     letter-spacing: 0.24em;
     text-transform: uppercase;
-    background: linear-gradient(180deg, #1b1226 82%, rgb(27 18 38 / 0));
+    /* Nền đặc: dòng cuộn bên dưới không lộ chữ qua header đang dính. */
+    background: #1b1226;
+    box-shadow: 0 6px 10px -6px rgb(10 4 20 / 0.9);
   }
   :global(.group-head::-webkit-details-marker) {
     display: none;
+  }
+  /* Thư mục con (Class / C1, Extra / Bronze …): không dính, nhỏ hơn, thụt theo cấp. */
+  :global(.group-sub) {
+    margin-left: 0.9rem;
+    border-left: 1px dotted rgb(244 114 182 / 0.3);
+  }
+  :global(.group-sub > .group-head) {
+    position: static;
+    padding: 0.55rem 0.5rem 0.4rem 0.75rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    color: var(--text-soft);
+    background: transparent;
+    box-shadow: none;
+  }
+  :global(.group-sub > .group-head .group-diamond) {
+    width: 0.45rem;
+    height: 0.45rem;
+    background: transparent;
+    border: 1.5px solid var(--accent);
+  }
+  :global(.group-sub > .group-head .group-line) {
+    border-top-width: 1px;
+  }
+  :global(.group-sub .rows) {
+    padding-left: 0.4rem;
   }
   :global(.group-diamond) {
     flex: none;
@@ -484,6 +466,16 @@ const hasMore = shown < total;
   }
   :global(.group-unsorted .group-line) {
     border-top-color: rgb(253 186 116 / 0.4);
+  }
+  /* Trong cây, tên thư mục đã nói bài thuộc giải nào: bỏ tên CTF lặp lại trên từng dòng. */
+  :global([data-list-groups] .row-ctf) {
+    display: none;
+  }
+  :global([data-list-groups] .row-sub:not(:has(.pill, .unsorted-label))) {
+    display: none;
+  }
+  :global([data-list-groups] .row) {
+    min-height: 3.4rem;
   }
 
   :global(.rows) {

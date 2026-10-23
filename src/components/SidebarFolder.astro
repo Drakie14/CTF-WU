@@ -1,0 +1,37 @@
+---
+import type { PostFolder } from '../lib/post-tree';
+import type { Post } from '../lib/posts';
+import PostRow from './PostRow.astro';
+
+interface Props {
+  node: PostFolder<Post>;
+  depth?: number;
+  currentSlug?: string | undefined;
+  /** Nhánh mở sẵn khi render (nhánh chứa bài đang đọc, hoặc tất cả khi đang lọc). */
+  open: (key: string) => boolean;
+}
+
+const { node, depth = 0, currentSlug, open } = Astro.props;
+---
+
+<details class:list={['group', { 'group-sub': depth > 0 }]} open={open(node.key)} data-group={node.key} style={`--depth:${depth}`}>
+  <summary class="group-head">
+    <span class="group-diamond" aria-hidden="true"></span>
+    <span class="group-label" title={node.key}>{node.label}</span>
+    <span class="group-line" aria-hidden="true"></span>
+    <span class="group-count">{node.count}</span>
+    <span class="group-chevron" aria-hidden="true"></span>
+  </summary>
+  <div class="group-body">
+    {node.children.map((child) => <Astro.self node={child} depth={depth + 1} currentSlug={currentSlug} open={open} />)}
+    {
+      node.posts.length > 0 && (
+        <ul class="rows">
+          {node.posts.map((post) => (
+            <PostRow post={post} current={post.id === currentSlug} />
+          ))}
+        </ul>
+      )
+    }
+  </div>
+</details>

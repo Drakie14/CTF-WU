@@ -1,28 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { TAG_SYSTEM, tagPromptData, type TagPromptInput } from './tag-prompt';
 
-export interface AiTagInput {
+export interface AiTagInput extends TagPromptInput {
   apiKey: string;
-  title: string;
-  body: string;
-  category?: string;
-  ctf?: string;
-  /** Tag đã có trong blog: để Claude dùng đúng cách viết sẵn có. */
-  vocabulary: string[];
-  current: string[];
 }
-
-const SYSTEM = `You tag CTF write-ups for a personal blog. Read the write-up and return the tags that best describe what a reader learns from it.
-
-Tags are:
-- the vulnerability or attack class (e.g. "SSTI", "Prototype Pollution", "Known-plaintext"), listed first;
-- then specific technical keywords: technologies, libraries, protocols, file formats, functions/sinks, algorithms or techniques that the solution actually relies on, including niche or newly introduced concepts that are not in the existing tag list.
-
-Rules:
-- 3 to 8 tags, most important first. Prefer fewer, precise tags over many vague ones.
-- Never return the category name (Web, Crypto, Pwn, Misc, Forensics, Rev, OSINT, Mobile, Cloud), the CTF/event name, the platform name, or the flag.
-- Skip generic words that fit almost any write-up (Cookie, Header, JSON, Base64, Linux, Login, Token, API) unless the whole challenge is about it.
-- When a tag means the same thing as one in the existing tag list, return the existing spelling exactly.
-- Tags are in English, Title Case or the conventional spelling (e.g. "JWT", "postMessage", "os.path.join"), at most 4 words.`;
 
 /** Hỏi Claude bộ tag cho bài. Lỗi mạng/key sai/refusal thì ném lỗi để Studio giữ kết quả offline. */
 export async function aiSuggestTags(input: AiTagInput): Promise<string[]> {
@@ -44,14 +25,10 @@ export async function aiSuggestTags(input: AiTagInput): Promise<string[]> {
         },
       },
     },
-    system: SYSTEM,
+    system: TAG_SYSTEM,
     messages: [{
       role: 'user',
-      content: [
-        `<existing_tags>\n${input.vocabulary.join(', ')}\n</existing_tags>`,
-        `<writeup title="${input.title.replace(/"/g, "'")}" category="${input.category ?? ''}" ctf="${(input.ctf ?? '').replace(/"/g, "'")}">\n${input.body}\n</writeup>`,
-        input.current.length ? `Tags the author already typed (keep them unless clearly wrong): ${input.current.join(', ')}` : '',
-      ].filter(Boolean).join('\n\n'),
+      content: tagPromptData(input),
     }],
   });
   if (response.stop_reason === 'refusal') throw new Error('Claude từ chối gợi ý tag cho bài này.');

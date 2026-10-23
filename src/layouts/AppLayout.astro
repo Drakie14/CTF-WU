@@ -1,7 +1,8 @@
 ---
 import BaseLayout, { type Props as BaseProps } from './BaseLayout.astro';
 import Sidebar from '../components/Sidebar.astro';
-import { getSiteContent, groupPosts, type Post } from '../lib/posts';
+import { buildPostTree } from '../lib/post-tree';
+import { getSiteContent, type Post } from '../lib/posts';
 
 interface Props extends BaseProps {
   /**
@@ -17,7 +18,7 @@ interface Props extends BaseProps {
 
 const { view, currentSlug, sidebarPosts, filter, ...seo } = Astro.props;
 const { posts, ctfs } = await getSiteContent();
-const groups = groupPosts(sidebarPosts ?? posts, ctfs);
+const tree = buildPostTree(sidebarPosts ?? posts);
 // Sidebar được giữ nguyên khi chuyển trang (View Transitions) nếu cùng danh sách.
 const panelSwap = {
   old: { name: 'panel-out', duration: '0.15s', easing: 'ease-out', fillMode: 'forwards' },
@@ -30,7 +31,7 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
 <BaseLayout {...seo}>
   <div class="shell" data-view={view}>
     <div class="shell-side" transition:persist={persistKey} data-persist-key={persistKey}>
-      <Sidebar groups={groups} stats={{ posts: posts.length, ctfs: ctfs.terms.length }} currentSlug={currentSlug} filter={filter} />
+      <Sidebar tree={tree}stats={{ posts: posts.length, ctfs: ctfs.terms.length }} currentSlug={currentSlug} filter={filter} />
     </div>
     <main id="main" class="panel" tabindex="-1" data-panel data-rbar transition:animate={panelTransition}>
       {view === 'post' && <div class="read-progress" aria-hidden="true" />}
@@ -40,6 +41,11 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
           <span class="sr-only">Thu gọn / hiện danh sách write-up</span>
         </button>
       </div>
+      {
+        (view === 'post' || view === 'page') && (
+          <div class="top-scrim" aria-hidden="true" />
+        )
+      }
       {
         (view === 'post' || view === 'page') && (
           <a class="back-btn" href="/" data-back>
@@ -86,7 +92,8 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
   .panel:focus {
     outline: none;
   }
-  .back-btn {
+  .back-btn,
+  .top-scrim {
     display: none;
   }
 
@@ -169,6 +176,17 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
     :global(html[data-side-collapsed]) .shell-side {
       visibility: visible;
     }
+    /* Dải nền dính dưới nút Back / Mục lục: chữ của bài cuộn khuất sau dải này thay vì chạy xuyên qua nút. */
+    .top-scrim {
+      display: block;
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      height: calc(env(safe-area-inset-top) + 3.6rem);
+      margin-bottom: calc(-1 * (env(safe-area-inset-top) + 3.6rem));
+      background: linear-gradient(180deg, var(--panel) 72%, transparent);
+      pointer-events: none;
+    }
     .back-btn {
       position: sticky;
       top: calc(env(safe-area-inset-top) + 0.5rem);
@@ -184,8 +202,9 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
       padding: 0.45rem 0.75rem;
       border: 1px solid rgb(236 232 244 / 0.1);
       border-radius: 0.6rem;
-      background: rgb(34 34 40 / 0.86);
-      backdrop-filter: blur(8px);
+      /* Nền đặc: nút dính ở mép trên nên chữ của bài cuộn ngay bên dưới. */
+      background: rgb(34 34 40);
+      box-shadow: 0 6px 16px rgb(10 4 20 / 0.55);
       font-family: var(--font-mono);
       font-size: 0.72rem;
       letter-spacing: 0.12em;

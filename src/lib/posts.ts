@@ -8,14 +8,6 @@ export function isUnsorted(post: Post): boolean {
   return post.data.titleInferred || !post.data.ctf || !post.data.category;
 }
 
-export interface PostGroup {
-  /** Khóa ổn định (dùng cho id/aria). */
-  key: string;
-  label: string;
-  unsorted: boolean;
-  posts: Post[];
-}
-
 export interface SiteContent {
   /** Mọi bài, mới nhất trước. */
   posts: Post[];
@@ -37,31 +29,6 @@ export function getSiteContent(): Promise<SiteContent> {
     return { posts, tags, ctfs };
   })();
   return cache;
-}
-
-/**
- * Nhóm sidebar (mục 18): "Chưa phân loại" ở đầu (nếu có), sau đó theo CTF;
- * nhóm có bài mới nhất đứng trước, trong nhóm bài mới nhất trước.
- * `posts` phải đã được sắp xếp mới nhất trước.
- */
-export function groupPosts(posts: Post[], ctfs: Taxonomy): PostGroup[] {
-  const unsorted: Post[] = [];
-  const byCtf = new Map<string, PostGroup>();
-  for (const post of posts) {
-    if (isUnsorted(post)) {
-      unsorted.push(post);
-      continue;
-    }
-    const slug = ctfs.slugOf(post.data.ctf);
-    let group = byCtf.get(slug);
-    if (!group) {
-      group = { key: `ctf-${slug}`, label: ctfs.bySlug.get(slug)?.name ?? post.data.ctf, unsorted: false, posts: [] };
-      byCtf.set(slug, group);
-    }
-    group.posts.push(post);
-  }
-  const groups = [...byCtf.values()];
-  return unsorted.length ? [{ key: 'unsorted', label: 'Chưa phân loại', unsorted: true, posts: unsorted }, ...groups] : groups;
 }
 
 export const postUrl = (post: Post) => `/posts/${post.id}/`;

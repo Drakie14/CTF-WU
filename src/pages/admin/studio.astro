@@ -100,6 +100,14 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
               <label><span>Độ khó</span><select data-difficulty><option value="">Chưa chọn</option>{DIFFICULTIES.map((d) => <option value={d}>{d}</option>)}</select></label>
               <label class="tags-field"><span>Tags</span><input type="text" data-tags list="tag-options" autocomplete="off" placeholder="xss, svg, javascript" /><datalist id="tag-options" data-tag-options></datalist></label>
               <label class="tags-field" title="Có key thì “Tự thêm tags” hỏi thêm Claude (claude-opus-5-5): gửi nội dung bài tới Anthropic, tính phí vào key này. Key chỉ lưu trong trình duyệt này."><span>Claude API key (tuỳ chọn, cho tag bằng AI)</span><input type="password" autocomplete="off" placeholder="sk-ant-…" data-claude-key /></label>
+              <div class="tags-field chat-tags">
+                <span>Không có key? Hỏi ChatGPT web (miễn phí)</span>
+                <div class="chat-tags-actions">
+                  <button type="button" data-chat-prompt title="Copy prompt kèm nội dung bài rồi mở chatgpt.com. Dán vào ChatGPT (hay Claude/Gemini web), copy câu trả lời rồi dán vào ô bên dưới.">1. Copy prompt + mở ChatGPT</button>
+                  <button type="button" data-chat-apply>2. Áp dụng câu trả lời</button>
+                </div>
+                <textarea rows="2" data-chat-reply placeholder='Dán câu trả lời vào đây, VD {"tags": ["SSTI", "Jinja2"]}'></textarea>
+              </div>
               <script is:inline type="application/json" data-tag-vocabulary set:html={tagVocabulary}></script>
             </div>
           </details>
@@ -147,8 +155,9 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       import { marked } from 'marked';
       import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
       import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-      import { STUDIO_REPO, STUDIO_TOKEN_KEY } from '../../lib/studio';
+      import { STUDIO_REPO, STUDIO_TOKEN_KEY, ctfFromFolder } from '../../lib/studio';
       import { buildVocabulary, canonicalTag, mergeAiTags, suggestTags, type TagSuggestion, type TagTerm } from '../../lib/studio-tags';
+      import { chatTagPrompt, parseTagReply } from '../../lib/tag-prompt';
       import { EditorState, Prec, type Extension, type TransactionSpec } from '@codemirror/state';
       import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
       import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
@@ -468,7 +477,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         const post = parsePost(source);
         title.value = typeof post.fields.title === 'string' ? post.fields.title : '';
         date.value = typeof post.fields.date === 'string' ? post.fields.date.slice(0, 10) : '';
-        ctf.value = typeof post.fields.ctf === 'string' ? post.fields.ctf : folder.value;
+        ctf.value = typeof post.fields.ctf === 'string' ? post.fields.ctf : ctfFromFolder(folder.value);
         category.value = typeof post.fields.category === 'string' ? post.fields.category : '';
         difficulty.value = typeof post.fields.difficulty === 'string' ? post.fields.difficulty : '';
         tags.value = Array.isArray(post.fields.tags) ? post.fields.tags.join(', ') : typeof post.fields.tags === 'string' ? post.fields.tags : '';
@@ -478,7 +487,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       function resetEditor() {
         openFile = undefined; localDraftPath = undefined; localDraftOwned = false; writtenAssets.clear();
         assets.forEach((asset) => URL.revokeObjectURL(asset.url)); assets = [];
-        title.value = ''; date.value = new Date().toISOString().slice(0, 10); ctf.value = folder.value;
+        title.value = ''; date.value = new Date().toISOString().slice(0, 10); ctf.value = ctfFromFolder(folder.value);
         category.value = ''; difficulty.value = ''; tags.value = ''; setEditorSource('');
         $('[data-file-label]').textContent = 'Write-up mới';
         $('[data-save-state]').textContent = 'Chưa publish';
@@ -647,7 +656,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       function startNewInFolder(folderName = 'Dreamhack') {
         resetEditor();
         folder.value = folderName;
-        ctf.value = folderName.split('/').at(-1) ?? folderName;
+        ctf.value = ctfFromFolder(folderName);
         activeFolder = folderName;
         restoreDraft(); renderSidebar();
         showComposer();
@@ -1282,7 +1291,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       async function autoTags() {
         if (autoTagsBusy) return;
         const vocabulary = tagVocabulary();
-        const input = { title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() };
+        const input = tagInput();
         const offline = suggestTags(input, vocabulary);
         const apiKey = claudeKeyInput.value.trim();
         if (!apiKey) return applyTagResult(offline);
@@ -1299,6 +1308,40 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         } finally {
           autoTagsBusy = false; button.disabled = false;
         }
+      }
+      /** Cách miễn phí: copy prompt sang ChatGPT web, dán câu trả lời lại. */
+      function tagInput() {
+        return { title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() };
+      }
+      async function copyText(text: string) {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          const area = document.createElement('textarea');
+          area.value = text; area.style.position = 'fixed'; area.style.opacity = '0';
+          document.body.append(area); area.select();
+          const ok = document.execCommand('copy'); area.remove();
+          if (!ok) throw new Error('Trình duyệt chặn clipboard.');
+        }
+      }
+      function copyChatPrompt() {
+        const prompt = chatTagPrompt({ ...tagInput(), vocabulary: [...tagVocabulary().values()].map((term) => term.name) });
+        const copied = copyText(prompt);
+        // Mở tab ngay trong lúc click (trước khi await) để trình duyệt không chặn popup.
+        window.open('https://chatgpt.com/', '_blank', 'noopener');
+        copied.then(
+          () => setStatus(`Đã copy prompt (${Math.round(prompt.length / 1000)}k ký tự). Dán vào ChatGPT, copy câu trả lời rồi dán vào ô "Dán câu trả lời" và bấm Áp dụng.`, 'ok'),
+          (error) => setStatus(`Không copy được prompt: ${error instanceof Error ? error.message : String(error)}`, 'error'),
+        );
+        $<HTMLTextAreaElement>('[data-chat-reply]').focus();
+      }
+      function applyChatReply() {
+        const reply = $<HTMLTextAreaElement>('[data-chat-reply]');
+        const answer = parseTagReply(reply.value);
+        if (!answer.length) { setStatus('Chưa đọc được tag nào: dán nguyên câu trả lời dạng {"tags": [...]} hoặc danh sách cách nhau bởi dấu phẩy.', 'error'); reply.focus(); return; }
+        const vocabulary = tagVocabulary();
+        applyTagResult(mergeAiTags(suggestTags(tagInput(), vocabulary), answer, vocabulary), 'ChatGPT');
+        reply.value = '';
       }
       function applyTagResult(result: TagSuggestion, source?: string, warning?: string) {
         tags.value = result.tags.join(', ');
@@ -1633,6 +1676,8 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       $('[data-pending-discard]').addEventListener('click', discardPending);
       $('[data-selection-clear]').addEventListener('click', () => { selectedFiles.clear(); selectedFolders.clear(); renderFolderHome(); renderSidebar(); });
       $('[data-auto-tags]').addEventListener('click', () => void autoTags());
+      $('[data-chat-prompt]').addEventListener('click', copyChatPrompt);
+      $('[data-chat-apply]').addEventListener('click', applyChatReply);
       tags.addEventListener('focus', updateTagOptions);
       tags.addEventListener('input', updateTagOptions);
       tags.addEventListener('change', normalizeTags);
@@ -1704,7 +1749,8 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
   .connection-pill { display:flex; align-items:center; gap:.4rem; min-height:1.85rem; padding:0 .55rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--muted); font-size:.64rem; } .connection-pill i { width:.48rem; height:.48rem; border-radius:50%; background:#777; } .connection-pill[data-connected='true'] { border-color:#4c8b67; color:#a5e4bb; } .connection-pill[data-connected='true'] i { background:var(--ok); box-shadow:0 0 0 .16rem #68d39122; }
   .top-actions a,.top-actions button,.editor-tools button,.markdown-tools button { min-height:2.25rem; padding:.42rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); text-decoration:none; font-size:.72rem; white-space:nowrap; } .top-actions a:hover,.editor-tools button:hover,.markdown-tools button:hover { border-color:var(--accent); color:#e2bbff; } .top-actions .local-root[data-connected='true'] { border-color:#55a975; color:#a6edbd; } .top-actions .publish { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; }
   .library { min-height:0; overflow:auto; padding:1rem; border-right:1px solid var(--line); background:#25262a; transition:opacity .16s ease; } .studio[data-sidebar-collapsed] .library { overflow:hidden; padding:0; opacity:0; pointer-events:none; } .library-head { display:flex; align-items:start; justify-content:space-between; gap:.5rem; } .eyebrow { margin:0 0 .3rem; color:var(--muted); font-size:.6rem; letter-spacing:.12em; text-transform:uppercase; } .library-head strong { display:block; max-width:14rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.72rem; } .library-head button { border:0; background:transparent; color:var(--muted); font-size:1.1rem; }
-  .token-box { display:grid; gap:.5rem; margin:1rem 0; padding:.75rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); font-size:.72rem; } .token-box[hidden] { display:none; } .token-box input,.metadata input,.metadata select { width:100%; min-width:0; border:1px solid var(--line); border-radius:.35rem; padding:.55rem; background:#1d1e21; color:var(--text); } .token-box button { border:1px solid #b05be8; border-radius:.35rem; padding:.45rem; background:var(--accent-soft); color:#e2bbff; } .token-box p { margin:0; color:var(--muted); font-size:.62rem; line-height:1.45; }
+  .token-box { display:grid; gap:.5rem; margin:1rem 0; padding:.75rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); font-size:.72rem; } .token-box[hidden] { display:none; } .token-box input,.chat-tags { display:grid; gap:.28rem; min-width:0; color:var(--muted); font-size:.59rem; letter-spacing:.07em; text-transform:uppercase; } .chat-tags-actions { display:flex; flex-wrap:wrap; gap:.4rem; } .chat-tags button { min-height:2rem; padding:.35rem .6rem; border:1px solid var(--line); border-radius:.35rem; background:transparent; color:var(--text); font-size:.66rem; letter-spacing:0; text-transform:none; cursor:pointer; } .chat-tags button:hover { border-color:var(--accent); color:#e2bbff; } .chat-tags textarea { width:100%; min-width:0; resize:vertical; border:1px solid var(--line); border-radius:.35rem; padding:.55rem; background:#1d1e21; color:var(--text); font:inherit; font-size:.72rem; letter-spacing:0; text-transform:none; }
+  .metadata input,.metadata select { width:100%; min-width:0; border:1px solid var(--line); border-radius:.35rem; padding:.55rem; background:#1d1e21; color:var(--text); } .token-box button { border:1px solid #b05be8; border-radius:.35rem; padding:.45rem; background:var(--accent-soft); color:#e2bbff; } .token-box p { margin:0; color:var(--muted); font-size:.62rem; line-height:1.45; }
   .new-file { width:100%; margin:1rem 0; padding:.65rem .75rem; border:1px solid #ad63e6; border-radius:.45rem; background:#a85ce01f; color:#e1bdff; text-align:left; font-weight:700; } .empty-tree { color:var(--muted); font:.68rem/1.5 inherit; } .tree { display:grid; gap:.18rem; } .tree-file { display:grid; grid-template-columns:1.65rem minmax(0,1fr); gap:.2rem; width:100%; padding:.35rem; border-left:2px solid transparent; border-radius:.25rem; background:transparent; } .tree-file:hover { border-left-color:var(--accent); background:var(--accent-soft); } .tree-open { display:grid; gap:.12rem; min-width:0; border:0; background:transparent; color:var(--text); text-align:left; } .tree-file span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.73rem; } .tree-file small { overflow:hidden; color:var(--muted); font-size:.59rem; text-overflow:ellipsis; white-space:nowrap; }
   .workspace { min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--canvas); } .library-home { flex:1; overflow:auto; padding:2rem clamp(1.3rem,4vw,3.5rem); } .browser-head { display:flex; align-items:start; justify-content:space-between; gap:1rem; margin-bottom:2.2rem; } .browser-actions { display:flex; gap:.5rem; } .browser-head h1,.recent-posts h2,.folder-posts h2 { margin:0; font:700 1.35rem/1.2 system-ui,sans-serif; letter-spacing:-.02em; } .create-folder,.back-folder { min-height:2.5rem; padding:.55rem .85rem; border:1px solid #ad63e6; border-radius:.45rem; background:transparent; color:#dfbaff; font-weight:700; } .back-folder { border-color:var(--line); color:var(--muted); }
   .folder-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(15rem,1fr)); gap:1rem; } .folder-grid[hidden] { display:none; } .folder-card { position:relative; display:block; min-height:10rem; border:1px solid var(--line); border-radius:.55rem; background:var(--panel); transition:border-color .15s ease, background .15s ease; } .folder-card:hover,.folder-card[data-drop] { border-color:#a860db; background:#303035; } .folder-open { display:grid; width:100%; min-height:10rem; grid-template-rows:auto 1fr auto; gap:.7rem; padding:1.25rem; border:0; background:transparent; color:var(--text); text-align:left; } .folder-icon,.file-icon { display:grid; width:2.3rem; height:2.3rem; place-items:center; border:1px solid #b578e244; border-radius:.65rem; background:linear-gradient(145deg,#a858e52b,#7e6bff12); color:#d5a2ff; } .folder-icon svg,.file-icon svg { width:1.55rem; height:1.55rem; overflow:visible; } .folder-back { fill:#b879ec38; stroke:#c48bfa; stroke-width:1.45; stroke-linejoin:round; } .folder-front { fill:#b879ec22; stroke:#dbb3ff; stroke-width:1.45; stroke-linejoin:round; } .folder-card strong { align-self:end; font:650 1rem/1.2 system-ui,sans-serif; } .folder-card small,.recent-card small,.folder-file-card small { color:var(--muted); font-size:.66rem; } .recent-posts,.folder-posts { margin-top:2.8rem; } .recent-posts h2,.folder-posts h2 { margin-bottom:1rem; } .recent-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(15rem,1fr)); gap:.8rem; } .recent-card,.folder-file-card { position:relative; min-height:7.5rem; border:1px solid var(--line); border-radius:.5rem; background:#28292e; } .recent-card:hover,.folder-file-card:hover { border-color:#a860db; } .file-open { display:grid; width:100%; min-height:7.5rem; gap:.55rem; padding:1rem; border:0; background:transparent; color:var(--text); text-align:left; } .file-icon { width:2rem; height:2rem; border-color:#7fa8f344; background:linear-gradient(145deg,#60a5fa20,#8b5cf612); color:#a9ccff; } .file-sheet { fill:#769fe91a; stroke:#9cc1ff; stroke-width:1.45; stroke-linejoin:round; } .file-fold,.file-lines { fill:none; stroke:#b6d3ff; stroke-width:1.45; stroke-linecap:round; stroke-linejoin:round; } .file-open strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; } .selection-checkbox { position:relative; z-index:2; display:grid; width:1.55rem; height:1.55rem; place-items:center; border:0; background:transparent; color:#cfc3dc; font-size:1rem; } .folder-card > .selection-checkbox,.recent-card > .selection-checkbox,.folder-file-card > .selection-checkbox { position:absolute; top:.6rem; right:.6rem; }

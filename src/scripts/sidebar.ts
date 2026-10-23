@@ -26,41 +26,40 @@ function currentSlug(): string | null {
   return m ? decodeURIComponent(m[1]!) : null;
 }
 
-// ---- Danh sách dài (mục 22): dòng > 50 nằm trong <template data-more>, hiện dần khi cuộn gần cuối ----
-function materializeNext(list: HTMLElement, count = 1): boolean {
-  const templates = list.querySelectorAll<HTMLTemplateElement>('[data-list-groups] template[data-more]');
-  let done = 0;
-  for (const tpl of templates) {
-    if (done >= count) break;
-    tpl.replaceWith(tpl.content);
-    done++;
+// ---- Cây thư mục: nhớ nhánh nào đang mở giữa các lần ghé (trang chủ, không lọc) ----
+const OPEN_KEY = 'sidebar-open-folders';
+
+function treeFolders(list: HTMLElement): HTMLDetailsElement[] {
+  return [...list.querySelectorAll<HTMLDetailsElement>('[data-list-groups] details.group')];
+}
+
+function saveOpenFolders(list: HTMLElement): void {
+  if (persistKey() !== 'sidebar-all') return;
+  try {
+    localStorage.setItem(OPEN_KEY, JSON.stringify(treeFolders(list).filter((d) => d.open).map((d) => d.dataset.group)));
+  } catch {
+    /* ignore */
   }
-  const remaining = list.querySelector('[data-list-groups] template[data-more]') !== null;
-  if (!remaining) list.querySelector('[data-more-sentinel]')?.remove();
-  return remaining;
 }
 
-function materializeAll(list: HTMLElement): void {
-  while (materializeNext(list, 100));
-}
-
-function setupLazyRows(list: HTMLElement): void {
-  const sentinel = list.querySelector('[data-more-sentinel]');
-  if (!sentinel) return;
-  // Link "Xem toàn bộ" chỉ dành cho khi tắt JS.
-  sentinel.setAttribute('aria-hidden', 'true');
-  (sentinel as HTMLElement).style.visibility = 'hidden';
-  const io = new IntersectionObserver(
-    (entries) => {
-      if (!entries.some((e) => e.isIntersecting)) return;
-      if (!materializeNext(list, 2)) return io.disconnect();
-      // Quan sát lại để nhận callback mới nếu sentinel vẫn còn trong vùng nhìn thấy.
-      io.unobserve(sentinel);
-      io.observe(sentinel);
-    },
-    { root: list, rootMargin: '0px 0px 800px 0px' },
-  );
-  io.observe(sentinel);
+function setupFolderMemory(list: HTMLElement): void {
+  // Trang lọc ít bài và mở sẵn tất cả; chỉ cây đầy đủ mới khôi phục trạng thái.
+  if (persistKey() !== 'sidebar-all') return;
+  let saved: unknown = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(OPEN_KEY) ?? 'null');
+  } catch {
+    /* ignore */
+  }
+  if (Array.isArray(saved)) {
+    const keys = new Set(saved);
+    // Nhánh của bài đang đọc vẫn mở (server đã đánh dấu), cộng thêm nhánh đã lưu.
+    const current = list.querySelector('a.row[aria-current="page"]');
+    for (const d of treeFolders(list)) d.open = keys.has(d.dataset.group) || (current !== null && d.contains(current));
+  }
+  list.addEventListener('toggle', (e) => {
+    if ((e.target as Element).matches?.('[data-list-groups] details.group')) saveOpenFolders(list);
+  }, true);
 }
 
 // ---- Nút đổi cách nhóm: theo CTF (mặc định, render sẵn) ↔ theo category ----
@@ -73,7 +72,6 @@ const CATEGORY_LABELS: Record<string, string> = {
 function buildCategoryGroups(list: HTMLElement): void {
   const alt = list.querySelector<HTMLElement>('[data-list-alt]');
   if (!alt || alt.dataset.built) return;
-  materializeAll(list);
   const rows = [...list.querySelectorAll<HTMLElement>('[data-list-groups] li.row-item')];
   const byCat = new Map<string, HTMLElement[]>();
   for (const li of rows) {
@@ -135,10 +133,6 @@ function setupGroupToggle(root: HTMLElement, list: HTMLElement): void {
 
 function markCurrent(list: HTMLElement): HTMLElement | null {
   const slug = currentSlug();
-  // Bài hiện tại có thể nằm trong phần chưa render → hiện dần tới khi thấy.
-  if (slug) {
-    while (!list.querySelector(`a.row[data-slug="${CSS.escape(slug)}"]`) && materializeNext(list, 1));
-  }
   let current: HTMLElement | null = null;
   for (const row of list.querySelectorAll<HTMLElement>('a.row')) {
     if (slug && row.dataset.slug === slug) {
@@ -152,8 +146,10 @@ function markCurrent(list: HTMLElement): HTMLElement | null {
 }
 
 function centerRow(list: HTMLElement, row: HTMLElement): void {
-  const details = row.closest('details');
-  if (details && !details.open) details.open = true;
+  // Mở mọi thư mục cha (Dreamhack ▸ Class / C1) để dòng thật sự hiện ra.
+  for (let details = row.closest('details'); details; details = details.parentElement?.closest('details') ?? null) {
+    details.open = true;
+  }
   const listRect = list.getBoundingClientRect();
   const rowRect = row.getBoundingClientRect();
   list.scrollTop += rowRect.top - listRect.top - (list.clientHeight - rowRect.height) / 2;
@@ -253,7 +249,7 @@ function onPageLoad(): void {
     setupCurveFallback(list);
     setupCollapseAll(sidebar);
     setupScrollMemory(list);
-    setupLazyRows(list);
+    setupFolderMemory(list);
     setupGroupToggle(sidebar, list);
     setupSidebarSearch(sidebar);
   }
