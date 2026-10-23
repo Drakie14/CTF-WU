@@ -592,7 +592,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         return stack;
       }
       function selectedCards() {
-        return [...document.querySelectorAll<HTMLElement>('.recent-card,.folder-file-card')].filter((el) => el.dataset.selected === 'true');
+        return [...document.querySelectorAll<HTMLElement>('.recent-card,.folder-file-card,.folder-card')].filter((el) => el.dataset.selected === 'true');
       }
       function gatherSelectedCards(origin: HTMLElement) {
         const target = origin.getBoundingClientRect();
@@ -637,6 +637,14 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         card.querySelector('small')!.textContent = `${postCount} bài viết${subCount ? ` · ${subCount} folder con` : ''}`;
         card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFolder(path); });
         card.querySelector('.folder-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFolder(path); else openFolder(path); });
+        card.draggable = true; card.querySelectorAll('button').forEach((button) => { button.draggable = true; });
+        card.addEventListener('dragstart', (event) => {
+          if (!selectedFolders.has(path)) { selectedFiles.clear(); selectedFolders.clear(); selectedFolders.add(path); card.dataset.selected = 'true'; }
+          event.dataTransfer?.setData('text/plain', [...selectedFolders].join('\n'));
+          if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setDragImage(makeDragStack(selectedFolders.size + selectedFiles.size, leafName(path)), 90, 40); }
+          gatherSelectedCards(card);
+        });
+        card.addEventListener('dragend', releaseSelectedCards);
         card.addEventListener('dragover', (event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; card.dataset.drop = ''; });
         card.addEventListener('dragleave', () => delete card.dataset.drop);
         card.addEventListener('drop', (event) => { event.preventDefault(); delete card.dataset.drop; void moveSelectionTo(path); });
@@ -849,14 +857,26 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         } catch (error) { setStatus(errorMessage(error), 'error'); }
       }
       async function moveSelectionTo(targetFolder: string) {
-        const files = repoFiles.filter((file) => selectedFiles.has(file.path)).filter((file) => folderOf(file) !== targetFolder);
-        if (!files.length) return setStatus('Chọn ít nhất một bài ở folder khác trước khi kéo thả.', 'info');
+        const isInside = (path: string, parent: string) => path === parent || path.startsWith(`${parent}/`);
+        const folders = [...selectedFolders].filter((path) => !isInside(targetFolder, path) && parentOf(path) !== targetFolder)
+          .filter((path, _, all) => !all.some((other) => other !== path && isInside(path, other)));
+        const files = repoFiles.filter((file) => selectedFiles.has(file.path) && folderOf(file) !== targetFolder && !folders.some((path) => inFolder(file, path)));
+        if (!files.length && !folders.length) return setStatus('Chọn ít nhất một bài hoặc folder ở vị trí khác trước khi kéo thả.', 'info');
         if (!token()) return setStatus('Cần kết nối GitHub để sắp xếp bài.', 'error');
+        const clash = folders.find((path) => [...folderSet].some((existing) => existing.toLowerCase() === joinPath(targetFolder, leafName(path)).toLowerCase()));
+        if (clash) return setStatus(`Folder đích đã có folder tên "${leafName(clash)}".`, 'error');
         const conflict = files.find((file) => repoFiles.some((candidate) => folderOf(candidate) === targetFolder && articleName(candidate) === articleName(file)));
         if (conflict) return setStatus(`Folder đích đã có bài trùng tên: ${articleName(conflict)}.`, 'error');
         try {
-          setStatus(`Đang chuyển ${files.length} bài vào ${targetFolder}…`);
+          setStatus(`Đang chuyển vào ${targetFolder}…`);
           const entries: TreeEntry[] = [];
+          for (const path of folders) {
+            const prefix = `${postRoot}/${path}`;
+            const base = `${joinPath(postRoot, targetFolder, leafName(path))}`;
+            for (const item of repoTree.filter((entry) => entry.path.startsWith(`${prefix}/`))) {
+              entries.push({ path: `${base}${item.path.slice(prefix.length)}`, mode: '100644', type: 'blob', sha: item.sha }, { path: item.path, mode: '100644', type: 'blob', sha: null });
+            }
+          }
           for (const file of files) {
             const oldDirectory = file.path.replace(/\/[^/]+$/, '');
             const moved = isIndexFile(file)
@@ -867,8 +887,9 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
             }
           }
           selectedFiles.clear(); selectedFolders.clear(); activeFolder = targetFolder;
-          stageEntries(entries, `content: chuyển ${files.length} write-up vào ${targetFolder}`);
-          setStatus(`Đã thêm việc chuyển ${files.length} bài vào ${targetFolder} vào danh sách chờ. Bấm Save để commit.`, 'ok');
+          const label = [folders.length ? `${folders.length} folder` : '', files.length ? `${files.length} write-up` : ''].filter(Boolean).join(' và ');
+          stageEntries(entries, `content: chuyển ${label} vào ${targetFolder}`);
+          setStatus(`Đã thêm việc chuyển ${label} vào ${targetFolder} vào danh sách chờ. Bấm Save để commit.`, 'ok');
         } catch (error) { setStatus(errorMessage(error), 'error'); }
       }
       function renderAssets() {
