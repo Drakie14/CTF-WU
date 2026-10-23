@@ -1,5 +1,10 @@
 ---
 import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
+import { getSiteContent } from '../../lib/posts';
+
+// Tag của mọi bài lúc build: làm từ điển cho "Tự thêm tags" khi chưa đọc được bài nào từ GitHub.
+const { tags: taxonomy } = await getSiteContent();
+const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ name, count }))).replace(/</g, '\\u003c');
 ---
 
 <!doctype html>
@@ -93,7 +98,8 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
               <label><span>CTF</span><input type="text" data-ctf placeholder="Dreamhack" /></label>
               <label><span>Category</span><select data-category><option value="">Chưa chọn</option>{CATEGORIES.map((c) => <option value={c}>{c}</option>)}</select></label>
               <label><span>Độ khó</span><select data-difficulty><option value="">Chưa chọn</option>{DIFFICULTIES.map((d) => <option value={d}>{d}</option>)}</select></label>
-              <label class="tags-field"><span>Tags</span><input type="text" data-tags placeholder="xss, svg, javascript" /></label>
+              <label class="tags-field"><span>Tags</span><input type="text" data-tags list="tag-options" autocomplete="off" placeholder="xss, svg, javascript" /><datalist id="tag-options" data-tag-options></datalist></label>
+              <script is:inline type="application/json" data-tag-vocabulary set:html={tagVocabulary}></script>
             </div>
           </details>
 
@@ -141,6 +147,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
       import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
       import { STUDIO_REPO, STUDIO_TOKEN_KEY } from '../../lib/studio';
+      import { buildVocabulary, canonicalTag, suggestTags, type TagTerm } from '../../lib/studio-tags';
       import { EditorState } from '@codemirror/state';
       import { EditorView, lineNumbers } from '@codemirror/view';
       import { markdown } from '@codemirror/lang-markdown';
@@ -170,6 +177,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         queryPermission: (options?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
         requestPermission: (options?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
       };
+      type ListableDirectory = FileSystemDirectoryHandle & { entries: () => AsyncIterableIterator<[string, FileSystemDirectoryHandle | FileSystemFileHandle]> };
       type Draft = { title: string; folder: string; date: string; ctf: string; category: string; difficulty: string; tags: string; source: string };
       type MermaidApi = { initialize: (config: Record<string, unknown>) => void; run: (config: { nodes: NodeListOf<Element> }) => Promise<void> };
       let repo = { name: '', branch: 'main' };
@@ -201,6 +209,13 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       const selectedFolders = new Set<string>();
       let folderSet = new Set<string>();
       let draftTimer: ReturnType<typeof setTimeout> | undefined;
+      // Write-up chưa publish nằm trong thư mục posts local. Chỉ file Studio vừa tạo trong phiên này
+      // (owned) mới được đổi tên thư mục theo tiêu đề; file mở lại từ đĩa giữ nguyên đường dẫn.
+      let localDraftPath: string | undefined;
+      let localDraftOwned = false;
+      let localOnly: RepoFile[] = [];
+      let localWrite: Promise<void> = Promise.resolve();
+      const writtenAssets = new Set<Asset>();
 
       const editorSource = () => editor.state.doc.toString();
       function setEditorSource(source: string) {
@@ -227,11 +242,59 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       const draftKey = () => `ctf-wu.studio.draft.${openFile?.path ?? `new:${relativeFolder()}`}`;
       function scheduleDraft() { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 450); }
       function saveDraft() {
-        if (!$('[data-composer]').hasAttribute('hidden') && (title.value.trim() || editorSource().trim())) {
-          const draft: Draft = { title: title.value, folder: folder.value, date: date.value, ctf: ctf.value, category: category.value, difficulty: difficulty.value, tags: tags.value, source: editorSource() };
-          localStorage.setItem(draftKey(), JSON.stringify(draft));
-          $('[data-save-state]').textContent = 'Nháp đã lưu cục bộ';
+        if ($('[data-composer]').hasAttribute('hidden') || !(title.value.trim() || editorSource().trim())) return;
+        if (!openFile) { queueLocalSave(); if (localDraftPath) return; }
+        const draft: Draft = { title: title.value, folder: folder.value, date: date.value, ctf: ctf.value, category: category.value, difficulty: difficulty.value, tags: tags.value, source: editorSource() };
+        localStorage.setItem(draftKey(), JSON.stringify(draft));
+        $('[data-save-state]').textContent = 'Nháp lưu trong trình duyệt';
+      }
+      function queueLocalSave() {
+        localWrite = localWrite.then(saveLocalDraft).catch((error) => setStatus(errorMessage(error), 'error'));
+      }
+      async function localEntry(path: string): Promise<FileSystemDirectoryHandle | undefined> {
+        let target: FileSystemDirectoryHandle = localDirectory!;
+        try {
+          for (const part of localRelativePath(path).split('/')) target = await target.getDirectoryHandle(part);
+          return target;
+        } catch { return undefined; }
+      }
+      async function copyDirectory(from: FileSystemDirectoryHandle, to: FileSystemDirectoryHandle) {
+        for await (const [name, handle] of (from as ListableDirectory).entries()) {
+          if (handle.kind === 'directory') await copyDirectory(handle, await to.getDirectoryHandle(name, { create: true }));
+          else await writeLocalFile(to, name, await handle.getFile());
         }
+      }
+      async function writeLocalFile(directory: FileSystemDirectoryHandle, name: string, data: File | string) {
+        const stream = await (await directory.getFileHandle(name, { create: true })).createWritable();
+        await stream.write(data); await stream.close();
+      }
+      async function saveLocalDraft() {
+        if (openFile || !slugify(title.value) || !localDirectory || await localDirectory.queryPermission({ mode: 'readwrite' }) !== 'granted') return;
+        const path = currentPath();
+        const directory = path.replace(/\/[^/]+$/, '');
+        if (path !== localDraftPath) {
+          const previous = localDraftPath?.replace(/\/[^/]+$/, '');
+          if (remoteBlobs.some((item) => item.path.startsWith(`${directory}/`)) || await localEntry(directory) || (previous && directory.startsWith(`${previous}/`))) {
+            $('[data-save-state]').textContent = 'Trùng thư mục bài khác, chưa ghi file';
+            return setStatus(`Đã có ${relPath(directory)}; đổi tiêu đề hoặc folder để tạo file local.`, 'error');
+          }
+          let target: FileSystemDirectoryHandle = localDirectory;
+          for (const part of localRelativePath(directory).split('/')) target = await target.getDirectoryHandle(part, { create: true });
+          const old = previous ? await localEntry(previous) : undefined;
+          if (previous && old) {
+            await copyDirectory(old, target);
+            const holder = parentOf(previous) === postRoot ? localDirectory : await localEntry(parentOf(previous));
+            await holder?.removeEntry(leafName(previous), { recursive: true });
+          } else localStorage.removeItem(draftKey());
+          localDraftPath = path; localDraftOwned = true;
+          $('[data-file-label]').textContent = relPath(path);
+          setStatus(`Đã tạo file local ${relPath(path)}. Bài chỉ lên GitHub khi bấm Publish.`, 'ok');
+          void scanLocalDrafts();
+        }
+        await writeLocalArticle(path, composePost());
+        const target = await localEntry(directory);
+        for (const asset of assets) if (target && !writtenAssets.has(asset)) { await writeLocalFile(target, asset.name, asset.file); writtenAssets.add(asset); }
+        $('[data-save-state]').textContent = 'Đã lưu file local · chưa publish';
       }
       function restoreDraft() {
         try {
@@ -332,7 +395,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       const decode = (text: string) => new TextDecoder().decode(Uint8Array.from(atob(text.replace(/\n/g, '')), (c) => c.charCodeAt(0)));
       const postRoot = 'src/content/posts';
       const relativeFolder = () => folder.value.trim().replace(/^\/+|\/+$/g, '') || 'uncategorized';
-      const currentPath = () => openFile?.path ?? `${postRoot}/${relativeFolder()}/${slugify(title.value || 'untitled')}/index.md`;
+      const currentPath = () => openFile?.path ?? (localDraftPath && !localDraftOwned ? localDraftPath : undefined) ?? `${postRoot}/${relativeFolder()}/${slugify(title.value || 'untitled')}/index.md`;
       const articleDirectory = () => currentPath().replace(/\/[^/]+$/, '');
       const assetUrl = (name: string) => {
         const localAsset = assets.find((asset) => asset.name === name);
@@ -376,7 +439,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         void renderPreview();
       }
       function resetEditor() {
-        openFile = undefined;
+        openFile = undefined; localDraftPath = undefined; localDraftOwned = false; writtenAssets.clear();
         assets.forEach((asset) => URL.revokeObjectURL(asset.url)); assets = [];
         title.value = ''; date.value = new Date().toISOString().slice(0, 10); ctf.value = folder.value;
         category.value = ''; difficulty.value = ''; tags.value = ''; setEditorSource('');
@@ -404,7 +467,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           $('[data-token-box]').hidden = true;
           updateConnection();
           refreshFolderView();
-          void loadHiddenStates();
+          void loadHiddenStates(); void scanLocalDrafts();
         } catch (error) {
           tree.innerHTML = '';
           const message = error instanceof Error ? error.message : String(error);
@@ -472,7 +535,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         try {
           setStatus('Đang mở write-up…');
           const content = await api<{ content: string; sha: string }>(`/contents/${file.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repo.branch)}`);
-          openFile = { path: file.path, sha: content.sha };
+          openFile = { path: file.path, sha: content.sha }; localDraftPath = undefined; localDraftOwned = false;
           folder.value = folderOf(file) || 'uncategorized';
           $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
           const reconciled = await reconcileLocalArticle(file.path, decode(content.content));
@@ -481,6 +544,53 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           if (restoreDraft()) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok'); else setStatus(reconciled.message, reconciled.message.startsWith('Xung đột') ? 'error' : 'info');
           activeFolder = folderOf(file) || undefined; renderSidebar(); showComposer();
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
+      }
+      async function openLocalPost(file: RepoFile) {
+        try {
+          const source = await readLocalArticle(file.path);
+          if (source === undefined) return setStatus('Không đọc được file local. Kiểm tra quyền thư mục posts.', 'error');
+          resetEditor();
+          folder.value = folderOf(file) || 'uncategorized';
+          populate(source);
+          localDraftPath = file.path;
+          const directory = await localEntry(parentOf(file.path));
+          if (directory) {
+            for await (const [name, handle] of (directory as ListableDirectory).entries()) {
+              if (handle.kind !== 'file' || name === leafName(file.path)) continue;
+              const asset = { file: await handle.getFile(), name, url: '' }; asset.url = URL.createObjectURL(asset.file);
+              assets.push(asset); writtenAssets.add(asset);
+            }
+          }
+          renderAssets(); void renderPreview();
+          $('[data-file-label]').textContent = relPath(file.path);
+          $('[data-save-state]').textContent = 'File local · chưa publish';
+          setStatus('Đang mở bản local chưa publish. Bấm Publish để đưa lên GitHub.', 'info');
+          activeFolder = folderOf(file) || undefined; renderSidebar(); showComposer();
+        } catch (error) { setStatus(errorMessage(error), 'error'); }
+      }
+      async function scanLocalDrafts() {
+        if (!githubConnected || !localDirectory || await localDirectory.queryPermission({ mode: 'readwrite' }) !== 'granted') return;
+        const remote = new Set(remoteBlobs.map((item) => item.path));
+        const found: RepoFile[] = [];
+        const walk = async (directory: FileSystemDirectoryHandle, prefix: string) => {
+          for await (const [name, handle] of (directory as ListableDirectory).entries()) {
+            const path = `${prefix}/${name}`;
+            if (handle.kind === 'directory') await walk(handle, path);
+            else if (name === 'index.md' && !remote.has(path)) found.push({ path, sha: '' });
+          }
+        };
+        try { await walk(localDirectory, postRoot); } catch { return; }
+        localOnly = found.sort((a, b) => a.path.localeCompare(b.path));
+        refreshFolderView();
+      }
+      const isLocalOnly = (file: RepoFile) => localOnly.some((entry) => entry.path === file.path);
+      async function newWriteup() {
+        const folderName = currentFolder() || folder.value || 'Dreamhack';
+        const ready = localDirectory ? await requestLocalPermission().catch(() => false) : await chooseLocalFolder();
+        startNewInFolder(folderName);
+        setStatus(ready
+          ? 'Nhập tiêu đề để tạo file trong thư mục posts local. Bài chỉ lên GitHub khi bấm Publish.'
+          : 'Chưa kết nối thư mục posts local, nháp chỉ được lưu trong trình duyệt.', ready ? 'info' : 'error');
       }
       function showComposer() {
         $('[data-sidebar-new]').removeAttribute('hidden');
@@ -521,7 +631,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       function collectFolders() {
         const set = new Set<string>();
         const add = (directory: string) => { const parts = directory.split('/').filter(Boolean); parts.forEach((_, index) => set.add(parts.slice(0, index + 1).join('/'))); };
-        repoFiles.forEach((file) => add(folderOf(file)));
+        [...repoFiles, ...localOnly].forEach((file) => add(folderOf(file)));
         for (const item of repoTree) if (item.path.startsWith(`${postRoot}/`) && item.path.endsWith(`/${KEEP_FILE}`)) add(relPath(item.path).slice(0, -(KEEP_FILE.length + 1)));
         return set;
       }
@@ -530,6 +640,8 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         renderFolderHome(); renderSidebar();
       }
       const hiddenBySha = new Map<string, boolean>();
+      const builtTags: TagTerm[] = (() => { try { return JSON.parse($('[data-tag-vocabulary]').textContent ?? '[]') as TagTerm[]; } catch { return []; } })();
+      const tagsBySha = new Map<string, string[]>();
       const hiddenOf = (file: RepoFile) => hiddenBySha.get(file.sha) === true;
       const frontmatterRe = /^---\r?\n([\s\S]*?)\r?\n---/;
       const isDraftSource = (source: string) => /^draft:\s*true\s*$/m.test(frontmatterRe.exec(source)?.[1] ?? '');
@@ -544,7 +656,12 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         const todo = remoteBlobs.filter((item) => item.path.startsWith(`${postRoot}/`) && item.path.endsWith('.md') && !hiddenBySha.has(item.sha));
         for (let i = 0; i < todo.length; i += 8) {
           await Promise.all(todo.slice(i, i + 8).map(async (item) => {
-            try { hiddenBySha.set(item.sha, isDraftSource(decode((await api<{ content: string }>(`/git/blobs/${item.sha}`)).content))); } catch { /* giữ trạng thái hiện */ }
+            try {
+              const source = decode((await api<{ content: string }>(`/git/blobs/${item.sha}`)).content);
+              hiddenBySha.set(item.sha, isDraftSource(source));
+              const fieldTags = parsePost(source).fields.tags;
+              tagsBySha.set(item.sha, (Array.isArray(fieldTags) ? fieldTags : typeof fieldTags === 'string' ? fieldTags.split(',') : []).map((tag) => String(tag).trim()).filter(Boolean));
+            } catch { /* giữ trạng thái hiện */ }
           }));
         }
         refreshFolderView();
@@ -782,6 +899,11 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         card.querySelector('strong')!.textContent = articleName(file); card.querySelector('small')!.textContent = folderOf(file) || 'Chưa phân loại';
         card.dataset.selected = String(selectedFiles.has(file.path));
         if (hiddenOf(file)) { card.dataset.hidden = ''; card.querySelector('small')!.textContent += ' · Đã ẩn'; }
+        if (isLocalOnly(file)) {
+          card.dataset.local = ''; card.querySelector('small')!.textContent += ' · Chưa publish';
+          card.querySelector('.file-open')!.addEventListener('click', () => void openLocalPost(file));
+          return card;
+        }
         card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFile(file.path); });
         card.querySelector('.file-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFile(file.path); else void openPost(file); });
         enableCardDrag(card, 'file', file.path);
@@ -824,6 +946,12 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           item.querySelector('.selection-checkbox')!.addEventListener('click', () => toggleSelectedFile(file.path));
           item.querySelector('.tree-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFile(file.path); else void openPost(file); }); rows.push(item);
         }
+        for (const file of localOnly.filter((entry) => folderOf(entry) === here)) {
+          const item = document.createElement('div'); item.className = 'tree-file'; item.dataset.local = '';
+          item.innerHTML = '<span class="selection-checkbox" aria-hidden="true"></span><button type="button" class="tree-open"><span></span><small></small></button>';
+          item.querySelector('span:not(.selection-checkbox)')!.textContent = articleName(file); item.querySelector('small')!.textContent = `${relPath(file.path)} · Chưa publish`;
+          item.querySelector('.tree-open')!.addEventListener('click', () => void openLocalPost(file)); rows.push(item);
+        }
         if (rows.length === 1) { const empty = document.createElement('p'); empty.className = 'empty-tree'; empty.textContent = 'Folder này chưa có gì.'; rows.push(empty); }
         tree.replaceChildren(...rows);
       }
@@ -853,7 +981,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         folderSet = collectFolders();
         const here = currentFolder();
         const subfolders = childFolders(here);
-        const posts = files.filter((file) => folderOf(file) === here);
+        const posts = [...files, ...localOnly].filter((file) => folderOf(file) === here);
         const grid = $('[data-folder-grid]');
         grid.replaceChildren(...subfolders.map(makeFolderCard));
         grid.toggleAttribute('hidden', !subfolders.length);
@@ -1080,20 +1208,38 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         };
         insertText(snippets[kind] ?? selected);
       }
+      /** Từ điển tag = tag lúc build + tag đọc trực tiếp từ các bài trên GitHub (gồm cả bài vừa publish). */
+      const tagVocabulary = () => buildVocabulary(builtTags, repoFiles.flatMap((file) => tagsBySha.get(file.sha) ?? []).map((name) => ({ name, count: 1 })));
+      const currentTags = () => tags.value.split(',').map((tag) => tag.trim()).filter(Boolean);
       function autoTags() {
-        const source = `${title.value}\n${editorSource()}`.toLowerCase();
-        const rules: Array<[string, string]> = [
-          ['sql injection', 'SQL Injection'], ['sqli', 'SQL Injection'], ['cross-site scripting', 'XSS'], ['xss', 'XSS'],
-          ['prototype pollution', 'Prototype Pollution'], ['path traversal', 'Path Traversal'], ['jwt', 'JWT'], ['oauth', 'OAuth'],
-          ['flask', 'Flask'], ['php', 'PHP'], ['javascript', 'JavaScript'], ['node.js', 'Node.js'], ['python', 'Python'],
-          ['webdav', 'WebDAV'], ['ssrf', 'SSRF'], ['ssti', 'SSTI'], ['rce', 'RCE'], ['deserialization', 'Deserialization'],
-          ['rsa', 'RSA'], ['aes', 'AES'], ['buffer overflow', 'Buffer Overflow'], ['reverse engineering', 'Reverse Engineering'],
-        ];
-        const existing = tags.value.split(',').map((tag) => tag.trim()).filter(Boolean);
-        const seen = new Set(existing.map((tag) => tag.toLowerCase()));
-        const added = rules.filter(([needle]) => source.includes(needle)).map(([, tag]) => tag).filter((tag) => !seen.has(tag.toLowerCase()));
-        tags.value = [...existing, ...added].join(', ');
-        setStatus(added.length ? `Đã thêm tags: ${added.join(', ')}` : 'Chưa tìm được tag mới từ nội dung.', added.length ? 'ok' : 'info');
+        const result = suggestTags({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() }, tagVocabulary());
+        tags.value = result.tags.join(', ');
+        const notes = [
+          result.added.length ? `Đã thêm tags: ${result.added.join(', ')}` : '',
+          result.renamed.length ? `Đổi theo cách viết sẵn có: ${result.renamed.map(([from, to]) => `${from} → ${to}`).join(', ')}` : '',
+        ].filter(Boolean);
+        setStatus(notes.join('. ') || 'Chưa tìm được tag mới từ nội dung.', notes.length ? 'ok' : 'info');
+        void renderPreview(); scheduleDraft();
+      }
+      /** Gợi ý tag đã có cho phần đang gõ sau dấu phẩy cuối; datalist cần cả chuỗi nên mỗi option giữ nguyên phần trước. */
+      function updateTagOptions() {
+        const typed = tags.value;
+        const cut = typed.lastIndexOf(',');
+        const prefix = cut < 0 ? '' : `${typed.slice(0, cut + 1).trimEnd()} `;
+        const needle = typed.slice(cut + 1).trim().toLowerCase();
+        const used = new Set(typed.slice(0, Math.max(cut, 0)).split(',').map((tag) => tag.trim().toLowerCase()));
+        const options = [...tagVocabulary().values()]
+          .filter((term) => !used.has(term.name.toLowerCase()) && (!needle || term.name.toLowerCase().includes(needle)))
+          .sort((a, b) => Number(!a.name.toLowerCase().startsWith(needle)) - Number(!b.name.toLowerCase().startsWith(needle)) || b.count - a.count || a.name.localeCompare(b.name))
+          .slice(0, 30)
+          .map((term) => Object.assign(document.createElement('option'), { value: `${prefix}${term.name}` }));
+        $('[data-tag-options]').replaceChildren(...options);
+      }
+      function normalizeTags() {
+        const vocabulary = tagVocabulary();
+        const seen = new Set<string>();
+        const next = currentTags().map((tag) => canonicalTag(tag, vocabulary)).filter((tag) => !seen.has(tag.toLowerCase()) && seen.add(tag.toLowerCase()));
+        if (next.join(', ') !== currentTags().join(', ')) { tags.value = next.join(', '); void renderPreview(); scheduleDraft(); }
       }
       function addFiles(files: FileList | File[]) {
         for (const file of Array.from(files)) {
@@ -1102,7 +1248,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           assets.push({ file, name, url: URL.createObjectURL(file) });
           if (file.type.startsWith('image/')) insertText(`![${name}](./${name})`);
         }
-        renderAssets(); void renderPreview();
+        renderAssets(); void renderPreview(); scheduleDraft();
       }
       const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
       function normalizeCallouts(source: string) {
@@ -1284,6 +1430,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
         if (!slugify(title.value)) return setStatus('Tiêu đề chưa tạo được tên folder hợp lệ.', 'error');
         if (!(await savePending())) return;
+        clearTimeout(draftTimer); await localWrite;
         const filePath = currentPath();
         try {
           setStatus('Đang tạo commit…');
@@ -1301,7 +1448,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           const commit = await api<{ sha: string; html_url: string }>('/git/commits', { method: 'POST', body: JSON.stringify({ message: `content: ${openFile ? 'sửa' : 'thêm'} "${title.value.trim()}"`, tree: tree.sha, parents: [ref.object.sha] }) });
           await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
           removeDraft();
-          openFile = { path: filePath, sha: '' }; $('[data-file-label]').textContent = filePath.replace(`${postRoot}/`, '');
+          openFile = { path: filePath, sha: '' }; localDraftPath = undefined; localDraftOwned = false; $('[data-file-label]').textContent = filePath.replace(`${postRoot}/`, '');
           activeFolder = relativeFolder();
           $('[data-save-state]').textContent = 'Đã publish';
           const localSynced = await syncLocal({ quiet: true });
@@ -1330,6 +1477,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           await saveLocalHandle(selectedDirectory);
           updateLocalButton();
           setStatus('Đã kết nối thư mục posts. Bài local sẽ được đối chiếu với GitHub khi mở và sau khi Publish.', 'ok');
+          void scanLocalDrafts();
           return true;
         }
         catch { return false; }
@@ -1338,7 +1486,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         if (!localDirectory) { await chooseLocalFolder(); return; }
         try {
           localPermission = await localDirectory.requestPermission({ mode: 'readwrite' });
-          updateLocalButton();
+          updateLocalButton(); void scanLocalDrafts();
           setStatus(localPermission === 'granted' ? 'Đã kết nối lại thư mục posts local.' : 'Chưa được cấp quyền đọc và ghi thư mục posts.', localPermission === 'granted' ? 'ok' : 'error');
         } catch { await chooseLocalFolder(); }
       }
@@ -1362,7 +1510,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           return false;
         }
       }
-      document.querySelectorAll<HTMLButtonElement>('[data-new]').forEach((button) => button.addEventListener('click', () => startNewInFolder(currentFolder() || folder.value || 'Dreamhack')));
+      document.querySelectorAll<HTMLButtonElement>('[data-new]').forEach((button) => button.addEventListener('click', () => void newWriteup()));
       $('[data-reload]').addEventListener('click', () => void loadTree());
       $('[data-local-connect]').addEventListener('click', () => void connectLocalFolder());
       $('[data-connect]').addEventListener('click', () => {
@@ -1379,6 +1527,9 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       $('[data-pending-discard]').addEventListener('click', discardPending);
       $('[data-selection-clear]').addEventListener('click', () => { selectedFiles.clear(); selectedFolders.clear(); renderFolderHome(); renderSidebar(); });
       $('[data-auto-tags]').addEventListener('click', autoTags);
+      tags.addEventListener('focus', updateTagOptions);
+      tags.addEventListener('input', updateTagOptions);
+      tags.addEventListener('change', normalizeTags);
       $('[data-metadata-toggle]').addEventListener('click', () => {
         const metadata = $<HTMLDetailsElement>('[data-metadata]'); metadata.open = !metadata.open;
       });
@@ -1468,7 +1619,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
   .crumbs { display:flex; flex-wrap:wrap; align-items:center; gap:.15rem .35rem; margin:0 0 .5rem; color:var(--muted); font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; } .crumbs button { padding:.1rem .25rem; border:0; border-radius:.25rem; background:transparent; color:var(--muted); font:inherit; letter-spacing:inherit; text-transform:inherit; } .crumbs button:hover { background:var(--accent-soft); color:#e2bbff; } .crumbs i { color:#5d606b; font-style:normal; } .crumbs [aria-current] { padding:.1rem .25rem; color:var(--text); }
   .create-subfolder { min-height:2.5rem; padding:.55rem .85rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); color:var(--text); font-weight:700; } .create-subfolder:hover { border-color:var(--accent); color:#e2bbff; } .create-folder { background:var(--accent); border-color:#b05be8; color:#21152b; } .create-folder:hover { background:#d28cff; } .back-folder:hover { border-color:var(--accent); color:var(--text); }
   .pending-bar { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #b05be8; border-radius:.55rem; background:var(--accent-soft); } .pending-bar[hidden] { display:none; } .pending-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .pending-bar button { min-height:2rem; padding:.3rem .8rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; font-weight:700; } .pending-bar [data-pending-save] { background:var(--accent); border-color:#b05be8; color:#21152b; }
-  .selection-bar { position:sticky; top:-1.6rem; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #7b4aa3; border-radius:.55rem; background:#2e2339f2; box-shadow:0 .6rem 1.6rem #0006; backdrop-filter:blur(6px); } .selection-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .selection-bar button { min-height:2rem; padding:.3rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; } .selection-bar button:hover:not(:disabled) { border-color:var(--accent); color:#e2bbff; } .recent-card[data-hidden],.folder-file-card[data-hidden] { opacity:.55; border-style:dashed; } .selection-bar button:disabled { opacity:.4; cursor:not-allowed; } .selection-bar [data-folder-rename]:not(:disabled) { border-color:#b05be8; background:var(--accent-soft); color:#e9ccff; font-weight:700; }
+  .selection-bar { position:sticky; top:-1.6rem; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #7b4aa3; border-radius:.55rem; background:#2e2339f2; box-shadow:0 .6rem 1.6rem #0006; backdrop-filter:blur(6px); } .selection-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .selection-bar button { min-height:2rem; padding:.3rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; } .selection-bar button:hover:not(:disabled) { border-color:var(--accent); color:#e2bbff; } .recent-card[data-hidden],.folder-file-card[data-hidden] { opacity:.55; border-style:dashed; } .recent-card[data-local],.folder-file-card[data-local] { border-style:dashed; border-color:#55a975; } [data-local] .selection-checkbox { visibility:hidden; } .selection-bar button:disabled { opacity:.4; cursor:not-allowed; } .selection-bar [data-folder-rename]:not(:disabled) { border-color:#b05be8; background:var(--accent-soft); color:#e9ccff; font-weight:700; }
   .library-status { min-height:0; margin:0 0 1rem; padding:0; background:transparent; } .library-status:not(:empty) { padding:.5rem .75rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); }
   .library-empty { display:grid; justify-items:center; gap:.35rem; padding:3rem 1rem; border:1px dashed #5a5c68; border-radius:.7rem; color:var(--muted); text-align:center; font-size:.72rem; } .library-empty strong { color:var(--text); font:650 1rem/1.3 system-ui,sans-serif; }
   .folder-grid { gap:.9rem; } .folder-card { min-height:8.6rem; overflow:hidden; } .folder-card::before { content:''; position:absolute; inset:0 0 auto; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:0; transition:opacity .15s ease; } .folder-card:hover { transform:translateY(-1px); box-shadow:0 .7rem 1.6rem #0005; } .folder-card:hover::before,.folder-card[data-selected='true']::before { opacity:1; } .folder-open { min-height:8.6rem; padding:1.1rem 1.2rem; } .folder-card[data-selected='true'],.recent-card[data-selected='true'],.folder-file-card[data-selected='true'] { border-color:var(--accent); background:#33283d; box-shadow:0 0 0 1px #c674ff55; } .folder-card strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .folder-card[data-drop] { border-style:dashed; background:#3a2c47; }
