@@ -1,9 +1,14 @@
 ---
 title: Carve Party
 date: 2026-10-23
-ctf: Dreamhack
+ctf: Bronze
 category: web
 difficulty: easy
+tags:
+  - Client-side
+  - Source Code Review
+  - JavaScript
+  - XOR
 ---
 
 # Đề bài
