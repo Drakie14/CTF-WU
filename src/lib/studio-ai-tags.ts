@@ -55,6 +55,7 @@ export async function aiSuggestTags(input: AiTagInput): Promise<string[]> {
     }],
   });
   if (response.stop_reason === 'refusal') throw new Error('Claude từ chối gợi ý tag cho bài này.');
+  if (response.stop_reason === 'max_tokens') throw new Error('Claude trả lời bị cắt giữa chừng.');
   const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
   const parsed = JSON.parse(text) as { tags?: unknown };
   return Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === 'string') : [];
