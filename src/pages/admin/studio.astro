@@ -579,7 +579,12 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         if (hiddenOf(file)) { card.dataset.hidden = ''; card.querySelector('small')!.textContent += ' · Đã ẩn'; }
         card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFile(file.path); });
         card.querySelector('.file-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFile(file.path); else void openPost(file); });
-        card.addEventListener('dragstart', () => { if (!selectedFiles.has(file.path)) { selectedFiles.clear(); selectedFiles.add(file.path); } });
+        card.querySelectorAll('button').forEach((button) => { button.draggable = true; });
+        card.addEventListener('dragstart', (event) => {
+          if (!selectedFiles.has(file.path)) { selectedFiles.clear(); selectedFolders.clear(); selectedFiles.add(file.path); }
+          event.dataTransfer?.setData('text/plain', [...selectedFiles].join('\n'));
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+        });
         return card;
       }
       function makeFolderCard(path: string) {
@@ -591,7 +596,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         card.querySelector('small')!.textContent = `${postCount} bài viết${subCount ? ` · ${subCount} folder con` : ''}`;
         card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFolder(path); });
         card.querySelector('.folder-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFolder(path); else openFolder(path); });
-        card.addEventListener('dragover', (event) => { event.preventDefault(); card.dataset.drop = ''; });
+        card.addEventListener('dragover', (event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; card.dataset.drop = ''; });
         card.addEventListener('dragleave', () => delete card.dataset.drop);
         card.addEventListener('drop', (event) => { event.preventDefault(); delete card.dataset.drop; void moveSelectionTo(path); });
         return card;
