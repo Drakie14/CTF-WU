@@ -44,8 +44,9 @@
 
 # Shiki dùng WebAssembly để tô màu code trong Studio. Chỉ nới CSP cho Studio;
 # Các trang admin khác tiếp tục không cho phép WebAssembly/eval.
+# connect-src thêm api.anthropic.com cho "Tự thêm tags" bằng Claude (chỉ khi tác giả nhập API key).
 /admin/studio/*
   ! Content-Security-Policy
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' blob: data: https://*.githubusercontent.com; media-src 'self' blob:; connect-src 'self' blob: data: https://api.github.com; frame-src blob:; worker-src 'self' blob:; manifest-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' blob: data: https://*.githubusercontent.com; media-src 'self' blob:; connect-src 'self' blob: data: https://api.github.com https://api.anthropic.com; frame-src blob:; worker-src 'self' blob:; manifest-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
   X-Robots-Tag: noindex, nofollow
   Cache-Control: no-cache

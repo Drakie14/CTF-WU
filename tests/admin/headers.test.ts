@@ -47,4 +47,10 @@ describe('public/_headers', () => {
     expect(p).not.toMatch(/script-src[^;]*'unsafe-eval'/);
     expect(csp('/admin/*')).toMatch(/script-src 'self';/);
   });
+
+  it('chỉ Studio được gọi Claude API (Tự thêm tags bằng AI)', () => {
+    expect(csp('/admin/studio/*')).toMatch(/connect-src [^;]*https:\/\/api\.anthropic\.com/);
+    expect(csp('/admin/*')).not.toMatch(/anthropic/);
+    expect(csp('/*')).not.toMatch(/anthropic/);
+  });
 });

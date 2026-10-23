@@ -377,3 +377,31 @@ export function suggestTags(input: TagSuggestionInput, vocabulary: TagVocabulary
   const added = [...freshVulns, ...freshKeywords];
   return { tags, added, novel: added.filter((name) => novel.has(tagKey(name))), removed, renamed };
 }
+
+/**
+ * Gộp tag Claude gợi ý vào kết quả offline: tag tác giả đã nhập giữ nguyên, tag AI ưu tiên trước,
+ * tag offline sẵn có trong blog lấp chỗ còn trống. Tag AI cũng đi qua cách viết của blog và bộ lọc tên mảng.
+ */
+export function mergeAiTags(base: TagSuggestion, ai: string[], vocabulary: TagVocabulary, limit = 8): TagSuggestion {
+  const typed = base.tags.filter((name) => !base.added.includes(name));
+  const keys = new Set(typed.map(tagKey));
+  const removed = [...base.removed];
+  const fresh: string[] = [];
+  const take = (name: string) => {
+    const key = tagKey(name);
+    if (!name.trim() || keys.has(key)) return;
+    keys.add(key);
+    fresh.push(name);
+  };
+  for (const tag of ai) {
+    if (isCategoryTag(tag)) continue;
+    take(canonicalTag(tag, vocabulary).replace(/\s+/g, ' ').trim());
+  }
+  for (const name of base.added) if (!base.novel.includes(name)) take(name);
+  const room = Math.max(limit - typed.length, 0);
+  const freshVulns = fresh.filter(isVuln).slice(0, room);
+  const freshKeywords = fresh.filter((name) => !isVuln(name)).slice(0, room - freshVulns.length);
+  const tags = [...typed.filter(isVuln), ...freshVulns, ...typed.filter((name) => !isVuln(name)), ...freshKeywords];
+  const added = [...freshVulns, ...freshKeywords];
+  return { tags, added, novel: added.filter((name) => !vocabulary.has(tagKey(name))), removed, renamed: base.renamed };
+}

@@ -99,6 +99,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
               <label><span>Category</span><select data-category><option value="">Chưa chọn</option>{CATEGORIES.map((c) => <option value={c}>{c}</option>)}</select></label>
               <label><span>Độ khó</span><select data-difficulty><option value="">Chưa chọn</option>{DIFFICULTIES.map((d) => <option value={d}>{d}</option>)}</select></label>
               <label class="tags-field"><span>Tags</span><input type="text" data-tags list="tag-options" autocomplete="off" placeholder="xss, svg, javascript" /><datalist id="tag-options" data-tag-options></datalist></label>
+              <label class="tags-field" title="Có key thì “Tự thêm tags” hỏi thêm Claude (claude-opus-5-5): gửi nội dung bài tới Anthropic, tính phí vào key này. Key chỉ lưu trong trình duyệt này."><span>Claude API key (tuỳ chọn, cho tag bằng AI)</span><input type="password" autocomplete="off" placeholder="sk-ant-…" data-claude-key /></label>
               <script is:inline type="application/json" data-tag-vocabulary set:html={tagVocabulary}></script>
             </div>
           </details>
@@ -147,7 +148,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
       import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
       import { STUDIO_REPO, STUDIO_TOKEN_KEY } from '../../lib/studio';
-      import { buildVocabulary, canonicalTag, suggestTags, type TagTerm } from '../../lib/studio-tags';
+      import { buildVocabulary, canonicalTag, mergeAiTags, suggestTags, type TagSuggestion, type TagTerm } from '../../lib/studio-tags';
       import { EditorState, Prec, type Extension, type TransactionSpec } from '@codemirror/state';
       import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
       import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
@@ -1270,17 +1271,46 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       /** Từ điển tag = tag lúc build + tag đọc trực tiếp từ các bài trên GitHub (gồm cả bài vừa publish). */
       const tagVocabulary = () => buildVocabulary(builtTags, repoFiles.flatMap((file) => tagsBySha.get(file.sha) ?? []).map((name) => ({ name, count: 1 })));
       const currentTags = () => tags.value.split(',').map((tag) => tag.trim()).filter(Boolean);
-      function autoTags() {
-        const result = suggestTags({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() }, tagVocabulary());
+      /** API key Claude chỉ lưu trong trình duyệt này, như GitHub token. */
+      const claudeKeyStorage = 'ctf-wu.studio.claude-key';
+      const claudeKeyInput = $<HTMLInputElement>('[data-claude-key]');
+      try { claudeKeyInput.value = localStorage.getItem(claudeKeyStorage) ?? ''; } catch { /* storage unavailable */ }
+      claudeKeyInput.addEventListener('change', () => {
+        try { const key = claudeKeyInput.value.trim(); if (key) localStorage.setItem(claudeKeyStorage, key); else localStorage.removeItem(claudeKeyStorage); } catch { /* storage unavailable */ }
+      });
+      let autoTagsBusy = false;
+      async function autoTags() {
+        if (autoTagsBusy) return;
+        const vocabulary = tagVocabulary();
+        const input = { title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() };
+        const offline = suggestTags(input, vocabulary);
+        const apiKey = claudeKeyInput.value.trim();
+        if (!apiKey) return applyTagResult(offline);
+        autoTagsBusy = true;
+        const button = $<HTMLButtonElement>('[data-auto-tags]'); button.disabled = true;
+        setStatus('Đang hỏi Claude gợi ý tags…', 'info');
+        try {
+          // SDK chỉ tải khi dùng tới, không làm nặng Studio lúc mở.
+          const { aiSuggestTags } = await import('../../lib/studio-ai-tags');
+          const ai = await aiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()].map((term) => term.name) });
+          applyTagResult(mergeAiTags(offline, ai, vocabulary), 'Claude');
+        } catch (error) {
+          applyTagResult(offline, undefined, `Không hỏi được Claude (${error instanceof Error ? error.message : String(error)}), dùng gợi ý offline`);
+        } finally {
+          autoTagsBusy = false; button.disabled = false;
+        }
+      }
+      function applyTagResult(result: TagSuggestion, source?: string, warning?: string) {
         tags.value = result.tags.join(', ');
         const known = result.added.filter((name) => !result.novel.includes(name));
         const notes = [
-          known.length ? `Đã thêm tags: ${known.join(', ')}` : '',
+          warning ?? '',
+          known.length ? `Đã thêm tags${source ? ` (${source})` : ''}: ${known.join(', ')}` : '',
           result.novel.length ? `Tag mới (chưa có trong blog, soát lại nhé): ${result.novel.join(', ')}` : '',
           result.renamed.length ? `Đổi theo cách viết sẵn có: ${result.renamed.map(([from, to]) => `${from} → ${to}`).join(', ')}` : '',
           result.removed.length ? `Bỏ tag tên mảng (đã có category): ${result.removed.join(', ')}` : '',
         ].filter(Boolean);
-        setStatus(notes.join('. ') || 'Chưa tìm được tag mới từ nội dung.', notes.length ? 'ok' : 'info');
+        setStatus(notes.join('. ') || 'Chưa tìm được tag mới từ nội dung.', notes.length && !warning ? 'ok' : 'info');
         void renderPreview(); scheduleDraft();
       }
       /** Gợi ý tag đã có cho phần đang gõ sau dấu phẩy cuối; datalist cần cả chuỗi nên mỗi option giữ nguyên phần trước. */
@@ -1602,7 +1632,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       $('[data-pending-save]').addEventListener('click', () => void savePending());
       $('[data-pending-discard]').addEventListener('click', discardPending);
       $('[data-selection-clear]').addEventListener('click', () => { selectedFiles.clear(); selectedFolders.clear(); renderFolderHome(); renderSidebar(); });
-      $('[data-auto-tags]').addEventListener('click', autoTags);
+      $('[data-auto-tags]').addEventListener('click', () => void autoTags());
       tags.addEventListener('focus', updateTagOptions);
       tags.addEventListener('input', updateTagOptions);
       tags.addEventListener('change', normalizeTags);

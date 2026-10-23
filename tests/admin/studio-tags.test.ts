@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildVocabulary, canonicalTag, extractConcepts, isCategoryTag, suggestTags } from '../../src/lib/studio-tags';
+import { buildVocabulary, canonicalTag, extractConcepts, isCategoryTag, mergeAiTags, suggestTags } from '../../src/lib/studio-tags';
 
 const vocabulary = buildVocabulary([
   { name: 'Web', count: 13 }, { name: 'Misc', count: 3 }, { name: 'Path Traversal', count: 5 }, { name: 'XSS', count: 4 },
@@ -108,5 +108,20 @@ describe('extractConcepts / tag mới', () => {
     const result = suggestTags({ title: 'X', body: '## 2. prototype pollution là gì?', current: [] }, vocabulary);
     expect(result.added).toContain('Prototype Pollution');
     expect(result.novel).toEqual([]);
+  });
+});
+
+describe('mergeAiTags', () => {
+  it('keeps typed tags, puts AI tags first, snaps spelling and drops categories', () => {
+    const base = suggestTags({ title: 'X', body: 'Gửi `../../../../etc/passwd`.', current: ['dset'] }, vocabulary);
+    const merged = mergeAiTags(base, ['Web', 'prototype pollution', 'Known-plaintext', 'dset'], vocabulary);
+    expect(merged.tags).toEqual(['Prototype Pollution', 'Path Traversal', 'dset', 'Known-plaintext']);
+    expect(merged.novel).toEqual(['Known-plaintext']);
+  });
+
+  it('drops offline-only novel guesses when AI answered', () => {
+    const base = suggestTags({ title: 'X', body: 'Vậy `Alpha Trick` là gì?', current: [] }, vocabulary);
+    expect(base.novel).toEqual(['Alpha Trick']);
+    expect(mergeAiTags(base, ['XSS'], vocabulary).tags).toEqual(['XSS']);
   });
 });
