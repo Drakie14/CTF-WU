@@ -109,7 +109,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
 
           <div class="editor-grid">
             <section class="source-pane">
-              <div class="pane-head"><span>Markdown</span><span>Ctrl+V ảnh để chèn</span></div>
+              <div class="pane-head"><span>Markdown</span><span class="editor-keys" tabindex="0" title="Tab / Shift+Tab: thụt lề (dòng list thành list con)&#10;Bôi đen rồi gõ ` [ ( { &quot; * _ ~ = $ &lt;: bọc vùng chọn (` trên nhiều dòng thành code block)&#10;Ctrl+B đậm · Ctrl+I nghiêng · Ctrl+E code · Ctrl+Shift+X gạch · Ctrl+K link&#10;Bôi đen chữ rồi dán URL: thành link&#10;Ctrl+F tìm / thay · Ctrl+D chọn chữ giống tiếp theo&#10;Alt+↑/↓ chuyển dòng · Shift+Alt+↑/↓ nhân đôi dòng · Ctrl+Z / Ctrl+Shift+Z hoàn tác&#10;Ctrl+V ảnh để chèn">Ctrl+V ảnh · Phím tắt ⓘ</span></div>
               <div class="code-editor" data-editor></div>
               <label class="asset-drop" data-drop>
                 <input type="file" multiple data-assets accept="image/*,.svg,.txt,.py,.js,.ts,.zip,.pdf" />
@@ -148,8 +148,11 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
       import { STUDIO_REPO, STUDIO_TOKEN_KEY } from '../../lib/studio';
       import { buildVocabulary, canonicalTag, suggestTags, type TagTerm } from '../../lib/studio-tags';
-      import { EditorState } from '@codemirror/state';
-      import { EditorView, lineNumbers } from '@codemirror/view';
+      import { EditorState, Prec, type Extension, type TransactionSpec } from '@codemirror/state';
+      import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
+      import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
+      import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
+      import { insertIndent, insertLink, pasteLink, toggleMark, wrapSelection } from '../../lib/studio-editor';
       import { markdown } from '@codemirror/lang-markdown';
       import { languages } from '@codemirror/language-data';
       import { oneDark } from '@codemirror/theme-one-dark';
@@ -218,21 +221,43 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       const writtenAssets = new Set<Asset>();
 
       const editorSource = () => editor.state.doc.toString();
+      let editorExtensions: Extension[] = [];
+      /** Nạp bài mới: báo cho preview/nháp như một lần sửa, rồi dựng lại state để Ctrl+Z không lùi về bài trước. */
       function setEditorSource(source: string) {
         editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: source } });
+        editor.setState(EditorState.create({ doc: source, extensions: editorExtensions }));
       }
+      const run = (view: EditorView, spec: TransactionSpec | null) => { if (spec) view.dispatch(spec); return Boolean(spec); };
       function initEditor() {
-        editor = new EditorView({
-          state: EditorState.create({
-            doc: '',
-            extensions: [
-              lineNumbers(), EditorView.lineWrapping, oneDark,
-              markdown({ codeLanguages: languages }),
-              EditorView.updateListener.of((update) => { if (update.docChanged) { void renderPreview(); scheduleDraft(); } }),
-            ],
+        editorExtensions = [
+          lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(), history(), search({ top: true }), highlightSelectionMatches(),
+          EditorView.lineWrapping, oneDark,
+          markdown({ codeLanguages: languages }),
+          EditorView.inputHandler.of((view, _from, _to, text) => {
+            const spec = wrapSelection(view.state, text);
+            if (spec) view.dispatch(spec);
+            return Boolean(spec);
           }),
-          parent: $('[data-editor]'),
-        });
+          Prec.high(EditorView.domEventHandlers({
+            paste: (event, view) => {
+              if (!run(view, pasteLink(view.state, event.clipboardData?.getData('text/plain') ?? ''))) return false;
+              event.preventDefault();
+              return true;
+            },
+          })),
+          Prec.high(keymap.of([
+            { key: 'Tab', run: (view) => run(view, insertIndent(view.state)) || indentMore(view), shift: indentLess },
+            { key: 'Mod-b', run: (view) => run(view, toggleMark(view.state, '**')) },
+            { key: 'Mod-i', run: (view) => run(view, toggleMark(view.state, '*')) },
+            { key: 'Mod-e', run: (view) => run(view, toggleMark(view.state, '`')) },
+            { key: 'Mod-Shift-x', run: (view) => run(view, toggleMark(view.state, '~~')) },
+            { key: 'Mod-k', run: (view) => run(view, insertLink(view.state)) },
+          ])),
+          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+          EditorState.allowMultipleSelections.of(true),
+          EditorView.updateListener.of((update) => { if (update.docChanged) { void renderPreview(); scheduleDraft(); } }),
+        ];
+        editor = new EditorView({ state: EditorState.create({ doc: '', extensions: editorExtensions }), parent: $('[data-editor]') });
         editor.contentDOM.addEventListener('paste', (event) => {
           const images = [...(event.clipboardData?.items ?? [])].filter((item) => item.type.startsWith('image/')).map((item) => item.getAsFile()).filter((file): file is File => Boolean(file));
           if (images.length) { event.preventDefault(); addFiles(images); }
