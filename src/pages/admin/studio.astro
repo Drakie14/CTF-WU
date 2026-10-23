@@ -571,61 +571,220 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       const selectionMode = () => selectedFiles.size > 0 || selectedFolders.size > 0;
       function toggleSelectedFile(path: string) { if (selectedFiles.has(path)) selectedFiles.delete(path); else selectedFiles.add(path); renderFolderHome(); renderSidebar(); }
       function toggleSelectedFolder(path: string) { if (selectedFolders.has(path)) selectedFolders.delete(path); else selectedFolders.add(path); renderFolderHome(); }
-      function makeDragStack(count: number, label: string) {
-        const stack = document.createElement('div');
-        stack.style.cssText = 'position:fixed;top:-500px;left:-500px;width:180px;height:80px;pointer-events:none;';
-        const layers = Math.min(count, 3);
-        for (let i = layers - 1; i >= 0; i--) {
-          const sheet = document.createElement('div');
-          sheet.style.cssText = `position:absolute;inset:0;padding:.7rem .8rem;border:1px solid #a860db;border-radius:.5rem;background:#33283d;color:#f1e6fa;font:600 .74rem system-ui,sans-serif;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;box-shadow:0 .4rem 1rem #0007;transform:translate(${i * 6}px,${i * 5}px) rotate(${i * 3 * (i % 2 ? 1 : -1)}deg);`;
-          if (i === 0) sheet.textContent = label;
-          stack.append(sheet);
-        }
-        if (count > 1) {
-          const badge = document.createElement('span');
-          badge.textContent = String(count);
-          badge.style.cssText = 'position:absolute;top:-8px;right:-8px;min-width:1.5rem;height:1.5rem;padding:0 .35rem;display:grid;place-items:center;border-radius:999px;background:#b05be8;color:#fff;font:700 .72rem system-ui,sans-serif;box-shadow:0 .2rem .6rem #0008;';
-          stack.append(badge);
-        }
-        document.body.append(stack);
-        setTimeout(() => stack.remove(), 0);
-        return stack;
+      type Motion = { x: number; y: number; s: number; r: number; o: number };
+      type DragLayer = { clone: HTMLElement; source: HTMLElement; w: number; h: number; fit: number; k: number; now: Motion; vel: Motion; goal: Motion };
+      type DragPhase = 'follow' | 'return' | 'absorb';
+      const motionKeys = ['x', 'y', 's', 'r', 'o'] as const;
+      const settleEps: Motion = { x: .3, y: .3, s: .002, r: .05, o: .01 };
+      const phaseDamping: Record<DragPhase, number> = { follow: .8, return: .62, absorb: 1 };
+      const fan = [0, -4, 5, -7];
+      const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+      let drag: {
+        layers: DragLayer[]; layer: HTMLElement; badge?: HTMLElement; pointer: { x: number; y: number }; grab: { x: number; y: number };
+        vx: number; lastMove: { x: number; t: number }; lastFrame: number; frame: number; phase: DragPhase; phaseStart: number;
+        target?: HTMLElement; done?: () => void | Promise<void>; cleanup: () => void;
+      } | undefined;
+      const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+      const dragKey = (el: HTMLElement) => `${el.dataset.dragKind}:${el.dataset.dragPath}`;
+      function enableCardDrag(card: HTMLElement, kind: 'file' | 'folder', path: string) {
+        card.dataset.dragKind = kind; card.dataset.dragPath = path;
+        card.addEventListener('pointerdown', (event) => {
+          if (event.button !== 0 || event.pointerType === 'touch' || drag) return;
+          const start = { x: event.clientX, y: event.clientY };
+          const stop = () => { window.removeEventListener('pointermove', watch); window.removeEventListener('pointerup', stop); };
+          const watch = (move: PointerEvent) => {
+            if (Math.hypot(move.clientX - start.x, move.clientY - start.y) < 6) return;
+            stop(); beginDrag(kind, path, start, move);
+          };
+          window.addEventListener('pointermove', watch); window.addEventListener('pointerup', stop);
+        });
       }
-      function selectedCards() {
-        return [...document.querySelectorAll<HTMLElement>('.recent-card,.folder-file-card,.folder-card')].filter((el) => el.dataset.selected === 'true');
+      function beginDrag(kind: 'file' | 'folder', path: string, start: { x: number; y: number }, event: PointerEvent) {
+        const picked = kind === 'file' ? selectedFiles : selectedFolders;
+        if (!picked.has(path)) { selectedFiles.clear(); selectedFolders.clear(); picked.add(path); renderFolderHome(); renderSidebar(); }
+        const cards = [...document.querySelectorAll<HTMLElement>('[data-library-home] [data-drag-path]')]
+          .filter((el) => (el.dataset.dragKind === 'file' ? selectedFiles : selectedFolders).has(el.dataset.dragPath ?? ''));
+        const grabbed = cards.find((el) => el.dataset.dragKind === kind && el.dataset.dragPath === path);
+        if (!grabbed) return;
+        const centerOf = (box: DOMRect) => ({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+        const origin = centerOf(grabbed.getBoundingClientRect());
+        const distance = (el: HTMLElement) => { const c = centerOf(el.getBoundingClientRect()); return Math.hypot(c.x - origin.x, c.y - origin.y); };
+        const ordered = [grabbed, ...cards.filter((el) => el !== grabbed).sort((a, b) => distance(a) - distance(b))];
+        const layer = document.createElement('div'); layer.className = 'drag-layer'; layer.setAttribute('aria-hidden', 'true');
+        const layers = ordered.map((source, index): DragLayer => {
+          const box = source.getBoundingClientRect();
+          const clone = source.cloneNode(true) as HTMLElement;
+          clone.classList.add('drag-clone'); delete clone.dataset.dragPath; delete clone.dataset.dropFolder;
+          clone.style.width = `${box.width}px`; clone.style.height = `${box.height}px`; clone.style.zIndex = String(ordered.length - index);
+          layer.append(clone);
+          const now = { ...centerOf(box), s: 1, r: 0, o: 1 };
+          return { clone, source, w: box.width, h: box.height, fit: Math.min(1, 210 / box.width), k: Math.max(170, 520 - index * 85), now, vel: { x: 0, y: 0, s: 0, r: 0, o: 0 }, goal: { ...now } };
+        });
+        const total = selectedFiles.size + selectedFolders.size;
+        let badge: HTMLElement | undefined;
+        if (total > 1) { badge = document.createElement('span'); badge.className = 'drag-badge'; badge.textContent = String(total); layer.append(badge); }
+        document.body.append(layer);
+        layers.forEach((item) => { item.source.dataset.lifted = ''; });
+        document.body.dataset.cardDragging = '';
+        const onMove = (move: PointerEvent) => {
+          if (!drag) return;
+          const t = performance.now();
+          const speed = (move.clientX - drag.lastMove.x) / Math.max(1, t - drag.lastMove.t) * 1000;
+          drag.vx = drag.vx * .7 + speed * .3; drag.lastMove = { x: move.clientX, t };
+          drag.pointer = { x: move.clientX, y: move.clientY };
+        };
+        const onUp = () => {
+          if (drag?.phase !== 'follow') return;
+          const swallow = (click: Event) => { click.stopPropagation(); click.preventDefault(); };
+          window.addEventListener('click', swallow, { capture: true, once: true });
+          setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0);
+          if (drag.target) absorbInto(drag.target); else returnHome();
+        };
+        const onKey = (key: KeyboardEvent) => { if (key.key === 'Escape' && drag?.phase === 'follow') { key.preventDefault(); returnHome(); } };
+        const onCancel = () => { if (drag?.phase === 'follow') returnHome(); };
+        window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onCancel); window.addEventListener('keydown', onKey); window.addEventListener('blur', onCancel);
+        const now = performance.now();
+        drag = {
+          layers, layer, badge, pointer: { x: event.clientX, y: event.clientY }, grab: { x: origin.x - start.x, y: origin.y - start.y },
+          vx: 0, lastMove: { x: event.clientX, t: now }, lastFrame: now, frame: 0, phase: 'follow', phaseStart: now,
+          cleanup: () => {
+            window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onCancel); window.removeEventListener('keydown', onKey); window.removeEventListener('blur', onCancel);
+          },
+        };
+        drag.frame = requestAnimationFrame(dragTick);
       }
-      function gatherSelectedCards(origin: HTMLElement) {
-        const target = origin.getBoundingClientRect();
-        setTimeout(() => {
-          for (const el of selectedCards()) {
-            if (el === origin) continue;
-            const box = el.getBoundingClientRect();
-            el.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1), opacity .42s ease';
-            el.style.transform = `translate(${target.left - box.left}px,${target.top - box.top}px) scale(.8) rotate(${(Math.random() - .5) * 8}deg)`;
-            el.style.opacity = '.35';
+      function canDropInto(path: string) {
+        return ![...selectedFolders].some((folderPath) => path === folderPath || path.startsWith(`${folderPath}/`));
+      }
+      function setDropTarget(target: HTMLElement | undefined) {
+        if (!drag || target === drag.target) return;
+        delete drag.target?.dataset.drop;
+        if (target) target.dataset.drop = '';
+        drag.target = target;
+      }
+      function followGoals(dt: number) {
+        if (!drag) return;
+        drag.vx *= Math.exp(-dt * 9);
+        const { pointer, grab } = drag;
+        const hit = document.elementFromPoint(pointer.x, pointer.y)?.closest<HTMLElement>('[data-drop-folder]');
+        setDropTarget(hit && !('lifted' in hit.dataset) && canDropInto(hit.dataset.dropFolder ?? '') ? hit : undefined);
+        const scroller = $('[data-library-home]'); const box = scroller.getBoundingClientRect(); const edge = 70;
+        if (pointer.y < box.top + edge && pointer.x > box.left) scroller.scrollTop -= (box.top + edge - pointer.y) * 12 * dt;
+        else if (pointer.y > box.bottom - edge && pointer.x > box.left) scroller.scrollTop += (pointer.y - box.bottom + edge) * 12 * dt;
+        const hover = drag.target ? .84 : 1;
+        const tilt = clamp(drag.vx * .012, -14, 14);
+        const [lead, ...rest] = drag.layers;
+        const leadScale = lead.fit * hover;
+        lead.goal = { x: pointer.x + grab.x * leadScale, y: pointer.y + grab.y * leadScale, s: leadScale, r: tilt, o: 1 };
+        rest.forEach((item, index) => {
+          const depth = Math.min(index + 1, 3);
+          item.goal = { x: lead.now.x + depth * 6, y: lead.now.y + depth * 7, s: item.fit * hover * (1 - depth * .025), r: fan[depth] + tilt * .55, o: index + 1 > 3 ? 0 : 1 };
+        });
+      }
+      function stepSprings(dt: number) {
+        if (!drag) return false;
+        const damping = phaseDamping[drag.phase];
+        let moving = false;
+        for (const item of drag.layers) {
+          const k = reduceMotion.matches ? 2400 : item.k;
+          const c = 2 * Math.sqrt(k) * (reduceMotion.matches ? 1 : damping);
+          for (const key of motionKeys) {
+            const accel = k * (item.goal[key] - item.now[key]) - c * item.vel[key];
+            item.vel[key] += accel * dt; item.now[key] += item.vel[key] * dt;
+            if (Math.abs(item.goal[key] - item.now[key]) > settleEps[key] || Math.abs(item.vel[key]) > settleEps[key] * 20) moving = true;
           }
-        }, 0);
+        }
+        return moving;
       }
-      function releaseSelectedCards() {
-        for (const el of selectedCards()) { el.style.transition = 'transform .3s ease, opacity .3s ease'; el.style.transform = ''; el.style.opacity = ''; }
-        setTimeout(() => selectedCards().forEach((el) => { el.style.transition = ''; }), 320);
+      function paintDrag() {
+        if (!drag) return;
+        for (const item of drag.layers) {
+          const { x, y, s, r, o } = item.now;
+          item.clone.style.transform = `translate3d(${x - item.w / 2}px,${y - item.h / 2}px,0) rotate(${r}deg) scale(${Math.max(0, s)})`;
+          item.clone.style.opacity = String(clamp(o, 0, 1));
+        }
+        const lead = drag.layers[0];
+        if (drag.badge) {
+          const half = { x: lead.w * lead.now.s / 2, y: lead.h * lead.now.s / 2 };
+          drag.badge.style.transform = `translate3d(${lead.now.x + half.x - 6}px,${lead.now.y - half.y + 6}px,0) translate(-50%,-50%)`;
+        }
+      }
+      function dragTick(time: number) {
+        if (!drag) return;
+        const dt = clamp((time - drag.lastFrame) / 1000, 0, .05); drag.lastFrame = time;
+        if (drag.phase === 'follow') followGoals(dt);
+        const steps = Math.max(1, Math.ceil(dt * 120));
+        let moving = false;
+        for (let step = 0; step < steps; step += 1) moving = stepSprings(dt / steps);
+        paintDrag();
+        if (drag.phase !== 'follow' && drag.done && (!moving || time - drag.phaseStart > 1100)) { const done = drag.done; drag.done = undefined; void done(); }
+        if (drag) drag.frame = requestAnimationFrame(dragTick);
+      }
+      function returnHome() {
+        if (!drag) return;
+        setDropTarget(undefined);
+        drag.phase = 'return'; drag.phaseStart = performance.now();
+        for (const item of drag.layers) {
+          const box = item.source.getBoundingClientRect();
+          item.goal = { x: box.left + box.width / 2, y: box.top + box.height / 2, s: 1, r: 0, o: 1 };
+        }
+        drag.badge?.classList.add('leaving');
+        drag.done = finishDrag;
+      }
+      function absorbInto(target: HTMLElement) {
+        if (!drag) return;
+        const path = target.dataset.dropFolder ?? '';
+        const box = target.getBoundingClientRect();
+        const center = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        drag.phase = 'absorb'; drag.phaseStart = performance.now();
+        drag.layers.forEach((item, index) => {
+          item.goal = { x: center.x, y: center.y, s: .16, r: item.now.r * .3, o: 0 };
+          item.k = Math.max(260, 640 - index * 70);
+        });
+        drag.badge?.classList.add('leaving');
+        if (!reduceMotion.matches) target.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.07)' }, { transform: 'scale(1)' }], { duration: 380, delay: 90, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+        drag.done = async () => {
+          setDropTarget(undefined);
+          const moved = await flipLibrary(() => moveSelectionTo(path));
+          if (moved) return finishDrag();
+          drag?.badge?.classList.remove('leaving');
+          returnHome();
+        };
+      }
+      function finishDrag() {
+        if (!drag) return;
+        cancelAnimationFrame(drag.frame);
+        drag.cleanup();
+        setDropTarget(undefined);
+        drag.layer.remove();
+        drag.layers.forEach((item) => { delete item.source.dataset.lifted; });
+        delete document.body.dataset.cardDragging;
+        drag = undefined;
+      }
+      async function flipLibrary<T>(change: () => T | Promise<T>) {
+        const scope = $('[data-library-home]');
+        const before = new Map([...scope.querySelectorAll<HTMLElement>('[data-drag-path]')].map((el) => [dragKey(el), el.getBoundingClientRect()]));
+        const result = await change();
+        if (reduceMotion.matches) return result;
+        for (const el of scope.querySelectorAll<HTMLElement>('[data-drag-path]')) {
+          const old = before.get(dragKey(el));
+          if (!old) { el.animate([{ opacity: 0, transform: 'scale(.94)' }, { opacity: 1, transform: 'none' }], { duration: 280, easing: 'ease-out' }); continue; }
+          const box = el.getBoundingClientRect(); const dx = old.left - box.left; const dy = old.top - box.top;
+          if (Math.abs(dx) + Math.abs(dy) > 1) el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { duration: 460, easing: 'cubic-bezier(.22,1,.36,1)' });
+        }
+        return result;
       }
       function makeFileCard(file: RepoFile, className = 'recent-card') {
-        const card = document.createElement('article'); card.className = className; card.draggable = true;
+        const card = document.createElement('article'); card.className = className;
         card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="file-open"><span class="file-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="file-sheet" d="M8 3.5h10l7 7v17a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-23a1 1 0 0 1 1-1z"/><path class="file-fold" d="M18 3.5v7h7"/><path class="file-lines" d="M11 16h10M11 20h10M11 24h7"/></svg></span><strong></strong><small></small></button>`;
         card.querySelector('strong')!.textContent = articleName(file); card.querySelector('small')!.textContent = folderOf(file) || 'Chưa phân loại';
         card.dataset.selected = String(selectedFiles.has(file.path));
         if (hiddenOf(file)) { card.dataset.hidden = ''; card.querySelector('small')!.textContent += ' · Đã ẩn'; }
         card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFile(file.path); });
         card.querySelector('.file-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFile(file.path); else void openPost(file); });
-        card.querySelectorAll('button').forEach((button) => { button.draggable = true; });
-        card.addEventListener('dragstart', (event) => {
-          if (!selectedFiles.has(file.path)) { selectedFiles.clear(); selectedFolders.clear(); selectedFiles.add(file.path); }
-          event.dataTransfer?.setData('text/plain', [...selectedFiles].join('\n'));
-          if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setDragImage(makeDragStack(selectedFiles.size, articleName(file)), 90, 40); }
-          gatherSelectedCards(card);
-        });
-        card.addEventListener('dragend', releaseSelectedCards);
+        enableCardDrag(card, 'file', file.path);
         return card;
       }
       function makeFolderCard(path: string) {
@@ -637,17 +796,8 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         card.querySelector('small')!.textContent = `${postCount} bài viết${subCount ? ` · ${subCount} folder con` : ''}`;
         card.querySelector('.selection-checkbox')!.addEventListener('click', (event) => { event.stopPropagation(); toggleSelectedFolder(path); });
         card.querySelector('.folder-open')!.addEventListener('click', () => { if (selectionMode()) toggleSelectedFolder(path); else openFolder(path); });
-        card.draggable = true; card.querySelectorAll('button').forEach((button) => { button.draggable = true; });
-        card.addEventListener('dragstart', (event) => {
-          if (!selectedFolders.has(path)) { selectedFiles.clear(); selectedFolders.clear(); selectedFolders.add(path); card.dataset.selected = 'true'; }
-          event.dataTransfer?.setData('text/plain', [...selectedFolders].join('\n'));
-          if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setDragImage(makeDragStack(selectedFolders.size + selectedFiles.size, leafName(path)), 90, 40); }
-          gatherSelectedCards(card);
-        });
-        card.addEventListener('dragend', releaseSelectedCards);
-        card.addEventListener('dragover', (event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; card.dataset.drop = ''; });
-        card.addEventListener('dragleave', () => delete card.dataset.drop);
-        card.addEventListener('drop', (event) => { event.preventDefault(); delete card.dataset.drop; void moveSelectionTo(path); });
+        card.dataset.dropFolder = path;
+        enableCardDrag(card, 'folder', path);
         return card;
       }
       function renderSidebar() {
@@ -659,12 +809,12 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         const navigate = (target: string) => { showLibrary(); openFolder(target); };
         if (here) {
           const up = document.createElement('button'); up.type = 'button'; up.className = 'tree-folder tree-up'; up.textContent = '↰ Lên trên';
-          up.addEventListener('click', () => navigate(parentOf(here))); rows.push(up);
+          up.dataset.dropFolder = parentOf(here); up.addEventListener('click', () => navigate(parentOf(here))); rows.push(up);
         }
         for (const child of childFolders(here)) {
           const row = document.createElement('button'); row.type = 'button'; row.className = 'tree-folder';
           row.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4.5 8.5h8l3 3h12v13a2 2 0 0 1-2 2h-19a2 2 0 0 1-2-2z"/></svg><span></span>';
-          row.querySelector('span')!.textContent = leafName(child); row.title = child;
+          row.querySelector('span')!.textContent = leafName(child); row.title = child; row.dataset.dropFolder = child;
           row.addEventListener('click', () => navigate(child)); rows.push(row);
         }
         for (const file of repoFiles.filter((entry) => folderOf(entry) === here)) {
@@ -684,7 +834,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           const last = index === crumbs.length - 1;
           const crumb = document.createElement(last ? 'span' : 'button'); crumb.textContent = label;
           if (last) crumb.setAttribute('aria-current', 'page');
-          else { (crumb as HTMLButtonElement).type = 'button'; crumb.addEventListener('click', () => openFolder(path)); }
+          else { (crumb as HTMLButtonElement).type = 'button'; crumb.dataset.dropFolder = path; crumb.addEventListener('click', () => openFolder(path)); }
           if (!index) return [crumb];
           const divider = document.createElement('i'); divider.textContent = '/'; divider.setAttribute('aria-hidden', 'true');
           return [divider, crumb];
@@ -856,19 +1006,19 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           setStatus(`Đã thêm đổi tên "${oldPath}" thành "${newPath}"${retargeted ? ` (cập nhật ctf trong ${retargeted} bài)` : ''} vào danh sách chờ. Bấm Save để commit.`, 'ok');
         } catch (error) { setStatus(errorMessage(error), 'error'); }
       }
-      async function moveSelectionTo(targetFolder: string) {
+      async function moveSelectionTo(targetFolder: string): Promise<boolean> {
         const isInside = (path: string, parent: string) => path === parent || path.startsWith(`${parent}/`);
         const folders = [...selectedFolders].filter((path) => !isInside(targetFolder, path) && parentOf(path) !== targetFolder)
           .filter((path, _, all) => !all.some((other) => other !== path && isInside(path, other)));
         const files = repoFiles.filter((file) => selectedFiles.has(file.path) && folderOf(file) !== targetFolder && !folders.some((path) => inFolder(file, path)));
-        if (!files.length && !folders.length) return setStatus('Chọn ít nhất một bài hoặc folder ở vị trí khác trước khi kéo thả.', 'info');
-        if (!token()) return setStatus('Cần kết nối GitHub để sắp xếp bài.', 'error');
+        if (!files.length && !folders.length) { setStatus('Chọn ít nhất một bài hoặc folder ở vị trí khác trước khi kéo thả.', 'info'); return false; }
+        if (!token()) { setStatus('Cần kết nối GitHub để sắp xếp bài.', 'error'); return false; }
         const clash = folders.find((path) => [...folderSet].some((existing) => existing.toLowerCase() === joinPath(targetFolder, leafName(path)).toLowerCase()));
-        if (clash) return setStatus(`Folder đích đã có folder tên "${leafName(clash)}".`, 'error');
+        if (clash) { setStatus(`Folder đích đã có folder tên "${leafName(clash)}".`, 'error'); return false; }
         const conflict = files.find((file) => repoFiles.some((candidate) => folderOf(candidate) === targetFolder && articleName(candidate) === articleName(file)));
-        if (conflict) return setStatus(`Folder đích đã có bài trùng tên: ${articleName(conflict)}.`, 'error');
+        if (conflict) { setStatus(`Folder đích đã có bài trùng tên: ${articleName(conflict)}.`, 'error'); return false; }
         try {
-          setStatus(`Đang chuyển vào ${targetFolder}…`);
+          setStatus(`Đang chuyển vào ${targetFolder || 'thư mục gốc'}…`);
           const entries: TreeEntry[] = [];
           for (const path of folders) {
             const prefix = `${postRoot}/${path}`;
@@ -886,11 +1036,12 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
               entries.push({ path: target, mode: '100644', type: 'blob', sha: item.sha }, { path: item.path, mode: '100644', type: 'blob', sha: null });
             }
           }
-          selectedFiles.clear(); selectedFolders.clear(); activeFolder = targetFolder;
+          selectedFiles.clear(); selectedFolders.clear();
           const label = [folders.length ? `${folders.length} folder` : '', files.length ? `${files.length} write-up` : ''].filter(Boolean).join(' và ');
-          stageEntries(entries, `content: chuyển ${label} vào ${targetFolder}`);
-          setStatus(`Đã thêm việc chuyển ${label} vào ${targetFolder} vào danh sách chờ. Bấm Save để commit.`, 'ok');
-        } catch (error) { setStatus(errorMessage(error), 'error'); }
+          stageEntries(entries, `content: chuyển ${label} vào ${targetFolder || 'thư mục gốc'}`);
+          setStatus(`Đã thêm việc chuyển ${label} vào ${targetFolder || 'thư mục gốc'} vào danh sách chờ. Bấm Save để commit.`, 'ok');
+          return true;
+        } catch (error) { setStatus(errorMessage(error), 'error'); return false; }
       }
       function renderAssets() {
         const list = $('[data-assets-list]');
@@ -1326,4 +1477,20 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
   .tree-folder { display:flex; align-items:center; gap:.5rem; width:100%; padding:.42rem .45rem; border:0; border-left:2px solid transparent; border-radius:.25rem; background:transparent; color:var(--text); font-size:.73rem; text-align:left; } .tree-folder:hover { border-left-color:var(--accent); background:var(--accent-soft); } .tree-folder svg { flex:none; width:1rem; height:1rem; fill:#b879ec38; stroke:#c48bfa; stroke-width:2; stroke-linejoin:round; } .tree-folder span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tree-up { color:var(--muted); }
   .name-dialog { width:min(26rem,calc(100vw - 2rem)); padding:0; border:1px solid #6a4a86; border-radius:.7rem; background:var(--panel); color:var(--text); box-shadow:0 1.5rem 4rem #000a; } .name-dialog::backdrop { background:#0009; backdrop-filter:blur(2px); } .name-form { display:grid; gap:.55rem; padding:1.3rem; } .name-form h2 { margin:0 0 .4rem; overflow:hidden; font:700 1.25rem/1.25 system-ui,sans-serif; text-overflow:ellipsis; white-space:nowrap; } .name-form label { color:var(--muted); font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; } .name-form input { width:100%; padding:.65rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:#1d1e21; color:var(--text); } .name-form input:focus { border-color:var(--accent); outline:2px solid #c674ff33; } .name-hint { min-height:1.9rem; margin:0; color:var(--muted); font-size:.64rem; line-height:1.5; } .name-hint[data-kind='error'] { color:var(--error); } .name-actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:.3rem; } .name-actions button { min-height:2.2rem; padding:.4rem .9rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.72rem; } .name-actions button:hover { border-color:var(--accent); } .name-actions .primary { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; }
   @media (max-width:38rem) { .browser-head { align-items:stretch; } .browser-actions { flex-wrap:wrap; } .browser-actions > * { flex:1 1 auto; } .selection-bar { top:-1.2rem; } }
+
+  /* Pointer drag: stack follows cursor, flies home or into a folder */
+  body[data-card-dragging] { user-select:none; } body[data-card-dragging] * { cursor:grabbing !important; }
+  [data-drag-path] { user-select:none; -webkit-user-drag:none; }
+  [data-drag-path][data-lifted] { border-style:dashed !important; border-color:#ffffff1c !important; background:#ffffff05 !important; box-shadow:none !important; transform:none !important; }
+  [data-drag-path][data-lifted] > *,[data-drag-path][data-lifted]::before { opacity:0 !important; }
+  .drag-layer { position:fixed; inset:0; z-index:1000; overflow:hidden; pointer-events:none; }
+  .drag-layer > .drag-clone { position:absolute; left:0; top:0; margin:0; transform-origin:50% 50%; will-change:transform,opacity; transition:none; box-shadow:0 1.1rem 2.6rem #000b,0 0 0 1px #c674ff59; animation:drag-lift .28s ease-out both; }
+  .drag-badge { position:absolute; left:0; top:0; z-index:100000; display:grid; min-width:1.75rem; height:1.75rem; padding:0 .45rem; place-items:center; border-radius:999px; background:linear-gradient(145deg,#cf8dff,#8e4ee0); color:#fff; font:750 .76rem/1 system-ui,sans-serif; box-shadow:0 .35rem .9rem #000a,0 0 0 2px #1d1e21; animation:drag-badge-in .34s cubic-bezier(.34,1.56,.64,1) both; transition:opacity .18s ease; }
+  .drag-badge.leaving { opacity:0; }
+  @keyframes drag-lift { from { box-shadow:0 0 0 #0000,0 0 0 1px #c674ff00; } }
+  @keyframes drag-badge-in { from { scale:0; } to { scale:1; } }
+  .folder-card { transition:border-color .15s ease, background .15s ease, transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s ease; }
+  .folder-card[data-drop] { transform:scale(1.035); border-color:var(--accent); box-shadow:0 0 0 3px #c674ff33,0 .9rem 2rem #0006; }
+  .folder-icon { transition:transform .25s cubic-bezier(.34,1.56,.64,1); } .folder-card[data-drop] .folder-icon { transform:scale(1.15) rotate(-7deg); }
+  .tree-folder[data-drop],[data-library-path] button[data-drop] { background:var(--accent-soft); color:#fff; box-shadow:inset 0 0 0 1px var(--accent); border-radius:.35rem; }
 </style>
