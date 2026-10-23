@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import sitemap from '@astrojs/sitemap';
 import { markdownOptions } from './src/lib/markdown/index.ts';
 import attachments from './src/integrations/attachments.ts';
+import studioSync from './src/integrations/studio-sync.ts';
 
 // Đổi thành domain thật khi deploy (dùng cho canonical URL, RSS, sitemap).
 const SITE = process.env.SITE_URL ?? 'https://drakie14-ctf-wu.pages.dev';
@@ -35,6 +36,7 @@ export default defineConfig({
   prefetch: false,
   integrations: [
     attachments(),
+    studioSync(),
     {
       name: 'capture-out-dir',
       hooks: { 'astro:config:done': ({ config }) => void (outDir = fileURLToPath(config.outDir)) },

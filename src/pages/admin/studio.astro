@@ -1460,6 +1460,15 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         if (version === renderVersion) await renderMermaidDiagrams();
         if (version === renderVersion) previewState.textContent = 'Live preview';
       }
+      /** Chỉ có khi mở Studio qua `npm run dev`: git pull về máy để file Studio vừa ghi không chặn lần pull sau. Bản deploy trả null. */
+      async function pullToGit(): Promise<string | null> {
+        try {
+          const reply = await fetch('/__studio/sync', { method: 'POST', headers: { 'x-studio-sync': '1' } });
+          if (!reply.ok) return null;
+          const result = await reply.json() as { ok: boolean; message: string };
+          return result.ok ? 'Đã git pull về máy.' : `Git: ${result.message}`;
+        } catch { return null; }
+      }
       async function publish() {
         if (!token()) { $('[data-token-box]').hidden = false; return setStatus('Nhập GitHub token trước khi publish.', 'error'); }
         if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
@@ -1491,9 +1500,11 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
           $('[data-save-state]').textContent = 'Đã publish';
           const localSynced = await syncLocal({ quiet: true });
           if (localSynced) localStorage.setItem(localBaselineKey(filePath), await hashText(composePost()));
-          setStatus(localSynced
-            ? 'Đã publish GitHub và đồng bộ file trong src/content/posts local.'
-            : 'Đã publish GitHub. Kết nối thư mục src/content/posts để đồng bộ local.', 'ok');
+          const git = await pullToGit();
+          setStatus([
+            localSynced ? 'Đã publish GitHub và đồng bộ file trong src/content/posts local.' : 'Đã publish GitHub. Kết nối thư mục src/content/posts để đồng bộ local.',
+            git ?? '',
+          ].filter(Boolean).join(' '), git && git.startsWith('Git:') ? 'error' : 'ok');
           void loadTree();
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }

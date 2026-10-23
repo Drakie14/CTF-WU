@@ -19,6 +19,7 @@
     "clean:fixtures": "node scripts/clean-fixtures.mjs",
     "build:fixtures": "node scripts/with-fixtures.mjs build",
     "dev:fixtures": "node scripts/with-fixtures.mjs dev",
+    "sync": "node scripts/sync.mjs",
     "verify": "node scripts/verify-dist.mjs",
     "lighthouse": "lhci autorun"
   },
