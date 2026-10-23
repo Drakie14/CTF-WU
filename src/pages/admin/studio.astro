@@ -57,6 +57,11 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
               <button type="button" class="create-folder" data-new data-folder-new hidden>+ Tạo write-up</button>
             </div>
           </div>
+          <div class="pending-bar" data-pending-bar hidden>
+            <span data-pending-count></span>
+            <button type="button" data-pending-discard>Hủy</button>
+            <button type="button" data-pending-save>Save</button>
+          </div>
           <div class="selection-bar" data-selection-bar hidden>
             <span data-selection-summary></span>
             <button type="button" data-folder-rename>Đổi tên folder</button>
@@ -174,6 +179,16 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       let editor!: EditorView;
       let repoFiles: RepoFile[] = [];
       let repoTree: Array<{ path: string; sha: string; type: string }> = [];
+      let remoteBlobs: Array<{ path: string; sha: string; type: string }> = [];
+      type PendingFolders = { entries: TreeEntry[]; messages: string[] };
+      const pendingKey = 'ctf-wu.studio.pending-folders';
+      function readPending(): PendingFolders {
+        try { return JSON.parse(localStorage.getItem(pendingKey) ?? '') as PendingFolders; } catch { return { entries: [], messages: [] }; }
+      }
+      function writePending() {
+        try { if (pending.messages.length) localStorage.setItem(pendingKey, JSON.stringify(pending)); else localStorage.removeItem(pendingKey); } catch { /* storage unavailable */ }
+      }
+      let pending: PendingFolders = readPending();
       let localPermission: PermissionState = 'prompt';
       let mermaidReady: Promise<MermaidApi> | undefined;
       let syncScrollEnabled = false;
@@ -381,15 +396,11 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         try {
           const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
           const data = await api<{ tree: Array<{ path: string; type: string; sha: string }> }>(`/git/trees/${ref.object.sha}?recursive=1`);
-          repoTree = data.tree.filter((item) => item.type === 'blob');
-          const files = repoTree.filter((item) => item.path.startsWith(`${postRoot}/`) && (item.path.endsWith('/index.md') || /\.md$/.test(item.path)))
-            .map((item) => ({ path: item.path, sha: item.sha })).sort((a, b) => a.path.localeCompare(b.path));
-          repoFiles = files;
+          remoteBlobs = data.tree.filter((item) => item.type === 'blob');
           githubConnected = true;
           $('[data-token-box]').hidden = true;
           updateConnection();
-          renderFolderHome(files);
-          renderSidebar();
+          refreshFolderView();
         } catch (error) {
           tree.innerHTML = '';
           const message = error instanceof Error ? error.message : String(error);
@@ -610,6 +621,51 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       }
 
       type TreeEntry = { path: string; mode: '100644'; type: 'blob'; sha?: string | null; content?: string };
+      function refreshFolderView() {
+        repoTree = [...remoteBlobs];
+        for (const entry of pending.entries) {
+          repoTree = repoTree.filter((item) => item.path !== entry.path);
+          if (entry.sha) repoTree.push({ path: entry.path, sha: entry.sha, type: 'blob' });
+        }
+        repoFiles = repoTree.filter((item) => item.path.startsWith(`${postRoot}/`) && /\.md$/.test(item.path))
+          .map((item) => ({ path: item.path, sha: item.sha })).sort((a, b) => a.path.localeCompare(b.path));
+        const count = pending.messages.length;
+        $('[data-pending-bar]').toggleAttribute('hidden', !count);
+        $('[data-pending-count]').textContent = `${count} thay đổi folder chưa lưu`;
+        renderFolderHome(repoFiles);
+        renderSidebar();
+      }
+      function stageEntries(entries: TreeEntry[], message: string) {
+        const remote = new Set(remoteBlobs.map((item) => item.path));
+        const staged = new Map(pending.entries.map((entry) => [entry.path, entry]));
+        for (const entry of entries) {
+          if (entry.sha === null && !remote.has(entry.path)) staged.delete(entry.path);
+          else staged.set(entry.path, entry);
+        }
+        pending = { entries: [...staged.values()], messages: [...pending.messages, message] };
+        writePending();
+        refreshFolderView();
+      }
+      async function savePending() {
+        if (!pending.messages.length) return true;
+        if (!token()) { setStatus('Cần kết nối GitHub để lưu thay đổi.', 'error'); return false; }
+        const count = pending.messages.length;
+        const message = count === 1 ? pending.messages[0] : [`content: cập nhật ${count} thay đổi folder`, ...pending.messages].join('\n');
+        try {
+          setStatus(`Đang lưu ${count} thay đổi folder…`);
+          await commitEntries(pending.entries, message);
+          pending = { entries: [], messages: [] }; writePending();
+          setStatus(`Đã lưu ${count} thay đổi folder lên GitHub.`, 'ok');
+          await loadTree();
+          return true;
+        } catch (error) { setStatus(errorMessage(error), 'error'); return false; }
+      }
+      function discardPending() {
+        pending = { entries: [], messages: [] }; writePending();
+        selectedFiles.clear(); selectedFolders.clear();
+        setStatus('Đã bỏ các thay đổi folder chưa lưu.', 'info');
+        refreshFolderView();
+      }
       async function commitEntries(entries: TreeEntry[], message: string) {
         const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
         const parent = await api<{ tree: { sha: string } }>(`/git/commits/${ref.object.sha}`);
@@ -662,9 +718,8 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         try {
           setStatus(`Đang tạo folder "${path}"…`);
           const blob = await api<{ sha: string }>('/git/blobs', { method: 'POST', body: JSON.stringify({ content: '', encoding: 'utf-8' }) });
-          await commitEntries([{ path: `${postRoot}/${path}/${KEEP_FILE}`, mode: '100644', type: 'blob', sha: blob.sha }], `content: tạo folder "${path}"`);
-          setStatus(`Đã tạo folder "${path}".`, 'ok');
-          await loadTree();
+          stageEntries([{ path: `${postRoot}/${path}/${KEEP_FILE}`, mode: '100644', type: 'blob', sha: blob.sha }], `content: tạo folder "${path}"`);
+          setStatus(`Đã thêm folder "${path}" vào danh sách chờ. Bấm Save để commit.`, 'ok');
         } catch (error) { setStatus(errorMessage(error), 'error'); }
       }
       async function renameSelectedFolder() {
@@ -689,15 +744,18 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
             if (item.path.endsWith('.md')) {
               const source = decode((await api<{ content: string }>(`/git/blobs/${item.sha}`)).content);
               const updated = retargetCtf(source, oldName, name);
-              if (updated !== source) { retargeted += 1; return [removal, { path: target, mode: '100644', type: 'blob', content: updated }]; }
+              if (updated !== source) {
+                retargeted += 1;
+                const blob = await api<{ sha: string }>('/git/blobs', { method: 'POST', body: JSON.stringify({ content: updated, encoding: 'utf-8' }) });
+                return [removal, { path: target, mode: '100644', type: 'blob', sha: blob.sha }];
+              }
             }
             return [removal, { path: target, mode: '100644', type: 'blob', sha: item.sha }];
           }))).flat();
-          await commitEntries(entries, `content: đổi tên folder "${oldPath}" thành "${newPath}"`);
           selectedFolders.clear(); selectedFiles.clear();
           if (activeFolder === oldPath || activeFolder?.startsWith(`${oldPath}/`)) activeFolder = newPath + activeFolder.slice(oldPath.length);
-          setStatus(`Đã đổi tên "${oldPath}" thành "${newPath}"${retargeted ? `, cập nhật ctf trong ${retargeted} bài` : ''}. Chạy git pull để lấy thay đổi về local.`, 'ok');
-          await loadTree();
+          stageEntries(entries, `content: đổi tên folder "${oldPath}" thành "${newPath}"`);
+          setStatus(`Đã thêm đổi tên "${oldPath}" thành "${newPath}"${retargeted ? ` (cập nhật ctf trong ${retargeted} bài)` : ''} vào danh sách chờ. Bấm Save để commit.`, 'ok');
         } catch (error) { setStatus(errorMessage(error), 'error'); }
       }
       async function moveSelectionTo(targetFolder: string) {
@@ -718,9 +776,9 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
               entries.push({ path: target, mode: '100644', type: 'blob', sha: item.sha }, { path: item.path, mode: '100644', type: 'blob', sha: null });
             }
           }
-          await commitEntries(entries, `content: chuyển ${files.length} write-up vào ${targetFolder}`);
           selectedFiles.clear(); selectedFolders.clear(); activeFolder = targetFolder;
-          setStatus(`Đã chuyển ${files.length} bài vào ${targetFolder}.`, 'ok'); void loadTree();
+          stageEntries(entries, `content: chuyển ${files.length} write-up vào ${targetFolder}`);
+          setStatus(`Đã thêm việc chuyển ${files.length} bài vào ${targetFolder} vào danh sách chờ. Bấm Save để commit.`, 'ok');
         } catch (error) { setStatus(errorMessage(error), 'error'); }
       }
       function renderAssets() {
@@ -963,6 +1021,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         if (!token()) { $('[data-token-box]').hidden = false; return setStatus('Nhập GitHub token trước khi publish.', 'error'); }
         if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
         if (!slugify(title.value)) return setStatus('Tiêu đề chưa tạo được tên folder hợp lệ.', 'error');
+        if (!(await savePending())) return;
         const filePath = currentPath();
         try {
           setStatus('Đang tạo commit…');
@@ -1053,6 +1112,8 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
       $('[data-folder-back]').addEventListener('click', () => openFolder(parentOf(currentFolder())));
       $('[data-folder-create]').addEventListener('click', () => void createFolder());
       $('[data-folder-rename]').addEventListener('click', () => void renameSelectedFolder());
+      $('[data-pending-save]').addEventListener('click', () => void savePending());
+      $('[data-pending-discard]').addEventListener('click', discardPending);
       $('[data-selection-clear]').addEventListener('click', () => { selectedFiles.clear(); selectedFolders.clear(); renderFolderHome(); renderSidebar(); });
       $('[data-auto-tags]').addEventListener('click', autoTags);
       $('[data-metadata-toggle]').addEventListener('click', () => {
@@ -1143,6 +1204,7 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
   .library-home { padding:1.6rem clamp(1.2rem,4vw,3.5rem) 3rem; } .browser-head { align-items:flex-end; margin-bottom:1.4rem; padding-bottom:1.2rem; border-bottom:1px solid var(--line); } .browser-title { min-width:0; } .browser-head h1 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1.7rem; }
   .crumbs { display:flex; flex-wrap:wrap; align-items:center; gap:.15rem .35rem; margin:0 0 .5rem; color:var(--muted); font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; } .crumbs button { padding:.1rem .25rem; border:0; border-radius:.25rem; background:transparent; color:var(--muted); font:inherit; letter-spacing:inherit; text-transform:inherit; } .crumbs button:hover { background:var(--accent-soft); color:#e2bbff; } .crumbs i { color:#5d606b; font-style:normal; } .crumbs [aria-current] { padding:.1rem .25rem; color:var(--text); }
   .create-subfolder { min-height:2.5rem; padding:.55rem .85rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); color:var(--text); font-weight:700; } .create-subfolder:hover { border-color:var(--accent); color:#e2bbff; } .create-folder { background:var(--accent); border-color:#b05be8; color:#21152b; } .create-folder:hover { background:#d28cff; } .back-folder:hover { border-color:var(--accent); color:var(--text); }
+  .pending-bar { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #b05be8; border-radius:.55rem; background:var(--accent-soft); } .pending-bar[hidden] { display:none; } .pending-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .pending-bar button { min-height:2rem; padding:.3rem .8rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; font-weight:700; } .pending-bar [data-pending-save] { background:var(--accent); border-color:#b05be8; color:#21152b; }
   .selection-bar { position:sticky; top:-1.6rem; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0 0 1rem; padding:.55rem .75rem; border:1px solid #7b4aa3; border-radius:.55rem; background:#2e2339f2; box-shadow:0 .6rem 1.6rem #0006; backdrop-filter:blur(6px); } .selection-bar span { margin-right:auto; color:#ecd7ff; font-size:.72rem; } .selection-bar button { min-height:2rem; padding:.3rem .7rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font-size:.7rem; } .selection-bar button:hover:not(:disabled) { border-color:var(--accent); color:#e2bbff; } .selection-bar button:disabled { opacity:.4; cursor:not-allowed; } .selection-bar [data-folder-rename]:not(:disabled) { border-color:#b05be8; background:var(--accent-soft); color:#e9ccff; font-weight:700; }
   .library-status { min-height:0; margin:0 0 1rem; padding:0; background:transparent; } .library-status:not(:empty) { padding:.5rem .75rem; border:1px solid var(--line); border-radius:.45rem; background:var(--panel); }
   .library-empty { display:grid; justify-items:center; gap:.35rem; padding:3rem 1rem; border:1px dashed #5a5c68; border-radius:.7rem; color:var(--muted); text-align:center; font-size:.72rem; } .library-empty strong { color:var(--text); font:650 1rem/1.3 system-ui,sans-serif; }
