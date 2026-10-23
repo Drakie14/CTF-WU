@@ -71,7 +71,6 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
           <div class="folder-grid" data-folder-grid><p class="empty-tree">Kết nối GitHub để tải thư mục.</p></div>
           <div class="library-empty" data-folder-empty hidden><strong>Folder này đang trống</strong><span>Tạo folder con hoặc write-up đầu tiên ngay bên trong.</span></div>
           <section class="folder-posts" data-folder-posts hidden><h2 data-folder-posts-title>Bài trong folder</h2><div class="recent-grid" data-folder-files></div></section>
-          <section class="recent-posts" data-recent-section><h2>Bài viết gần đây</h2><div class="recent-grid" data-recent-posts></div></section>
         </section>
 
         <section class="composer" data-composer hidden>
@@ -612,13 +611,11 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
         $('[data-folder-posts-title]').textContent = here ? 'Bài trong folder' : 'Bài chưa phân loại';
         $('[data-folder-files]').replaceChildren(...posts.map((file) => makeFileCard(file, 'folder-file-card')));
         $('[data-folder-empty]').toggleAttribute('hidden', !here || Boolean(subfolders.length || posts.length));
-        $('[data-recent-section]').toggleAttribute('hidden', Boolean(here) || !files.length);
         $('[data-folder-back]').toggleAttribute('hidden', !here);
         $('[data-folder-new]').toggleAttribute('hidden', !here);
         $('[data-folder-create]').textContent = here ? '+ Folder con' : '+ Folder mới';
         $('[data-library-title]').textContent = here ? leafName(here) : 'Thư mục write-up';
         renderCrumbs(here); renderSelectionBar();
-        $('[data-recent-posts]').replaceChildren(...files.slice(-8).reverse().map((file) => makeFileCard(file)));
       }
 
       type TreeEntry = { path: string; mode: '100644'; type: 'blob'; sha?: string | null; content?: string };
