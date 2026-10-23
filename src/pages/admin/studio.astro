@@ -1251,6 +1251,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         const notes = [
           result.added.length ? `Đã thêm tags: ${result.added.join(', ')}` : '',
           result.renamed.length ? `Đổi theo cách viết sẵn có: ${result.renamed.map(([from, to]) => `${from} → ${to}`).join(', ')}` : '',
+          result.removed.length ? `Bỏ tag tên mảng (đã có category): ${result.removed.join(', ')}` : '',
         ].filter(Boolean);
         setStatus(notes.join('. ') || 'Chưa tìm được tag mới từ nội dung.', notes.length ? 'ok' : 'info');
         void renderPreview(); scheduleDraft();

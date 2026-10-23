@@ -11,12 +11,22 @@ export type TagVocabulary = Map<string, TagTerm>;
 
 const tagKey = (tag: string) => slugify(tag.trim().replace(/^#/, '')) || tag.trim().toLowerCase();
 
+/**
+ * Tên mảng ("Web", "Misc"…) không phải tag: frontmatter đã có `category`. Tags chỉ gồm lỗ hổng và keyword.
+ * Bỏ khỏi từ điển, gợi ý, và khỏi tags đã nhập khi bấm "Tự thêm tags".
+ */
+const CATEGORY_KEYS = new Set([
+  'web', 'web-exploitation', 'misc', 'miscellaneous', 'crypto', 'cryptography', 'osint', 'forensics', 'pwn', 'binary-exploitation',
+  'rev', 'reverse', 'reversing', 'reverse-engineering', 'mobile', 'cloud', 'ctf', 'writeup',
+]);
+export const isCategoryTag = (tag: string) => CATEGORY_KEYS.has(tagKey(tag));
+
 export function buildVocabulary(...sources: Iterable<TagTerm>[]): TagVocabulary {
   const variants = new Map<string, Map<string, number>>();
   for (const source of sources) {
     for (const { name, count } of source) {
       const clean = name.trim();
-      if (!clean) continue;
+      if (!clean || isCategoryTag(clean)) continue;
       const key = tagKey(clean);
       const seen = variants.get(key) ?? new Map<string, number>();
       seen.set(clean, (seen.get(clean) ?? 0) + count);
@@ -36,55 +46,105 @@ export function buildVocabulary(...sources: Iterable<TagTerm>[]): TagVocabulary 
 /** Cách viết chuẩn theo blog; tag chưa từng dùng thì giữ nguyên. */
 export const canonicalTag = (tag: string, vocabulary: TagVocabulary) => vocabulary.get(tagKey(tag))?.name ?? tag.trim();
 
-/** Category trong frontmatter → tag cùng tên mà các bài cũ vẫn gắn ("Web", "OSINT"…). */
-const CATEGORY_TAGS: Readonly<Record<string, string>> = {
-  web: 'Web', crypto: 'Crypto', misc: 'Misc', osint: 'OSINT', forensics: 'Forensics',
-  pwn: 'Pwn', rev: 'Reverse Engineering', mobile: 'Mobile', cloud: 'Cloud',
-};
+type Rule = { tag: string; patterns: RegExp[]; min?: number };
+/** `names`: tên lỗ hổng; `signs`: payload/hàm đặc trưng, đếm cả trong code. */
+type VulnRule = { tag: string; names: RegExp[]; signs?: RegExp[]; signMin?: number };
 
 /**
- * Dấu hiệu kỹ thuật → tag. `min` là số lần khớp tối thiểu (mặc định 1) cho dấu hiệu dễ gặp tình cờ.
- * Tên tag ở đây chỉ là mặc định: nếu blog đã có cách viết khác cùng slug thì dùng cách viết của blog.
+ * Lỗ hổng: đứng đầu danh sách tags. Nhận khi tên lỗ hổng nằm ở tiêu đề/heading, được nhắc 2 lần trong lời giải thích
+ * (bỏ câu phủ định kiểu "không phải SSTI"), nhắc 1 lần kèm payload, hoặc payload xuất hiện đủ `signMin` lần (mặc định 3).
  */
-const RULES: ReadonlyArray<{ tag: string; patterns: RegExp[]; min?: number }> = [
-  { tag: 'XSS', patterns: [/\bxss\b/gi, /cross[- ]site scripting/gi, /<script\b/gi, /\bon(?:error|load|focus|mouseover)\s*=/gi, /\balert\s*\(/gi], min: 2 },
-  { tag: 'SQL Injection', patterns: [/\bsqli\b/gi, /sql[- ]injection/gi, /'\s*or\s+'?1'?\s*=\s*'?1/gi, /\bunion\s+(?:all\s+)?select\b/gi] },
-  { tag: 'UNION', patterns: [/\bunion\s+(?:all\s+)?select\b/gi] },
-  { tag: 'NoSQL', patterns: [/\bnosql\b/gi, /["']?\$(?:ne|gt|regex|where)["']?\s*:/gi] },
+const VULNS: readonly VulnRule[] = [
+  { tag: 'XSS', names: [/\bxss\b/gi, /cross[- ]site scripting/gi], signs: [/<script\b/gi, /\bon(?:error|load|focus|mouseover|toggle)\s*=/gi, /\balert\s*\(/gi], signMin: 5 },
+  { tag: 'Reflected XSS', names: [/reflected xss/gi, /reflected cross[- ]site/gi] },
+  { tag: 'Stored XSS', names: [/stored xss/gi, /stored cross[- ]site/gi] },
+  { tag: 'DOM XSS', names: [/dom[- ](?:based )?xss/gi] },
+  { tag: 'SQL Injection', names: [/\bsqli\b/gi, /sql[- ]injection/gi], signs: [/'\s*or\s+'?1'?\s*=\s*'?1/gi, /\bunion\s+(?:all\s+)?select\b/gi, /\binformation_schema\b/gi, /\bsqlite_master\b/gi, /'\s*--\s/g] },
+  { tag: 'UNION', names: [/union[- ]based/gi], signs: [/\bunion\s+(?:all\s+)?select\b/gi], signMin: 1 },
+  { tag: 'Blind SQL Injection', names: [/blind sql/gi, /time[- ]based sql/gi, /boolean[- ]based sql/gi] },
+  { tag: 'NoSQL', names: [/\bnosql(?:i| injection)?\b/gi], signs: [/["']?\$(?:ne|gt|regex|where|nin)["']?\s*:/gi], signMin: 2 },
+  { tag: 'SSJI', names: [/\bssji\b/gi, /server[- ]side javascript injection/gi], signs: [/\$where/g], signMin: 2 },
+  { tag: 'Command Injection', names: [/command[- ]injection/gi, /os command/gi], signs: [/\bos\.system\s*\(/gi, /\bshell\s*=\s*True\b/g, /\b(?:shell_exec|passthru|popen|proc_open)\s*\(/gi, /\bchild_process\b/g, /;\s*(?:cat|ls|id|whoami)\b/g] },
+  { tag: 'RCE', names: [/\brce\b/gi, /remote code execution/gi], signs: [/reverse shell/gi] },
+  { tag: 'SSTI', names: [/\bssti\b/gi, /template injection/gi], signs: [/\{\{\s*7\s*\*\s*7\s*\}\}/g, /__class__\.__mro__|__subclasses__\(\)/g, /render_template_string/g, /\bcycler\.__init__|lipsum\.__globals__/g] },
+  { tag: 'SSRF', names: [/\bssrf\b/gi, /server[- ]side request forgery/gi], signs: [/169\.254\.169\.254/g, /metadata\.google\.internal/gi, /gopher:\/\//gi], signMin: 1 },
+  { tag: 'CSRF', names: [/\bcsrf\b/gi, /cross[- ]site request forgery/gi] },
+  { tag: 'IDOR', names: [/\bidor\b/gi, /insecure direct object/gi, /\bbola\b/gi] },
+  { tag: 'BFLA', names: [/\bbfla\b/gi, /broken function level/gi] },
+  { tag: 'Broken Access Control', names: [/broken access control/gi] },
+  { tag: 'Auth Bypass', names: [/auth(?:entication)?[- ]bypass/gi, /bypass (?:the )?(?:login|auth)/gi] },
+  { tag: 'Path Traversal', names: [/path[- ]traversal/gi, /directory[- ]traversal/gi], signs: [/(?:\.\.\/){2,}/g, /\.\.%2f/gi, /(?:\.\.\\){2,}/g], signMin: 1 },
+  { tag: 'LFI', names: [/\blfi\b/gi, /local file inclusion/gi], signs: [/php:\/\/filter/gi], signMin: 1 },
+  { tag: 'RFI', names: [/\brfi\b/gi, /remote file inclusion/gi] },
+  { tag: 'File Upload', names: [/file upload/gi, /upload (?:shell|webshell)/gi], signs: [/\bmove_uploaded_file\b/g, /\bwebshell\b/gi] },
+  { tag: 'XXE', names: [/\bxxe\b/gi], signs: [/<!ENTITY\b/g], signMin: 1 },
+  { tag: 'Deserialization', names: [/deserializ/gi], signs: [/\bunserialize\s*\(/gi, /\bpickle\.loads?\b/g, /\byaml\.load\s*\(/g, /\bO:\d+:"/g], signMin: 2 },
+  { tag: 'Prototype Pollution', names: [/prototype pollution/gi], signs: [/__proto__/g, /constructor\.prototype/g, /constructor\[["']prototype/g], signMin: 1 },
+  { tag: 'Type Juggling', names: [/type juggling/gi, /loose comparison/gi], signs: [/\b0e\d{5,}\b/g] },
+  { tag: 'Race Condition', names: [/race condition/gi, /\btoctou\b/gi] },
+  { tag: 'Open Redirect', names: [/open redirect/gi] },
+  { tag: 'Header Injection', names: [/header injection/gi, /\bcrlf\b/gi], signs: [/%0d%0a/gi] },
+  { tag: 'Host Header Injection', names: [/host header (?:injection|attack|poisoning)/gi] },
+  { tag: 'CSS Injection', names: [/css injection/gi], signs: [/@import\b/g, /input\[value[\^$*]?=/g] },
+  { tag: 'HTML Injection', names: [/html injection/gi, /dangling markup/gi] },
+  { tag: 'DOM Clobbering', names: [/dom clobbering/gi] },
+  { tag: 'CORS', names: [/cors misconfig/gi], signs: [/access-control-allow-(?:origin|credentials)/gi] },
+  { tag: 'Clickjacking', names: [/clickjacking/gi] },
+  { tag: 'Cache Poisoning', names: [/cache poisoning/gi, /cache deception/gi] },
+  { tag: 'Request Smuggling', names: [/request smuggling/gi], signs: [/\bCL\.TE\b|\bTE\.CL\b/g] },
+  { tag: 'Mass Assignment', names: [/mass assignment/gi] },
+  { tag: 'Logic Bug', names: [/logic (?:bug|flaw)/gi, /business logic/gi, /lỗi logic/gi] },
+  { tag: 'Information Disclosure', names: [/information disclosure/gi, /source (?:code )?leak/gi], signs: [/\.git\/(?:HEAD|config)\b/g] },
+  { tag: 'Brute Force', names: [/brute[- ]?forc/gi] },
+  { tag: 'Insecure Randomness', names: [/insecure random/gi, /predictable (?:random|token|seed)/gi] },
+  { tag: 'Hash Length Extension', names: [/length extension/gi], signs: [/\bhashpump\b/gi] },
+  { tag: 'Padding Oracle', names: [/padding oracle/gi] },
+  { tag: 'Session Fixation', names: [/session fixation/gi] },
+  { tag: 'Zip Slip', names: [/zip ?slip/gi] },
+  { tag: 'ReDoS', names: [/\bredos\b/gi, /catastrophic backtracking/gi] },
+  { tag: 'XS-Leaks', names: [/\bxs-?leaks?\b/gi, /cross[- ]site leak/gi] },
+  { tag: 'LDAP Injection', names: [/ldap injection/gi] },
+  { tag: 'XPath Injection', names: [/xpath injection/gi] },
+  { tag: 'Buffer Overflow', names: [/buffer overflow/gi, /\bbof\b/gi] },
+  { tag: 'Format String', names: [/format string/gi], signs: [/%\d*\$[npsx]/g] },
+  { tag: 'ROP', names: [/\brop chain\b/gi], signs: [/\bret2(?:libc|win|plt)\b/gi, /\bROPgadget\b/g], signMin: 1 },
+];
+
+/**
+ * Keyword: công nghệ, thư viện, hàm/sink liên quan tới bug. Đứng sau lỗ hổng.
+ * Từ dễ gặp tình cờ thì đặt `min` cao.
+ */
+const KEYWORDS: readonly Rule[] = [
+  { tag: 'PHP', patterns: [/<\?php\b/gi, /\$_(?:GET|POST|REQUEST|COOKIE|FILES|SERVER)\b/g, /\.php\b/gi], min: 3 },
+  { tag: 'Node.js', patterns: [/\bnode\.?js\b/gi, /require\(\s*['"]express['"]\s*\)/g, /\bexpress\(\)/g] },
+  { tag: 'Flask', patterns: [/\bflask\b/gi], min: 3 },
+  { tag: 'Flask Session', patterns: [/flask[- ]unsign/gi, /flask session/gi] },
+  { tag: 'Django', patterns: [/\bdjango\b/gi], min: 2 },
+  { tag: 'FastAPI', patterns: [/\bfastapi\b/gi], min: 2 },
+  { tag: 'Spring', patterns: [/\bspring ?boot\b/gi, /\bspring framework\b/gi] },
+  { tag: 'Laravel', patterns: [/\blaravel\b/gi], min: 2 },
+  { tag: 'Jinja2', patterns: [/\bjinja2?\b/gi], min: 2 },
+  { tag: 'Handlebars', patterns: [/\bhandlebars\b/gi], min: 2 },
+  { tag: 'EJS', patterns: [/\bejs\b/gi], min: 2 },
+  { tag: 'Pug', patterns: [/\bpug\b/gi], min: 2 },
+  { tag: 'Twig', patterns: [/\btwig\b/gi], min: 2 },
   { tag: 'MongoDB', patterns: [/\bmongo(?:db|ose)?\b/gi] },
   { tag: 'SQLite', patterns: [/\bsqlite3?\b/gi, /\bsqlite_master\b/gi] },
-  { tag: 'Path Traversal', patterns: [/path[- ]traversal/gi, /directory[- ]traversal/gi, /(?:\.\.\/){2,}/g, /\.\.%2f/gi] },
-  { tag: 'LFI', patterns: [/\blfi\b/gi, /local file inclusion/gi, /php:\/\/filter/gi] },
-  { tag: 'Command Injection', patterns: [/command[- ]injection/gi, /\bos\.system\s*\(/gi, /\bshell\s*=\s*True\b/g, /\b(?:exec|shell_exec|passthru|popen)\s*\(/gi] },
-  { tag: 'RCE', patterns: [/\brce\b/gi, /remote code execution/gi, /reverse shell/gi] },
-  { tag: 'SSTI', patterns: [/\bssti\b/gi, /template injection/gi, /\{\{\s*7\s*\*\s*7\s*\}\}/g, /__class__\.__mro__|__subclasses__\(\)/g] },
-  { tag: 'SSRF', patterns: [/\bssrf\b/gi, /server[- ]side request forgery/gi, /169\.254\.169\.254/g] },
-  { tag: 'CSRF', patterns: [/\bcsrf\b/gi, /cross[- ]site request forgery/gi] },
-  { tag: 'IDOR', patterns: [/\bidor\b/gi, /insecure direct object/gi] },
-  { tag: 'Broken Access Control', patterns: [/broken access control/gi] },
-  { tag: 'Auth Bypass', patterns: [/auth(?:entication)?[- ]bypass/gi, /bypass (?:the )?(?:login|auth)/gi] },
-  { tag: 'JWT', patterns: [/\bjwt\b/gi, /\beyJ[\w-]{8,}\.eyJ[\w-]{8,}/g] },
-  { tag: 'OAuth', patterns: [/\boauth\s?2?\b/gi] },
-  { tag: 'OIDC', patterns: [/\boidc\b/gi, /openid connect/gi] },
-  { tag: 'Prototype Pollution', patterns: [/prototype pollution/gi, /__proto__/g, /constructor\.prototype/g] },
+  { tag: 'MySQL', patterns: [/\bmysql\b/gi, /\bmariadb\b/gi], min: 2 },
+  { tag: 'PostgreSQL', patterns: [/\bpostgres(?:ql)?\b/gi], min: 2 },
+  { tag: 'Redis', patterns: [/\bredis\b/gi], min: 2 },
   { tag: 'GraphQL', patterns: [/\bgraphql\b/gi, /\bgraphiql\b/gi] },
   { tag: 'Introspection', patterns: [/\bintrospection\b/gi, /__schema\b/g] },
-  { tag: 'File Upload', patterns: [/file upload/gi, /\bmove_uploaded_file\b/g, /multipart\/form-data/gi] },
+  { tag: 'JWT', patterns: [/\bjwt\b/gi, /\beyJ[\w-]{8,}\.eyJ[\w-]{8,}/g], min: 2 },
+  { tag: 'OAuth', patterns: [/\boauth\s?2?\b/gi] },
+  { tag: 'OIDC', patterns: [/\boidc\b/gi, /openid connect/gi] },
+  { tag: 'WebSocket', patterns: [/\bwebsockets?\b/gi], min: 2 },
+  { tag: 'postMessage', patterns: [/\bpostMessage\s*\(/g, /\bpostMessage\b/g], min: 2 },
   { tag: '.htaccess', patterns: [/\.htaccess\b/gi] },
-  { tag: 'Type Juggling', patterns: [/type juggling/gi, /loose comparison/gi] },
-  { tag: 'Deserialization', patterns: [/deserializ/gi, /\bunserialize\s*\(/gi, /\bpickle\.loads?\b/g] },
-  { tag: 'XXE', patterns: [/\bxxe\b/gi, /<!ENTITY\b/g] },
-  { tag: 'Race Condition', patterns: [/race condition/gi] },
-  { tag: 'Open Redirect', patterns: [/open redirect/gi] },
-  { tag: 'Header Injection', patterns: [/header injection/gi, /\bcrlf\b/gi] },
-  { tag: 'CSS Injection', patterns: [/css injection/gi] },
-  { tag: 'postMessage', patterns: [/\bpostMessage\s*\(/g] },
-  { tag: 'Brute Force', patterns: [/brute[- ]?forc/gi] },
-  { tag: 'Flask', patterns: [/\bflask\b/gi], min: 2 },
   { tag: 'DAV', patterns: [/\bwebdav\b/gi, /\bPROPFIND\b/g] },
-  { tag: 'Flask Session', patterns: [/flask[- ]unsign/gi, /flask session/gi] },
-  { tag: 'PHP', patterns: [/<\?php\b/gi, /\$_(?:GET|POST|REQUEST|COOKIE|FILES|SERVER)\b/g, /\.php\b/gi], min: 2 },
-  { tag: 'Node.js', patterns: [/\bnode\.?js\b/gi, /require\(\s*['"]express['"]\s*\)/g, /\bexpress\(\)/g] },
+  { tag: 'Nginx', patterns: [/\bnginx\b/gi], min: 2 },
+  { tag: 'Docker', patterns: [/\bdocker(?:file)?\b/gi], min: 3 },
+  { tag: 'CVE', patterns: [/\bCVE-\d{4}-\d{4,}\b/gi] },
   { tag: 'Steganography', patterns: [/steganograph/gi, /\b(?:steghide|zsteg|stegsolve|stegseek)\b/gi] },
   { tag: 'Metadata', patterns: [/\bexiftool\b/gi, /\bexif\b/gi] },
   { tag: 'Geolocation', patterns: [/geolocat/gi, /street view/gi] },
@@ -93,12 +153,24 @@ const RULES: ReadonlyArray<{ tag: string; patterns: RegExp[]; min?: number }> = 
   { tag: 'AES-GCM', patterns: [/\baes[- ]gcm\b/gi] },
   { tag: 'AES', patterns: [/\baes(?:[- ](?:ecb|cbc|ctr))?\b/gi], min: 2 },
   { tag: 'Vigenère', patterns: [/vigen[eè]re/gi] },
-  { tag: 'Base64', patterns: [/\bbase64\b/gi, /\batob\s*\(|\bb64decode\b/g], min: 2 },
-  { tag: 'Buffer Overflow', patterns: [/buffer overflow/gi, /\bbof\b/gi] },
-  { tag: 'ROP', patterns: [/\brop\b(?: chain)?/gi, /\bret2(?:libc|win|plt)\b/gi] },
-  { tag: 'Format String', patterns: [/format string/gi, /%\d*\$[npsx]/g] },
-  { tag: 'CVE', patterns: [/\bCVE-\d{4}-\d{4,}\b/gi] },
 ];
+
+/**
+ * Hàm/sink/định danh đáng chú ý: thành keyword khi tác giả nhắc trong lời giải thích (`inline code` 2 lần, chữ thường 3 lần,
+ * hoặc ở tiêu đề/heading). Không tính code block dán nguyên source, vì source nào cũng có cả đống hàm.
+ */
+const SINKS = [
+  'os.path.join', 'shell=True', 'subprocess', 'os.system', 'render_template_string', 'pickle', 'yaml.load',
+  'unserialize', 'file_get_contents', 'preg_replace', 'parse_str', 'strcmp',
+  'innerHTML', 'outerHTML', 'document.write', 'dangerouslySetInnerHTML', 'location.href', 'srcdoc', 'Object.assign',
+  'child_process', '$where', 'ObjectId', '@import', 'x5c',
+];
+const SINK_KEYS = new Map(SINKS.map((sink) => [sink.toLowerCase(), sink]));
+
+const VULN_KEYS = new Set(VULNS.map((rule) => tagKey(rule.tag)));
+/** Tag lấy từ từ điển blog không có rule: đoán là lỗ hổng nếu tên mang chữ đặc trưng. */
+const VULN_WORDS = /injection|traversal|bypass|pollution|overflow|forgery|smuggling|poisoning|juggling|deserializ|race condition|redirect|access control|disclosure|upload|brute force|logic bug|takeover|clobbering|\b(?:xss|csrf|ssrf|idor|xxe|ssti|lfi|rfi|rce|bfla|bola|sqli)\b/i;
+const isVuln = (name: string) => VULN_KEYS.has(tagKey(name)) || VULN_WORDS.test(name);
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const count = (text: string, pattern: RegExp) => text.match(pattern)?.length ?? 0;
@@ -110,21 +182,27 @@ function termPattern(name: string): RegExp {
 }
 
 /**
- * Tag "rõ nghĩa" (nhiều chữ, viết hoa kiểu acronym, có số hay ký tự đặc biệt) chỉ cần nhắc một lần.
- * Từ đơn thường như "Cookie", "Header", "Timeout" dễ xuất hiện tình cờ nên phải lặp lại nhiều hơn.
+ * Tag "rõ nghĩa" (nhiều chữ, viết hoa kiểu acronym, có số hay ký tự đặc biệt) cần nhắc 2 lần trong bài.
+ * Từ đơn thường dễ xuất hiện tình cờ nên phải lặp lại nhiều hơn.
  */
 const isDistinctive = (name: string) => /[\s\-_.@/=\d]/.test(name.trim()) || /[A-Z].*[A-Z]/.test(name) || /^[a-z]+[A-Z]/.test(name);
-/** Từ gần như bài web nào cũng nhắc: chỉ gắn khi xuất hiện ở tiêu đề/heading hoặc rất dày đặc. */
-const GENERIC = new Set(['base64', 'cookie', 'header', 'authorization', 'json', 'timeout', 'markdown', 'graph', 'puzzle', 'certificate', 'misc', 'web', 'crypto']);
+/** Từ gần như bài web nào cũng nhắc (Cookie, Header…): không tự gắn, trừ khi nằm ở tiêu đề. Muốn thì chọn trong gợi ý. */
+const GENERIC = new Set(['base64', 'cookie', 'header', 'authorization', 'json', 'timeout', 'markdown', 'graph', 'puzzle', 'certificate', 'source-code-review', 'client-side', 'linux', 'admin', 'login', 'session', 'token', 'api']);
 /** Tên hàm/biến làm tag ("os.path.join", "shell=True") hay xuất hiện trong code minh hoạ, cần lặp lại mới tính. */
 const isCodeToken = (name: string) => /^[\w$]+(?:[.=][\w$]+)+$/.test(name) && !/^[A-Z]/.test(name);
-function threshold(name: string) {
-  if (GENERIC.has(tagKey(name))) return 6;
-  if (isCodeToken(name)) return 3;
-  return isDistinctive(name) ? 1 : 4;
-}
-/** Bỏ URL (link tham khảo PortSwigger, MDN…) để tên site không bị nhận nhầm là tag. */
-const stripUrls = (text: string) => text.replace(/\]\([^)]*\)/g, ']').replace(/\bhttps?:\/\/\S+/gi, ' ');
+const threshold = (name: string) => (isCodeToken(name) ? 3 : isDistinctive(name) ? 2 : 4);
+/** Bỏ URL (link tham khảo PortSwigger, MDN…) và flag (`CSS{...}`, `DH{...}`) để tên site/tiền tố flag không thành tag. */
+const stripNoise = (text: string) => text
+  .replace(/\]\([^)]*\)/g, ']').replace(/\bhttps?:\/\/\S+/gi, ' ')
+  .replace(/\b[A-Za-z][\w-]{0,15}\{[^}\n]{3,}\}/g, ' ');
+/** Phần lời giải thích: bỏ code block và ảnh, giữ inline code. */
+const prose = (text: string) => text.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1\s*$/gm, ' ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
+/** Câu phủ định ("không phải SSTI", "not vulnerable to XSS") không phải bằng chứng. */
+const NEGATION = /không phải|chẳng phải|không bị|không dính|loại trừ|\bnot\b|n't\b/i;
+const sentences = (text: string) => text.split(/(?<=[.!?])\s+|\n/);
+const affirmed = (text: string) => sentences(text).filter((sentence) => !NEGATION.test(sentence)).join('\n');
+/** Câu gọi tên lỗ hổng ("Đây chính là lỗ hổng `Broken Access Control`") nặng ngang heading. */
+const DECLARES = /lỗ hổng|\blỗi\b|khai thác|tấn công|vulnerab|exploit|\battack/i;
 
 export interface TagSuggestionInput {
   title: string;
@@ -137,59 +215,89 @@ export interface TagSuggestionInput {
 }
 
 export interface TagSuggestion {
-  /** Danh sách cuối: tag category, tag đã nhập (đã chuẩn hoá cách viết), rồi tag mới theo điểm. */
+  /** Danh sách cuối: lỗ hổng trước, keyword sau; trong mỗi nhóm tag đã nhập đứng trước tag mới. */
   tags: string[];
   added: string[];
+  /** Tag tên mảng ("Web", "Misc"…) đã bị bỏ. */
+  removed: string[];
   /** Tag đã nhập bị đổi sang cách viết của blog, dạng [cũ, mới]. */
   renamed: Array<[string, string]>;
 }
 
 export function suggestTags(input: TagSuggestionInput, vocabulary: TagVocabulary, limit = 8): TagSuggestion {
   const ctfName = input.ctf?.trim() ? new RegExp(escapeRegExp(input.ctf.trim()), 'gi') : undefined;
-  const clean = (text: string) => (ctfName ? stripUrls(text).replace(ctfName, ' ') : stripUrls(text));
-  const title = clean(input.title);
+  const clean = (text: string) => (ctfName ? stripNoise(text).replace(ctfName, ' ') : stripNoise(text));
+  const title = affirmed(clean(input.title));
   const body = clean(input.body);
-  const headings = body.match(/^#{1,6}\s.*$/gm)?.join('\n') ?? '';
+  const explained = affirmed(prose(body));
+  const headings = explained.match(/^#{1,6}\s.*$/gm)?.join('\n') ?? '';
   const scores = new Map<string, { name: string; score: number }>();
   const bump = (name: string, score: number) => {
     const key = tagKey(name);
+    if (isCategoryTag(name)) return;
     const entry = scores.get(key) ?? { name: canonicalTag(name, vocabulary), score: 0 };
     entry.score = Math.max(entry.score, score);
     scores.set(key, entry);
   };
-  const weigh = (pattern: RegExp) => count(title, pattern) * 3 + count(headings, pattern) * 2 + Math.min(count(body, pattern), 5);
+  /** Tiêu đề/heading là chủ đề bài: một lần ở đó nặng hơn nhiều lần rải rác trong thân bài. */
+  const weigh = (patterns: RegExp[], text = explained) => {
+    const strong = patterns.reduce((sum, pattern) => sum + count(title, pattern) + count(headings, pattern), 0);
+    const plain = patterns.reduce((sum, pattern) => sum + count(text, pattern), 0);
+    return { strong, plain, score: strong * 4 + Math.min(plain, 6) };
+  };
 
-  for (const rule of RULES) {
-    const hits = rule.patterns.reduce((sum, pattern) => sum + weigh(pattern), 0);
-    if (hits >= Math.max(rule.min ?? 1, GENERIC.has(tagKey(rule.tag)) ? threshold(rule.tag) : 1)) bump(rule.tag, hits + 2);
+  const declared = sentences(explained).filter((sentence) => DECLARES.test(sentence)).join('\n');
+  for (const rule of VULNS) {
+    const names = weigh(rule.names);
+    names.strong += rule.names.reduce((sum, pattern) => sum + count(declared, pattern), 0);
+    const signs = rule.signs ? weigh(rule.signs, body).plain : 0;
+    if (names.strong || names.plain >= 2 || (names.plain && signs) || signs >= (rule.signMin ?? 3)) bump(rule.tag, names.score + Math.min(signs, 6) + 4);
   }
-  for (const id of new Set((`${title}\n${body}`.match(/\bCVE-\d{4}-\d{4,}\b/gi) ?? []).map((cve) => cve.toUpperCase()))) bump(id, 6);
+  for (const rule of KEYWORDS) {
+    const hit = weigh(rule.patterns, body);
+    if (hit.strong || hit.plain >= (rule.min ?? 1)) bump(rule.tag, hit.score + 2);
+  }
+  for (const id of new Set((`${title}\n${body}`.match(/\bCVE-\d{4}-\d{4,}\b/gi) ?? []).map((cve) => cve.toUpperCase()))) bump(id, 8);
   for (const term of vocabulary.values()) {
     if (term.name.length < 3 && !/^[A-Z0-9]+$/.test(term.name)) continue;
-    const score = weigh(termPattern(term.name));
-    if (score >= threshold(term.name)) bump(term.name, score + Math.min(term.count, 3));
+    const generic = GENERIC.has(tagKey(term.name));
+    const pattern = termPattern(term.name);
+    const hit = weigh([pattern], body);
+    if (generic ? count(title, pattern) > 0 : hit.strong || hit.plain >= threshold(term.name)) bump(term.name, hit.score + Math.min(term.count, 3));
+  }
+  // Sink trong inline code tính 1.5 điểm, chữ thường 1 điểm, tiêu đề/heading 3 điểm; đủ 3 điểm thì gắn.
+  const spans = new Map<string, number>();
+  for (const [, code] of explained.matchAll(/`([^`\n]+)`/g)) {
+    const sink = SINK_KEYS.get(code.trim().replace(/\(\)$/, '').toLowerCase());
+    if (sink) spans.set(sink, (spans.get(sink) ?? 0) + 1);
+  }
+  for (const sink of SINKS) {
+    const { strong, plain } = weigh([new RegExp(`(?<![\\w.$@])${escapeRegExp(sink)}(?![\\w$])`, 'g')]);
+    const inline = spans.get(sink) ?? 0;
+    const points = inline * 1.5 + (plain - inline) + strong * 3;
+    if (points >= 3) bump(sink, points);
   }
 
-  const categoryTag = input.category ? CATEGORY_TAGS[input.category.toLowerCase()] : undefined;
-  const ordered: string[] = [];
-  const keys = new Set<string>();
-  const push = (name: string) => { const key = tagKey(name); if (key && !keys.has(key)) { keys.add(key); ordered.push(name); } };
   const renamed: Array<[string, string]> = [];
-
-  if (categoryTag) push(canonicalTag(categoryTag, vocabulary));
+  const removed: string[] = [];
+  const keys = new Set<string>();
+  const current: string[] = [];
   for (const tag of input.current) {
+    if (isCategoryTag(tag)) { removed.push(tag.trim()); continue; }
     const name = canonicalTag(tag, vocabulary);
     if (name !== tag.trim()) renamed.push([tag.trim(), name]);
-    push(name);
+    if (keys.has(tagKey(name))) continue;
+    keys.add(tagKey(name));
+    current.push(name);
   }
-  const existing = ordered.length;
-  [...scores.entries()]
+  const fresh = [...scores.entries()]
     .filter(([key]) => !keys.has(key))
     .sort((a, b) => b[1].score - a[1].score || a[1].name.localeCompare(b[1].name))
-    .slice(0, limit)
-    .forEach(([, entry]) => push(entry.name));
-
-  const added = ordered.slice(existing);
-  if (categoryTag && !input.current.some((tag) => tagKey(tag) === tagKey(categoryTag))) added.unshift(ordered[0]);
-  return { tags: ordered, added, renamed };
+    .map(([, entry]) => entry.name);
+  // Lỗ hổng ưu tiên chỗ trống; keyword lấp phần còn lại.
+  const room = Math.max(limit - current.length, 0);
+  const freshVulns = fresh.filter(isVuln).slice(0, room);
+  const freshKeywords = fresh.filter((name) => !isVuln(name)).slice(0, room - freshVulns.length);
+  const tags = [...current.filter(isVuln), ...freshVulns, ...current.filter((name) => !isVuln(name)), ...freshKeywords];
+  return { tags, added: [...freshVulns, ...freshKeywords], removed, renamed };
 }
