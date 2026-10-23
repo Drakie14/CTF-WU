@@ -9,7 +9,7 @@ export interface TagTerm {
 /** slug → cách viết dùng nhiều nhất. "csrf"/"CSRF", ".htaccess"/"htaccess" về chung một tag. */
 export type TagVocabulary = Map<string, TagTerm>;
 
-const tagKey = (tag: string) => slugify(tag.trim().replace(/^#/, '')) || tag.trim().toLowerCase();
+export const tagKey = (tag: string) => slugify(tag.trim().replace(/^#/, '')) || tag.trim().toLowerCase();
 
 /**
  * Tên mảng ("Web", "Misc"…) không phải tag: frontmatter đã có `category`. Tags chỉ gồm lỗ hổng và keyword.
@@ -397,7 +397,8 @@ export function mergeAiTags(base: TagSuggestion, ai: string[], vocabulary: TagVo
     if (isCategoryTag(tag)) continue;
     take(canonicalTag(tag, vocabulary).replace(/\s+/g, ' ').trim());
   }
-  for (const name of base.added) if (!base.novel.includes(name)) take(name);
+  // AI đã đọc cả bài: chỉ bù bằng gợi ý offline khi AI trả quá ít tag, để không lẫn tag lệch chủ đề.
+  if (fresh.length < 3) for (const name of base.added) if (!base.novel.includes(name)) take(name);
   const room = Math.max(limit - typed.length, 0);
   const freshVulns = fresh.filter(isVuln).slice(0, room);
   const freshKeywords = fresh.filter((name) => !isVuln(name)).slice(0, room - freshVulns.length);

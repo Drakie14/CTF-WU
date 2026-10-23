@@ -48,9 +48,9 @@ describe('public/_headers', () => {
     expect(csp('/admin/*')).toMatch(/script-src 'self';/);
   });
 
-  it('chỉ Studio được gọi Claude API (Tự thêm tags bằng AI)', () => {
-    expect(csp('/admin/studio/*')).toMatch(/connect-src [^;]*https:\/\/api\.anthropic\.com/);
-    expect(csp('/admin/*')).not.toMatch(/anthropic/);
-    expect(csp('/*')).not.toMatch(/anthropic/);
+  it('chỉ Studio được gọi Gemini API (Gợi ý tags bằng AI)', () => {
+    expect(csp('/admin/studio/*')).toMatch(/connect-src [^;]*https:\/\/generativelanguage\.googleapis\.com/);
+    expect(csp('/admin/*')).not.toMatch(/googleapis|anthropic/);
+    expect(csp('/*')).not.toMatch(/googleapis|anthropic/);
   });
 });

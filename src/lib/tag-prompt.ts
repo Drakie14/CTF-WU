@@ -1,6 +1,5 @@
 /**
- * Prompt gợi ý tag, dùng chung cho Claude API và cách "copy sang ChatGPT/Claude web".
- * Không import SDK ở đây để Studio dùng prompt mà không kéo theo chunk của SDK.
+ * Prompt gợi ý tag gửi cho Gemini, và cách đọc câu trả lời.
  */
 
 export interface TagPromptInput {
@@ -25,7 +24,12 @@ Rules:
 - Skip generic words that fit almost any write-up (Cookie, Header, JSON, Base64, Linux, Login, Token, API) unless the whole challenge is about it.
 - When a tag means the same thing as one in the existing tag list, return the existing spelling exactly.
 - Tags are in English, Title Case or the conventional spelling (e.g. "JWT", "postMessage", "os.path.join"), at most 4 words.
-- The write-up is in Vietnamese with English technical terms; judge by what the solution does, not by how often a word appears.`;
+- The write-up is in Vietnamese with English technical terms; judge by what the solution does, not by how often a word appears.
+- Before answering, check each tag: would a reader searching for it want this write-up? Drop the ones that only appear in passing.
+
+Example: a write-up where an uploaded SVG runs JavaScript that steals the admin bot's cookie → {"tags": ["XSS", "SVG", "Cookie Stealing"]}, not ["Web", "Dreamhack", "JavaScript", "Upload", "Bot"].
+
+Answer with JSON only: {"tags": ["..."]}`;
 
 const MAX_CODE_LINES = 20;
 const MAX_BODY_CHARS = 24_000;
@@ -68,13 +72,8 @@ export function tagPromptData(input: TagPromptInput): string {
   ].filter(Boolean).join('\n\n');
 }
 
-/** Prompt trọn gói để dán vào ChatGPT / Claude web (không có system prompt riêng). */
-export function chatTagPrompt(input: TagPromptInput): string {
-  return `${TAG_SYSTEM}\n\n${tagPromptData(input)}\n\nReply with only this JSON on one line, no explanation and no code fence:\n{"tags": ["Tag 1", "Tag 2"]}`;
-}
-
 /**
- * Đọc câu trả lời dán từ chat: JSON `{"tags": [...]}` (có thể nằm trong code fence
+ * Đọc câu trả lời của model: JSON `{"tags": [...]}` (có thể nằm trong code fence
  * hoặc lẫn chữ), mảng JSON, hoặc danh sách cách nhau bởi dấu phẩy / xuống dòng.
  */
 export function parseTagReply(reply: string): string[] {
