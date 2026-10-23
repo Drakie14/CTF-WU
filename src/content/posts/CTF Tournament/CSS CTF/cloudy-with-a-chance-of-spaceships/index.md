@@ -5,7 +5,6 @@ ctf: CSS CTF
 category: web
 difficulty: insane
 tags:
-  - Web
   - SSRF
   - Length Oracle
   - GCP

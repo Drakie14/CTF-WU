@@ -5,7 +5,6 @@ ctf: CSS CTF
 category: web
 difficulty: easy
 tags:
-  - Web
   - Broken Access Control
   - Cookie
 ---

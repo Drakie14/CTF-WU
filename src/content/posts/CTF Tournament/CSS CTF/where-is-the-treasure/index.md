@@ -6,7 +6,6 @@ category: osint
 draft: true
 difficulty: easy
 tags:
-  - OSINT
   - Metadata
   - JPEG
 ---

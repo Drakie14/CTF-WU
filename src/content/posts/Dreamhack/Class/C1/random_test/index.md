@@ -5,7 +5,6 @@ ctf: Dreamhack
 category: web
 difficulty: easy
 tags:
-  - Web
   - Brute Force
   - Logic Bug
 ---

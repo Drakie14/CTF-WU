@@ -5,7 +5,6 @@ ctf: CSS CTF
 category: web
 difficulty: medium
 tags:
-  - Web
   - GraphQL
   - Introspection
   - Broken Access Control

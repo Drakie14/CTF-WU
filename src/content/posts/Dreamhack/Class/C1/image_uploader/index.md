@@ -5,7 +5,6 @@ ctf: Dreamhack
 category: web
 difficulty: medium
 tags:
-  - Web
   - PHP
   - File Upload
   - Logic Bug

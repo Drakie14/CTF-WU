@@ -6,7 +6,6 @@ category: crypto
 draft: true
 difficulty: medium
 tags:
-  - Crypto
   - Vigenère
   - Known-plaintext
   - Keystream

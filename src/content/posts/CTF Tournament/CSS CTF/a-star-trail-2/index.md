@@ -6,7 +6,6 @@ category: misc
 draft: true
 difficulty: medium
 tags:
-  - Misc
   - Graph
   - Shortest Path
   - Dijkstra

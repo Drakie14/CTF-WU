@@ -5,7 +5,6 @@ ctf: DefCamp Capture the Flag 2026
 category: web
 difficulty: medium
 tags:
-  - Web
   - Command Injection
   - RCE
   - subprocess

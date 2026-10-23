@@ -5,7 +5,6 @@ ctf: Pointer Overflow CTF 2026
 category: web
 difficulty: medium
 tags:
-  - Web
   - GraphQL
   - Introspection
   - Broken Access Control
