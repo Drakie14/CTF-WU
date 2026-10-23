@@ -1273,8 +1273,10 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       function autoTags() {
         const result = suggestTags({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() }, tagVocabulary());
         tags.value = result.tags.join(', ');
+        const known = result.added.filter((name) => !result.novel.includes(name));
         const notes = [
-          result.added.length ? `Đã thêm tags: ${result.added.join(', ')}` : '',
+          known.length ? `Đã thêm tags: ${known.join(', ')}` : '',
+          result.novel.length ? `Tag mới (chưa có trong blog, soát lại nhé): ${result.novel.join(', ')}` : '',
           result.renamed.length ? `Đổi theo cách viết sẵn có: ${result.renamed.map(([from, to]) => `${from} → ${to}`).join(', ')}` : '',
           result.removed.length ? `Bỏ tag tên mảng (đã có category): ${result.removed.join(', ')}` : '',
         ].filter(Boolean);

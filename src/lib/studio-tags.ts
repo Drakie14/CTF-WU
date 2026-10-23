@@ -204,6 +204,68 @@ const affirmed = (text: string) => sentences(text).filter((sentence) => !NEGATIO
 /** Câu gọi tên lỗ hổng ("Đây chính là lỗ hổng `Broken Access Control`") nặng ngang heading. */
 const DECLARES = /lỗ hổng|\blỗi\b|khai thác|tấn công|vulnerab|exploit|\battack/i;
 
+/**
+ * Khái niệm mới (chưa có rule, chưa có trong từ điển blog): lấy từ những chỗ tác giả chủ động giới thiệu khái niệm theo văn phong blog:
+ * câu hỏi tu từ "Vậy `X` là gì?", "lỗ hổng/kỹ thuật `X`", và link tham khảo tới trang tài liệu/kiến thức.
+ */
+const QUESTION = /^(?:#{1,6}\s*)?(?:\d+\.\s*)?(?:vậy|thế|một câu hỏi[^,]*,)?\s*(.+?)\s*(?:là gì|là cái gì|hoạt động (?:ra )?sao|hoạt động như thế nào)\s*\??\s*$/i;
+const INTRODUCES = /(?:lỗ hổng|kỹ thuật(?: tấn công)?|technique|attack|cơ chế|tính năng|khái niệm)\s+`([^`\n]{2,40})`/gi;
+const REFERENCE_HOSTS = /(?:^|\.)(?:portswigger\.net|owasp\.org|hacktricks\.(?:xyz|wiki)|cwe\.mitre\.org|developer\.mozilla\.org|wikipedia\.org|w3schools\.com|geeksforgeeks\.org|docs\.python\.org|nodejs\.org|php\.net|swisskey\.github\.io|github\.com\/swisskyrepo)$/i;
+/** Chữ hay gặp trong link/câu hỏi nhưng không phải khái niệm. */
+const NOT_CONCEPT = new Set([
+  'image', 'here', 'link', 'this', 'docs', 'documentation', 'example', 'examples', 'cheat-sheet', 'source', 'source-code', 'payload',
+  'flag', 'challenge', 'lab', 'writeup', 'write-up', 'solution', 'code', 'file', 'files', 'the', 'it', 'nay', 'do', 'string', 'main',
+  'object', 'value', 'property', 'function', 'input', 'output', 'data', 'list', 'request', 'response', 'server', 'client', 'page', 'website',
+  'expression', 'expressions', 'variable', 'variables', 'method', 'parameter', 'parameters',
+  // Tên trang tham khảo.
+  'portswigger', 'owasp', 'mdn', 'wikipedia', 'w3schools', 'hacktricks', 'geeksforgeeks', 'payloadsallthethings',
+]);
+const VIETNAMESE = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
+const FILE_LIKE = /\.(?:zip|gz|tar|tgz|7z|rar|png|jpe?g|gif|txt|pcap(?:ng)?|py|js|ts|php|html?|md|json|ya?ml|sh|exe|bin|elf|apk|pdf)$/i;
+
+/** Chuẩn hoá một cụm thành tên tag, hoặc undefined nếu không giống tên khái niệm. */
+function conceptName(raw: string): string | undefined {
+  const name = raw.replace(/`/g, '').replace(/^[\s"'“”*_]+|[\s"'“”*_:,.?!]+$/g, '').replace(/\s+/g, ' ');
+  if (name.length < 2 || name.length > 32 || VIETNAMESE.test(name) || FILE_LIKE.test(name)) return undefined;
+  if (!/^[\p{L}\d][\p{L}\d .+#@=_-]*$/u.test(name) || !/\p{L}/u.test(name)) return undefined;
+  if (name.split(' ').length > 4 || /^(?:list|types?|examples?) of\b/i.test(name) || NOT_CONCEPT.has(tagKey(name)) || isCategoryTag(name)) return undefined;
+  return name;
+}
+
+/** Ứng viên khái niệm trong bài, kèm điểm: câu hỏi tu từ 5, "lỗ hổng `X`" 5, link tham khảo 3; ở tiêu đề/heading cộng thêm 3. */
+export function extractConcepts(title: string, body: string): Map<string, { name: string; score: number }> {
+  const found = new Map<string, { name: string; score: number }>();
+  const add = (raw: string, score: number) => {
+    const name = conceptName(raw);
+    if (!name) return;
+    const key = tagKey(name);
+    const entry = found.get(key) ?? { name, score: 0 };
+    entry.score += score;
+    found.set(key, entry);
+  };
+  const text = prose(body);
+  for (const line of `${title}\n${text}`.split('\n')) {
+    const heading = /^#{1,6}\s/.test(line) || line === title;
+    for (const sentence of sentences(line)) {
+      const question = QUESTION.exec(sentence.trim());
+      if (!question) continue;
+      const spans = [...question[1].matchAll(/`([^`\n]+)`/g)].map((match) => match[1]);
+      // Câu hỏi gom cả loạt khái niệm ("`object`, `property`, `value` là gì?") là phần giải nghĩa phụ, không phải chủ đề bài.
+      if (spans.length > 2) continue;
+      for (const span of spans.length ? spans : [question[1]]) add(span, heading ? 8 : 5);
+    }
+    for (const [, span] of line.matchAll(INTRODUCES)) add(span, heading ? 8 : 5);
+    for (const [, label, url] of line.matchAll(/(?<!!)\[([^\]\n]{2,60})\]\((https?:\/\/[^)\s]+)\)/g)) {
+      let host = '';
+      try { const parsed = new URL(url); host = parsed.hostname + (parsed.hostname === 'github.com' ? `/${parsed.pathname.split('/')[1] ?? ''}` : ''); } catch { continue; }
+      if (REFERENCE_HOSTS.test(host)) add(label, heading ? 6 : 3);
+    }
+  }
+  // Khái niệm thật thì được nhắc lại trong bài; nhắc thêm mỗi lần cộng 1 (tối đa 4).
+  for (const entry of found.values()) entry.score += Math.max(Math.min(count(text, termPattern(entry.name)) - 1, 4), 0);
+  return found;
+}
+
 export interface TagSuggestionInput {
   title: string;
   body: string;
@@ -218,13 +280,15 @@ export interface TagSuggestion {
   /** Danh sách cuối: lỗ hổng trước, keyword sau; trong mỗi nhóm tag đã nhập đứng trước tag mới. */
   tags: string[];
   added: string[];
+  /** Phần của `added` chưa từng có trong blog (khái niệm mới lấy từ bài), để tác giả soát lại. */
+  novel: string[];
   /** Tag tên mảng ("Web", "Misc"…) đã bị bỏ. */
   removed: string[];
   /** Tag đã nhập bị đổi sang cách viết của blog, dạng [cũ, mới]. */
   renamed: Array<[string, string]>;
 }
 
-export function suggestTags(input: TagSuggestionInput, vocabulary: TagVocabulary, limit = 8): TagSuggestion {
+export function suggestTags(input: TagSuggestionInput, vocabulary: TagVocabulary, limit = 8, novelLimit = 2): TagSuggestion {
   const ctfName = input.ctf?.trim() ? new RegExp(escapeRegExp(input.ctf.trim()), 'gi') : undefined;
   const clean = (text: string) => (ctfName ? stripNoise(text).replace(ctfName, ' ') : stripNoise(text));
   const title = affirmed(clean(input.title));
@@ -277,6 +341,16 @@ export function suggestTags(input: TagSuggestionInput, vocabulary: TagVocabulary
     const points = inline * 1.5 + (plain - inline) + strong * 3;
     if (points >= 3) bump(sink, points);
   }
+  // Khái niệm tác giả tự giới thiệu: trùng tag sẵn có thì về cách viết của blog, còn lại là tag mới (tối đa `novelLimit`).
+  const ctfKey = input.ctf?.trim() ? tagKey(input.ctf) : '';
+  const novel = new Set<string>();
+  const concepts = [...extractConcepts(input.title, input.body).entries()]
+    .filter(([key, entry]) => entry.score >= 4 && key !== ctfKey && !GENERIC.has(key))
+    .sort((a, b) => b[1].score - a[1].score);
+  for (const [key, entry] of concepts) {
+    if (scores.has(key) || vocabulary.has(key)) bump(entry.name, entry.score);
+    else if (novel.size < novelLimit) { novel.add(key); bump(entry.name, entry.score); }
+  }
 
   const renamed: Array<[string, string]> = [];
   const removed: string[] = [];
@@ -290,14 +364,16 @@ export function suggestTags(input: TagSuggestionInput, vocabulary: TagVocabulary
     keys.add(tagKey(name));
     current.push(name);
   }
+  // Tag mới xếp sau tag có rule/có trong blog để không chiếm chỗ của chúng.
   const fresh = [...scores.entries()]
     .filter(([key]) => !keys.has(key))
-    .sort((a, b) => b[1].score - a[1].score || a[1].name.localeCompare(b[1].name))
+    .sort((a, b) => Number(novel.has(a[0])) - Number(novel.has(b[0])) || b[1].score - a[1].score || a[1].name.localeCompare(b[1].name))
     .map(([, entry]) => entry.name);
   // Lỗ hổng ưu tiên chỗ trống; keyword lấp phần còn lại.
   const room = Math.max(limit - current.length, 0);
   const freshVulns = fresh.filter(isVuln).slice(0, room);
   const freshKeywords = fresh.filter((name) => !isVuln(name)).slice(0, room - freshVulns.length);
   const tags = [...current.filter(isVuln), ...freshVulns, ...current.filter((name) => !isVuln(name)), ...freshKeywords];
-  return { tags, added: [...freshVulns, ...freshKeywords], removed, renamed };
+  const added = [...freshVulns, ...freshKeywords];
+  return { tags, added, novel: added.filter((name) => novel.has(tagKey(name))), removed, renamed };
 }
