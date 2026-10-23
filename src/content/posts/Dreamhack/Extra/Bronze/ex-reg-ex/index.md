@@ -1,7 +1,7 @@
 ---
 title: ex-reg-ex
 date: 2026-10-23
-ctf: Bronze
+ctf: Dreamhack
 category: web
 difficulty: easy
 ---
