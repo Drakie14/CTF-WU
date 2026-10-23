@@ -21,9 +21,9 @@ describe('compactBody / tagPromptData', () => {
     const code = Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n');
     const out = compactBody(`Ta thấy:\n![image](https://i.imgur.com/a.png)\n\n\n\n\`\`\`python!\n${code}\n\`\`\`\n-> Flag`);
     expect(out).not.toContain('imgur');
-    expect(out).toContain('line 19');
-    expect(out).not.toContain('line 20');
-    expect(out).toContain('… (10 more lines)');
+    expect(out).toContain('line 11');
+    expect(out).not.toContain('line 12');
+    expect(out).toContain('… (18 more lines)');
     expect(out).toContain('-> Flag');
     expect(out).not.toMatch(/\n{3}/);
   });

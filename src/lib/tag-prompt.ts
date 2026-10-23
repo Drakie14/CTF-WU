@@ -31,11 +31,11 @@ Example: a write-up where an uploaded SVG runs JavaScript that steals the admin 
 
 Answer with JSON only: {"tags": ["..."]}`;
 
-const MAX_CODE_LINES = 20;
-const MAX_BODY_CHARS = 24_000;
+const MAX_CODE_LINES = 12;
+const MAX_BODY_CHARS = 14_000;
 
 /**
- * Bỏ phần tốn token mà không giúp chọn tag: ảnh, khối code dài (giữ 20 dòng đầu),
+ * Bỏ phần tốn token mà không giúp chọn tag: ảnh, khối code dài (giữ 12 dòng đầu),
  * dòng trống thừa. Bài quá dài thì cắt đuôi, vì ý chính thường nằm ở nửa đầu.
  */
 export function compactBody(body: string): string {

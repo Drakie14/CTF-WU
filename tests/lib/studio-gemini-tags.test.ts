@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GEMINI_MODELS, geminiSuggestTags } from '../../src/lib/studio-gemini-tags';
+import { GEMINI_MODELS, geminiSuggestTags, thinkingFor } from '../../src/lib/studio-gemini-tags';
 
 const input = { apiKey: 'k', title: 'X', body: 'Body', vocabulary: ['XSS'], current: [] };
 const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -23,6 +23,15 @@ describe('geminiSuggestTags', () => {
     const body = JSON.parse(String(calls[0]!.init.body));
     expect(body.generationConfig.responseMimeType).toBe('application/json');
     expect(body.contents[0].parts[0].text).toContain('<existing_tags>');
+    expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+  });
+
+  it('keeps thinking short per model family and drops it when a model rejects it', async () => {
+    expect(thinkingFor('gemini-2.5-pro')).toEqual({ thinkingBudget: 128 });
+    expect(thinkingFor('gemini-2.5-flash')).toEqual({ thinkingBudget: 0 });
+    const { calls, impl } = fakeFetch([json(400, { error: { message: 'Unknown name "thinkingLevel" at generation_config.thinking_config' } }), answer('{"tags": ["XSS"]}')]);
+    await expect(geminiSuggestTags(input, impl)).resolves.toEqual({ tags: ['XSS'], model: GEMINI_MODELS[0] });
+    expect(JSON.parse(String(calls[1]!.init.body)).generationConfig.thinkingConfig).toBeUndefined();
   });
 
   it('falls back to the next model when the free quota runs out', async () => {

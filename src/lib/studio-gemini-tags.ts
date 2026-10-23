@@ -21,41 +21,68 @@ interface GeminiResponse {
 const RETRY_STATUS = new Set([404, 408, 429, 500, 502, 503, 504]);
 
 /** Hỏi Gemini bộ tag cho bài. Key sai hoặc mọi model đều lỗi thì ném lỗi để Studio giữ gợi ý offline. */
+/**
+ * Chọn tag là việc nhẹ nên cho model suy nghĩ ít: đây là chỗ tốn thời gian nhất.
+ * Gemini 3.x dùng `thinkingLevel`, 2.5 dùng `thinkingBudget` (2.5 Pro tối thiểu 128).
+ */
+export function thinkingFor(model: string): Record<string, unknown> {
+  if (/^gemini-[3-9]/.test(model)) return { thinkingLevel: 'low' };
+  return { thinkingBudget: /pro/.test(model) ? 128 : 0 };
+}
+
+/** Mỗi model chờ tối đa chừng này rồi chuyển model kế tiếp. */
+const MODEL_TIMEOUT_MS = 30_000;
+
 export async function geminiSuggestTags(input: TagPromptInput & { apiKey: string }, fetchImpl: typeof fetch = fetch): Promise<GeminiTagResult> {
-  const body = JSON.stringify({
+  const prompt = tagPromptData(input);
+  const requestBody = (model: string, thinking: boolean) => JSON.stringify({
     systemInstruction: { parts: [{ text: TAG_SYSTEM }] },
-    contents: [{ role: 'user', parts: [{ text: tagPromptData(input) }] }],
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
-      // Token suy nghĩ cũng tính vào giới hạn này, nên để rộng tay.
-      maxOutputTokens: 8192,
+      // Token suy nghĩ cũng tính vào giới hạn này.
+      maxOutputTokens: 2048,
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'object',
         properties: { tags: { type: 'array', items: { type: 'string' } } },
         required: ['tags'],
       },
+      ...(thinking ? { thinkingConfig: thinkingFor(model) } : {}),
     },
   });
   const failures: string[] = [];
   for (const model of GEMINI_MODELS) {
     let response: Response;
-    try {
-      response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
-        body,
-      });
-    } catch (error) {
-      throw new Error(`Không kết nối được Gemini (${error instanceof Error ? error.message : String(error)}).`);
+    let data: GeminiResponse;
+    let thinking = true;
+    for (;;) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+      try {
+        response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
+          body: requestBody(model, thinking),
+          signal: controller.signal,
+        });
+        data = (await response.json().catch(() => ({}))) as GeminiResponse;
+      } catch (error) {
+        if (controller.signal.aborted) { response = new Response(null, { status: 408 }); data = {}; break; }
+        throw new Error(`Không kết nối được Gemini (${error instanceof Error ? error.message : String(error)}).`);
+      } finally {
+        clearTimeout(timer);
+      }
+      // Model không nhận tuỳ chọn suy nghĩ này: hỏi lại không kèm nó.
+      if (thinking && response.status === 400 && /thinking/i.test(data.error?.message ?? '')) { thinking = false; continue; }
+      break;
     }
-    const data = (await response.json().catch(() => ({}))) as GeminiResponse;
     if (!response.ok) {
       const message = data.error?.message ?? response.statusText;
       if (/api key/i.test(message) || response.status === 401 || response.status === 403) {
         throw new Error(`Key Gemini không dùng được: ${message}`);
       }
       if (!RETRY_STATUS.has(response.status)) throw new Error(`Gemini ${response.status}: ${message}`);
-      failures.push(`${model}: ${response.status === 429 ? 'hết lượt free' : `${response.status}`}`);
+      failures.push(`${model}: ${response.status === 429 ? 'hết lượt free' : response.status === 408 ? 'quá lâu' : `${response.status}`}`);
       continue;
     }
     if (data.promptFeedback?.blockReason) {
