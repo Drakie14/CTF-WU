@@ -101,8 +101,10 @@ Có mật khẩu, `/api/vault/enter` cho vào tầng "privileged" và gợi ý C
 > Bản source chạy thẳng uvicorn (không có Caddy trước), nên header gửi trực tiếp tới FastAPI luôn được nhận. Trên server thật có Caddy nhưng dính CVE nên header vẫn xuyên qua -> cùng một exploit chạy được ở cả hai nơi.
 
 ### Chuỗi khai thác
-
-`clubs/balls/bags` -> giải base64 -> `R1,R2,R3` -> `enigma` -> `WORDS` -> `PHRASE` -> `POST /api/vault/admin-item` với body `{"phrase": "<PHRASE>"}` và header `X-User-Role: admin` -> nhận flag.
+1. `clubs/balls/bags` decode base64 thu được `R1,R2,R3` 
+2. `enigma` có được `WORDS`, ghép thành `PHRASE` 
+3. `POST /api/vault/admin-item` với body `{"phrase": "<PHRASE>"}` và header `X-User-Role: admin` 
+4. Lấy flag.
 
 ```python!
 #!/usr/bin/env python3
@@ -177,7 +179,7 @@ print(f"\n[+] FLAG: {body['flag']}\n" if st == 200 and "flag" in body
       else json.dumps(body, indent=2))
 ```
 
-Kết quả chạy thực tế (local, dựng từ source chính thức CSAW):
+Output:
 
 ```!
 [*] Leaked rotors: R1=6 R2=24 R3=13
@@ -187,7 +189,8 @@ Kết quả chạy thực tế (local, dựng từ source chính thức CSAW):
 [+] FLAG: csaw{el3gant_sw1ng_n3ver_c4ught}
 ```
 
-Toàn bộ chuỗi khai thác cũng làm được hoàn toàn trong trình duyệt, không cần chạy lệnh ngoài: mở DevTools -> Console và dán đoạn tự-chứa dưới (fetch rotor từ header -> tính `enigma` -> `POST` kèm header injection):
+Toàn bộ chuỗi khai thác cũng làm được hoàn toàn trong trình duyệt, không cần chạy lệnh ngoài: 
+mở DevTools -> Console và dán đoạn tự-chứa dưới (fetch rotor từ header -> tính `enigma` -> `POST` kèm header injection):
 
 ```javascript!
 (async () => {
@@ -213,9 +216,5 @@ Toàn bộ chuỗi khai thác cũng làm được hoàn toàn trong trình duy�
 Console cho thấy 3 request `418 I'm a Teapot` (rò rỉ rotor qua header) rồi in ra flag:
 
 ![image](./04-console.png)
-
-:::info
-Giải đã kết thúc, không còn instance. Các kết quả/ảnh ở trên được chạy local bằng chính source công khai mà BTC phát hành ([osirislab/CSAW-CTF-2026-Quals-Public](https://github.com/osirislab/CSAW-CTF-2026-Quals-Public/tree/main/web/golf-heist)) — trong `app/main.py` flag được hardcode đúng bằng flag thật của đề, nên exploit cho ra chính xác flag dưới đây.
-:::
 
 -> Flag: `csaw{el3gant_sw1ng_n3ver_c4ught}`
