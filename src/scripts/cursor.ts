@@ -46,6 +46,24 @@ function root(): HTMLElement | null {
   return el;
 }
 
+/**
+ * `<dialog>.showModal()` đưa dialog lên top layer, đè lên mọi z-index → con trỏ vẽ bằng HTML bị che.
+ * Cho `.reze-cursor` vào top layer (popover) và đưa lên trên cùng lại mỗi khi có dialog mở.
+ */
+function promote(): void {
+  const el = document.querySelector<HTMLElement>('.reze-cursor');
+  if (!el || typeof el.showPopover !== 'function') return;
+  try {
+    if (el.matches(':popover-open')) el.hidePopover();
+    el.showPopover();
+  } catch {
+    // Trình duyệt không hỗ trợ popover: con trỏ vẫn hiện bình thường trừ khi bị dialog đè.
+  }
+}
+new MutationObserver((records) => {
+  if (records.some((r) => r.target instanceof HTMLDialogElement && (r.target as HTMLDialogElement).open)) promote();
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['open'], subtree: true });
+
 function kindOf(target: EventTarget | null): Kind {
   if (!(target instanceof Element)) return 'normal';
   if (target.closest(TEXT_SELECTOR)) return 'text';
@@ -93,6 +111,7 @@ document.addEventListener('astro:before-swap', () => {
 });
 // Sau khi chuyển trang, phần tử dưới chuột đã đổi → chọn lại hình (link/text/thường).
 document.addEventListener('astro:page-load', () => {
+  promote();
   kind = kindOf(document.elementFromPoint(x, y));
   render();
 });

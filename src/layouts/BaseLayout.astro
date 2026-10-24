@@ -61,7 +61,7 @@ const canonicalUrl = canonical === false ? undefined : new URL(canonical ?? Astr
     <a class="skip-link" href="#main">Bỏ qua tới nội dung</a>
     <Background />
     <slot />
-    <div class="reze-cursor" aria-hidden="true" transition:persist="reze-cursor"></div>
+    <div class="reze-cursor" popover="manual" aria-hidden="true" transition:persist="reze-cursor"></div>
   </body>
 </html>
 
