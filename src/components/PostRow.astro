@@ -1,7 +1,7 @@
 ---
 import { categoryColor } from '../lib/categories';
 import { formatDisplayDate, formatIsoDate } from '../lib/content/dates';
-import { isUnsorted, postUrl, type Post } from '../lib/posts';
+import { getSiteContent, isUnsorted, postUrl, type Post } from '../lib/posts';
 
 interface Props {
   post: Post;
@@ -10,6 +10,7 @@ interface Props {
 
 const { post, current = false } = Astro.props;
 const { title, ctf, tags, date, difficulty, category } = post.data;
+const { tags: taxonomy } = await getSiteContent();
 const unsorted = isUnsorted(post);
 const color = categoryColor(category);
 ---
@@ -29,7 +30,7 @@ const color = categoryColor(category);
       <span class="row-sub">
         {unsorted && <span class="unsorted-label">UNSORTED</span>}
         {ctf && <span class="row-ctf">{ctf}</span>}
-        {tags.slice(0, 3).map((tag) => <span class="pill">{tag}</span>)}
+        {tags.slice(0, 3).map((tag) => <span class="pill">{taxonomy.bySlug.get(taxonomy.slugOf(tag))?.name ?? tag}</span>)}
       </span>
     </span>
     <span class="row-side">

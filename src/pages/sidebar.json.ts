@@ -22,7 +22,7 @@ export interface SidebarItem {
 }
 
 export const GET: APIRoute = async () => {
-  const { posts } = await getSiteContent();
+  const { posts, tags } = await getSiteContent();
   const items: SidebarItem[] = posts.map((p) => ({
     slug: p.id,
     url: postUrl(p),
@@ -30,7 +30,7 @@ export const GET: APIRoute = async () => {
     ctf: p.data.ctf,
     category: p.data.category,
     color: categoryColor(p.data.category),
-    tags: p.data.tags.slice(0, 3),
+    tags: p.data.tags.slice(0, 3).map((t) => tags.bySlug.get(tags.slugOf(t))?.name ?? t),
     date: formatDisplayDate(p.data.date),
     iso: formatIsoDate(p.data.date),
     difficulty: p.data.difficulty,
