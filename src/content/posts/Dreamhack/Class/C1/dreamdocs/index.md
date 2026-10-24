@@ -5,10 +5,9 @@ ctf: Dreamhack
 category: web
 difficulty: easy
 tags:
-  - Header
-  - Authorization
+  - Broken Access Control
+  - Header Spoofing
   - IDOR
-  - Brute Force
 ---
 
 # Đề bài 

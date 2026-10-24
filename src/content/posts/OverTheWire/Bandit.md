@@ -6,7 +6,6 @@ difficulty: easy
 tags:
   - Linux
   - SSH
-  - Bandit
 ---
 
 # Level 0

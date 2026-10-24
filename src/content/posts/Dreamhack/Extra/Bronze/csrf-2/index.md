@@ -5,7 +5,7 @@ ctf: Dreamhack
 category: web
 difficulty: easy
 tags:
-  - csrf
+  - CSRF
 ---
 
 # Đề bài 

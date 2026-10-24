@@ -6,7 +6,6 @@ tags:
   - Reflected XSS
   - Stored XSS
   - DOM XSS
-  - PortSwigger
 ---
 
 # Introduction

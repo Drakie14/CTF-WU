@@ -6,7 +6,7 @@ category: web
 difficulty: easy
 tags:
   - Broken Access Control
-  - Cookie
+  - Cookie Tampering
 ---
 
 ## Đề bài

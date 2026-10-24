@@ -6,7 +6,8 @@ category: web
 difficulty: medium
 tags:
   - XSS
-  - Authorization
+  - Authorization Header
+  - Basic Auth
 ---
 
 # Đề bài 

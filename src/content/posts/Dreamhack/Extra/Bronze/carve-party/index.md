@@ -6,8 +6,6 @@ category: web
 difficulty: easy
 tags:
   - Client-side
-  - Source Code Review
-  - JavaScript
   - XOR
 ---
 

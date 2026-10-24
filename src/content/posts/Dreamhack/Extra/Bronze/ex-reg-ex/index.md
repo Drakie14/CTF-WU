@@ -5,9 +5,8 @@ ctf: Bronze
 category: web
 difficulty: easy
 tags:
-  - re.match
   - Regex
-  - Python
+  - re.match
 ---
 
 # Đề bài

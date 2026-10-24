@@ -6,9 +6,9 @@ category: misc
 draft: true
 difficulty: hard
 tags:
-  - MongoDB
+  - NoSQL Injection
   - SSJI
-  - NoSQL
+  - MongoDB
 ---
 
 ## Đề bài

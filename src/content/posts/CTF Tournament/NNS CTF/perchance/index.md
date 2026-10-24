@@ -5,7 +5,7 @@ ctf: NNS CTF
 category: web
 difficulty: hard
 tags:
-  - Client-Side
+  - Client-side
   - XSS
   - Browser Extension
   - postMessage

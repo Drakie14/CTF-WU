@@ -5,9 +5,9 @@ ctf: Dreamhack
 category: web
 difficulty: medium
 tags:
-  - NoSQL
   - MongoDB
   - ObjectId
+  - IDOR
 ---
 
 # Đề bài

@@ -7,7 +7,9 @@ difficulty: medium
 tags:
   - XSS
   - SVG
-  - cookie
+  - PyScript
+  - innerHTML
+  - Cookie Stealing
 ---
 
 # Đề bài

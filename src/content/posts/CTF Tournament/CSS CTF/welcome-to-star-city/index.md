@@ -5,7 +5,6 @@ ctf: CSS CTF
 category: web
 difficulty: easy
 tags:
-  - Source Code Review
   - CSS
   - Base64
 ---

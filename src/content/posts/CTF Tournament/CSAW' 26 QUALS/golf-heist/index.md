@@ -5,10 +5,10 @@ ctf: CSAW' 26 QUALS
 category: web
 difficulty: hard
 tags:
-  - FastAPI
   - Header Injection
-  - CVE
+  - Caddy
   - Enigma
+  - FastAPI
 ---
 
 ## Đề bài

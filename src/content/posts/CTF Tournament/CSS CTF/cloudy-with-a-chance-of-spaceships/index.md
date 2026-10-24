@@ -8,7 +8,7 @@ tags:
   - SSRF
   - Length Oracle
   - GCP
-  - Metadata
+  - Metadata Server
   - Secret Manager
 ---
 

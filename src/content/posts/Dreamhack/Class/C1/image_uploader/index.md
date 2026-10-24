@@ -8,7 +8,7 @@ tags:
   - PHP
   - File Upload
   - Logic Bug
-  - htaccess
+  - .htaccess
 ---
 
 # Đề bài 

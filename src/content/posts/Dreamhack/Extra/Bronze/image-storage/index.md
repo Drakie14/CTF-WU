@@ -6,6 +6,7 @@ category: web
 difficulty: easy
 tags:
   - File Upload
+  - Web Shell
   - RCE
   - PHP
 ---
