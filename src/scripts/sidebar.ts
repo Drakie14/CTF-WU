@@ -314,6 +314,7 @@ function setupAdminGate(): void {
   const close = dialog?.querySelector<HTMLButtonElement>('[data-admin-auth-close]');
   if (!dialog || !form || !input || !error || !submit || !close || dialog.dataset.ready) return;
   dialog.dataset.ready = 'true';
+  let adminUrl = '/admin/studio/';
 
   const openDialog = (message = '') => {
     error.textContent = message;
@@ -329,12 +330,15 @@ function setupAdminGate(): void {
     submit.disabled = true;
     submit.textContent = 'Đang xác thực…';
     error.textContent = '';
+    // Mở tab ngay trong sự kiện submit để trình duyệt không chặn popup, xác thực xong mới điều hướng.
+    const tab = window.open('', '_blank');
     try {
       await verifyAdminToken(token);
       localStorage.setItem(STUDIO_TOKEN_KEY, token);
       dialog.close();
-      window.location.assign('/admin/studio/');
+      if (tab) tab.location.href = adminUrl; else window.location.assign(adminUrl);
     } catch (reason) {
+      tab?.close();
       error.textContent = reason instanceof Error ? reason.message : String(reason);
       input.focus();
     } finally {
@@ -343,27 +347,17 @@ function setupAdminGate(): void {
     }
   });
 
-  document.addEventListener('click', async (event) => {
+  document.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const link = target.closest<HTMLAnchorElement>('[data-admin-link]');
     if (!link) return;
-    // Ctrl/Cmd/Shift+click: để trình duyệt tự mở tab mới; trang studio tự đọc PAT đã lưu trong localStorage.
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
     event.preventDefault();
+    adminUrl = link.href;
 
-    const tokens = savedAdminTokens();
-    for (const token of tokens) {
-      try {
-        await verifyAdminToken(token);
-        localStorage.setItem(STUDIO_TOKEN_KEY, token);
-        window.location.assign(link.href);
-        return;
-      } catch {
-        // Nếu không có PAT đã xác thực, mở form để đăng nhập hoặc sửa token cũ.
-      }
-    }
-    openDialog(tokens.length ? 'Phiên GitHub cũ không còn quyền truy cập. Nhập lại PAT để tiếp tục.' : '');
+    // Máy đã từng nhập PAT thì mở thẳng tab mới, trang studio tự xác thực bằng PAT đã lưu.
+    if (savedAdminTokens().length) { window.open(adminUrl, '_blank'); return; }
+    openDialog();
   });
 }
 
