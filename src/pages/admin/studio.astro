@@ -153,17 +153,20 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
             </section>
           </div>
           <p class="status" role="status" data-status></p>
-          <section class="tag-toast" data-tag-toast role="status" aria-live="polite" hidden>
-            <button type="button" class="toast-close" data-toast-close aria-label="Đóng">×</button>
-            <strong data-toast-title></strong>
-            <p data-toast-body></p>
-            <small data-toast-hint></small>
-            <div class="toast-actions">
-              <button type="button" class="publish" data-toast-publish>Áp dụng và Publish</button>
-              <button type="button" data-toast-apply>Chỉ áp dụng</button>
-              <button type="button" data-toast-close>Bỏ qua</button>
-            </div>
-          </section>
+          <div class="tag-toast" data-tag-toast hidden>
+            <section class="toast-card" role="dialog" aria-modal="true" aria-labelledby="toast-title" aria-live="polite">
+              <button type="button" class="toast-close" data-toast-close aria-label="Đóng">×</button>
+              <strong id="toast-title" data-toast-title></strong>
+              <span class="toast-post">Bài: <b data-toast-post></b></span>
+              <ul class="toast-tags" data-toast-tags></ul>
+              <p data-toast-body hidden></p>
+              <small data-toast-hint></small>
+              <div class="toast-actions">
+                <button type="button" class="publish" data-toast-publish>Publish</button>
+                <button type="button" data-toast-apply>Not yet</button>
+              </div>
+            </section>
+          </div>
         </section>
       </section>
     </main>
@@ -1338,18 +1341,19 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         const buttons = document.querySelectorAll<HTMLButtonElement>('[data-auto-tags]');
         buttons.forEach((button) => { button.disabled = true; button.dataset.busy = ''; });
         const postPath = currentPath();
-        setTagNote('Gemini đang đọc bài. Cứ làm việc khác, xong sẽ có thông báo ở góc màn hình', 'info');
+        const postTitle = title.value.trim() || postPath.split('/').slice(-2, -1)[0] || postPath;
+        setTagNote('Gemini đang đọc bài. Cứ làm việc khác, xong sẽ có thông báo giữa màn hình', 'info');
         try {
           const ai = await geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()].map((term) => term.name) });
-          showTagToast({ tags: ai.tags, model: modelLabel(ai.model), postPath });
+          showTagToast({ tags: ai.tags, model: modelLabel(ai.model), postPath, postTitle });
         } catch (error) {
-          showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, postPath });
+          showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, postPath, postTitle });
         } finally {
           autoTagsBusy = false;
           buttons.forEach((button) => { button.disabled = false; delete button.dataset.busy; });
         }
       }
-      type TagToast = { postPath: string; tags?: string[]; model?: string; error?: string };
+      type TagToast = { postPath: string; postTitle: string; tags?: string[]; model?: string; error?: string };
       let pendingToast: TagToast | null = null;
       const toast = $<HTMLElement>('[data-tag-toast]');
       /** Thông báo khi Gemini xong; chưa đụng vào bài cho tới khi người dùng chọn. */
@@ -1357,12 +1361,16 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         pendingToast = result;
         setTagNote('', 'info');
         toast.dataset.kind = result.error ? 'error' : 'ok';
-        delete toast.dataset.expanded;
         $('[data-toast-title]').textContent = result.error ? 'Gemini không trả được tags' : `Gemini đã gợi ý ${result.tags!.length} tags`;
-        $('[data-toast-body]').textContent = result.error ?? result.tags!.join(', ');
-        $('[data-toast-hint]').textContent = result.error ? 'Bấm để xem' : `${result.model} · bấm để xem`;
+        $('[data-toast-post]').textContent = result.postTitle;
+        const list = $('[data-toast-tags]');
+        list.replaceChildren(...(result.tags ?? []).map((tag) => Object.assign(document.createElement('li'), { textContent: tag })));
+        list.hidden = Boolean(result.error);
+        const body = $('[data-toast-body]');
+        body.textContent = result.error ?? ''; body.hidden = !result.error;
+        $('[data-toast-hint]').textContent = result.error ? '' : `${result.model} · Not yet: chỉ thêm tags vào bài, chưa publish`;
         $<HTMLButtonElement>('[data-toast-publish]').hidden = Boolean(result.error);
-        $('[data-toast-apply]').textContent = result.error ? 'Dùng gợi ý offline' : 'Chỉ áp dụng';
+        $('[data-toast-apply]').textContent = result.error ? 'Dùng gợi ý offline' : 'Not yet';
         toast.hidden = false;
       }
       function closeTagToast() { toast.hidden = true; pendingToast = null; }
@@ -1390,11 +1398,11 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       }
       toast.addEventListener('click', (event) => {
         const target = event.target as HTMLElement;
-        if (target.closest('[data-toast-close]')) return closeTagToast();
+        if (target === toast || target.closest('[data-toast-close]')) return closeTagToast();
         if (target.closest('[data-toast-apply]')) return void applyPendingTags();
         if (target.closest('[data-toast-publish]')) return void applyPendingTags().then((ok) => { if (ok) void publish(); });
-        toast.dataset.expanded = '';
       });
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !toast.hidden) closeTagToast(); });
       function setTagNote(message: string, kind: 'info' | 'error' | 'ok') {
         const note = $('[data-tag-note]');
         note.textContent = message; note.dataset.kind = kind; note.hidden = !message;
@@ -1877,7 +1885,12 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
   .tag-chips { display:contents; margin:0; padding:0; list-style:none; } .tag-chips li { display:inline-flex; align-items:center; gap:.1rem; max-width:100%; padding:.1rem .15rem .1rem .5rem; border:1px solid #86efac4d; border-radius:999px; background:#86efac14; color:#86efac; font-size:.68rem; } .tag-chips li span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tag-chips li span::before { content:'#'; opacity:.55; } .tag-chips li[data-novel] { border-style:dashed; border-color:#fcd34d80; background:#fcd34d12; color:#fcd34d; }
   .tag-chips button { display:grid; width:1.15rem; height:1.15rem; flex:none; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:inherit; font-size:.85rem; line-height:1; opacity:.6; cursor:pointer; } .tag-chips button:hover { background:#ffffff14; opacity:1; }
   .tag-entry { flex:1; min-width:7rem; padding:.25rem; border:0; background:transparent; color:var(--text); font:inherit; font-size:.72rem; } .tag-entry:focus { outline:none; }
-  .tag-toast { position:fixed; z-index:40; right:1rem; bottom:1rem; display:grid; gap:.3rem; width:min(23rem,calc(100vw - 2rem)); padding:.75rem 2.2rem .75rem .9rem; border:1px solid var(--line); border-left:3px solid var(--ok); border-radius:.5rem; background:var(--panel-hi); box-shadow:0 1rem 2.5rem #000b; cursor:pointer; animation:toast-in .2s ease-out; } .tag-toast[hidden] { display:none; } .tag-toast[data-kind='error'] { border-left-color:#f6c177; } .tag-toast strong { font-size:.74rem; } .tag-toast p { margin:0; overflow:hidden; color:var(--text); font-size:.68rem; line-height:1.5; text-overflow:ellipsis; white-space:nowrap; } .tag-toast small { color:var(--muted); font-size:.6rem; } .tag-toast[data-expanded] { cursor:default; } .tag-toast[data-expanded] p { white-space:normal; } .tag-toast[data-expanded] small { display:none; } .toast-actions { display:none; flex-wrap:wrap; gap:.35rem; margin-top:.35rem; } .tag-toast[data-expanded] .toast-actions { display:flex; } .toast-actions button { min-height:2rem; padding:.3rem .6rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font:inherit; font-size:.66rem; cursor:pointer; } .toast-actions .publish { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; } .toast-actions button[hidden] { display:none; } .toast-close { position:absolute; top:.35rem; right:.4rem; border:0; background:transparent; color:var(--muted); font-size:1rem; cursor:pointer; } @keyframes toast-in { from { opacity:0; transform:translateY(.5rem); } } @media (prefers-reduced-motion:reduce) { .tag-toast { animation:none; } }
+  .tag-toast { position:fixed; z-index:40; inset:0; display:grid; place-items:center; padding:1rem; background:#0009; backdrop-filter:blur(3px); animation:toast-fade .15s ease-out; } .tag-toast[hidden] { display:none; }
+  .toast-card { position:relative; display:grid; gap:.65rem; width:min(26rem,100%); max-height:calc(100vh - 2rem); overflow:auto; padding:1.1rem 2.4rem 1rem 1.2rem; border:1px solid var(--line); border-top:3px solid var(--ok); border-radius:.6rem; background:var(--panel-hi); box-shadow:0 1.5rem 4rem #000c; animation:toast-in .2s ease-out; } .tag-toast[data-kind='error'] .toast-card { border-top-color:#f6c177; }
+  .toast-card strong { font-size:.85rem; } .toast-post { color:var(--muted); font-size:.68rem; overflow-wrap:anywhere; } .toast-post b { color:var(--text); font-weight:700; } .toast-card p { margin:0; color:var(--text); font-size:.7rem; line-height:1.5; overflow-wrap:anywhere; } .toast-card small { color:var(--muted); font-size:.6rem; }
+  .toast-tags { display:flex; flex-wrap:wrap; gap:.35rem; margin:0; padding:0; list-style:none; } .toast-tags[hidden], .toast-card p[hidden] { display:none; } .toast-tags li { padding:.25rem .6rem; border:1px solid #b05be8; border-radius:99px; background:var(--accent-soft); color:#e2bbff; font-size:.7rem; }
+  .toast-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.5rem; margin-top:.3rem; } .toast-actions button { min-height:2.2rem; padding:.35rem .9rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font:inherit; font-size:.72rem; cursor:pointer; } .toast-actions button:hover { border-color:var(--accent); } .toast-actions .publish { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; } .toast-actions button[hidden] { display:none; } .toast-close { position:absolute; top:.45rem; right:.5rem; border:0; background:transparent; color:var(--muted); font-size:1.1rem; cursor:pointer; }
+  @keyframes toast-fade { from { opacity:0; } } @keyframes toast-in { from { opacity:0; transform:translateY(.5rem) scale(.98); } } @media (prefers-reduced-motion:reduce) { .tag-toast, .toast-card { animation:none; } }
   .suggest-tags { min-height:2.35rem; padding:.4rem .8rem; border:1px solid #b05be8; border-radius:.4rem; background:var(--accent-soft); color:#e2bbff; font:inherit; font-size:.7rem; font-weight:700; white-space:nowrap; cursor:pointer; } .suggest-tags:hover:not(:disabled) { background:var(--accent); color:#21152b; } .suggest-tags[data-busy] { cursor:progress; animation:tag-busy .8s ease-in-out infinite alternate; }
   @keyframes tag-busy { to { opacity:.5; } } @media (prefers-reduced-motion:reduce) { .suggest-tags[data-busy] { animation:none; opacity:.6; } }
   .tag-note { margin:-.4rem 0 0 5.2rem; color:var(--muted); font-size:.64rem; line-height:1.55; } .tag-note[data-kind='ok'] { color:#a6edbd; } .tag-note[data-kind='error'] { color:#f6c177; }
