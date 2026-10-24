@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactBody, parseTagReply, tagPromptData } from '../../src/lib/tag-prompt';
+import { compactBody, parseTagReply, parseTagSummary, tagPromptData } from '../../src/lib/tag-prompt';
 
 describe('parseTagReply', () => {
   it('reads JSON, fenced JSON and JSON mixed with chat text', () => {
@@ -33,5 +33,33 @@ describe('compactBody / tagPromptData', () => {
     expect(prompt).toContain('XSS, CSRF');
     expect(prompt).toContain("title=\"A 'quoted' title\"");
     expect(prompt).toContain('dset');
+  });
+
+  it('sorts vocabulary by usage and adds tagged examples except the post itself', () => {
+    const prompt = tagPromptData({
+      title: 'CSRF-2',
+      body: 'Body',
+      vocabulary: [{ name: 'Cookie', count: 1 }, { name: 'XSS', count: 9 }],
+      current: [],
+      examples: [{ title: 'CSRF-2', tags: ['csrf'] }, { title: 'XSS-1', category: 'web', tags: ['XSS', 'innerHTML'] }],
+    });
+    expect(prompt).toContain('XSS (9), Cookie (1)');
+    expect(prompt).toContain('- XSS-1 [web]: XSS, innerHTML');
+    expect(prompt).not.toContain('- CSRF-2');
+  });
+
+  it('keeps both the start and the end of very long write-ups', () => {
+    const out = compactBody(`## Đề bài\n${'a'.repeat(20_000)}\n-> Flag: DH{x}`);
+    expect(out.startsWith('## Đề bài')).toBe(true);
+    expect(out).toContain('… (middle truncated)');
+    expect(out.endsWith('-> Flag: DH{x}')).toBe(true);
+  });
+});
+
+describe('parseTagSummary', () => {
+  it('reads the summary field and ignores replies without one', () => {
+    expect(parseTagSummary('{"summary": " SSTI in Jinja2 ", "tags": ["SSTI"]}')).toBe('SSTI in Jinja2');
+    expect(parseTagSummary('{"tags": ["SSTI"]}')).toBe('');
+    expect(parseTagSummary('SSTI, Jinja2')).toBe('');
   });
 });

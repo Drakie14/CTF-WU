@@ -4,8 +4,10 @@ import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
 import { getSiteContent } from '../../lib/posts';
 
 // Tag của mọi bài lúc build: làm từ điển cho "Tự thêm tags" khi chưa đọc được bài nào từ GitHub.
-const { tags: taxonomy } = await getSiteContent();
+const { tags: taxonomy, posts } = await getSiteContent();
 const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ name, count }))).replace(/</g, '\\u003c');
+// Bài đã gắn tag: few-shot cho Gemini bắt đúng cách gắn tag của tác giả.
+const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length).map(({ data }) => ({ title: data.title, category: data.category, tags: data.tags }))).replace(/</g, '\\u003c');
 ---
 
 <!doctype html>
@@ -129,6 +131,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
                 <p>Lấy key miễn phí ở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a>, chỉ lưu trong trình duyệt này. Studio hỏi Gemini 3.8 Flash (model free mạnh nhất), hết lượt thì tự chuyển 2.5 Pro, 3.6 Flash, 2.5 Flash.</p>
               </details>
               <script is:inline type="application/json" data-tag-vocabulary set:html={tagVocabulary}></script>
+              <script is:inline type="application/json" data-tag-examples set:html={tagExamples}></script>
             </div>
           </details>
 
@@ -192,6 +195,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       import { STUDIO_REPO, STUDIO_TOKEN_KEY, ctfFromFolder } from '../../lib/studio';
       import { buildVocabulary, canonicalTag, mergeAiTags, suggestTags, tagKey, type TagSuggestion, type TagTerm } from '../../lib/studio-tags';
       import { geminiSuggestTags } from '../../lib/studio-gemini-tags';
+      import type { TagExample } from '../../lib/tag-prompt';
       import { EditorState, Prec, type Extension, type TransactionSpec } from '@codemirror/state';
       import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
       import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
@@ -1325,6 +1329,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         try { const key = geminiKeyInput.value.trim(); if (key) localStorage.setItem(geminiKeyStorage, key); else localStorage.removeItem(geminiKeyStorage); } catch { /* storage unavailable */ }
         showKeyState();
       });
+      const tagExamples: TagExample[] = (() => { try { return JSON.parse($('[data-tag-examples]').textContent ?? '[]') as TagExample[]; } catch { return []; } })();
       const tagInput = () => ({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() });
       const modelLabel = (model: string) => model.replace(/^gemini-/, 'Gemini ').replace(/-(flash|pro)/, (_, kind: string) => ` ${kind[0]!.toUpperCase()}${kind.slice(1)}`).replace(/-lite$/, '-Lite');
       /** Mỗi bài có một lượt Gemini riêng, nên bấm bài khác khi bài trước chưa xong vẫn chạy song song được. */
@@ -1349,15 +1354,15 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         tagJobs.add(postPath); refreshTagButtons();
         setTagNote('Gemini đang đọc bài. Cứ làm việc khác (kể cả gợi ý tags bài khác), xong sẽ có thông báo giữa màn hình', 'info');
         try {
-          const ai = await geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()].map((term) => term.name) });
-          showTagToast({ tags: ai.tags, model: modelLabel(ai.model), postPath, postTitle });
+          const ai = await geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()], examples: tagExamples });
+          showTagToast({ tags: ai.tags, model: modelLabel(ai.model), summary: ai.summary, postPath, postTitle });
         } catch (error) {
           showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, postPath, postTitle });
         } finally {
           tagJobs.delete(postPath); refreshTagButtons(); renderTagToast();
         }
       }
-      type TagToast = { postPath: string; postTitle: string; curated?: boolean; tags?: string[]; model?: string; error?: string };
+      type TagToast = { postPath: string; postTitle: string; summary?: string; curated?: boolean; tags?: string[]; model?: string; error?: string };
       /** Hàng đợi kết quả: bài nào xong trước hiện trước, bấm xử lý xong bài này mới tới bài kế. */
       const toastQueue: TagToast[] = [];
       let applying = false;
@@ -1385,7 +1390,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         }));
         list.hidden = Boolean(result.error);
         const body = $('[data-toast-body]');
-        body.textContent = result.error ?? ''; body.hidden = !result.error;
+        body.textContent = result.error ?? (result.summary ? `Gemini hiểu bài: ${result.summary}` : ''); body.hidden = !body.textContent;
         const more = [
           result.error ? '' : `${result.model} · bấm × để bỏ tag không muốn · Not yet: chỉ thêm tags vào bài, chưa publish`,
           result.postPath === currentPath() ? '' : 'Bài này không phải bài đang mở, bấm nút sẽ tự mở bài đó trước',

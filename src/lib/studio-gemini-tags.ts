@@ -1,4 +1,4 @@
-import { TAG_SYSTEM, parseTagReply, tagPromptData, type TagPromptInput } from './tag-prompt';
+import { TAG_SYSTEM, parseTagReply, parseTagSummary, tagPromptData, type TagPromptInput } from './tag-prompt';
 
 /**
  * Model có free tier của Gemini API, mạnh nhất trước (theo bảng giá ngày 22/10/2026:
@@ -10,6 +10,8 @@ export const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-pro', 'gemini-3.6-
 export interface GeminiTagResult {
   tags: string[];
   model: string;
+  /** Model hiểu lời giải thế nào: hiện cho tác giả để soát tag có đúng ý không. */
+  summary?: string;
 }
 
 interface GeminiResponse {
@@ -44,8 +46,10 @@ export async function geminiSuggestTags(input: TagPromptInput & { apiKey: string
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'object',
-        properties: { tags: { type: 'array', items: { type: 'string' } } },
-        required: ['tags'],
+        // summary đứng trước để model tóm lời giải rồi mới chọn tag.
+        properties: { summary: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } },
+        propertyOrdering: ['summary', 'tags'],
+        required: ['summary', 'tags'],
       },
       ...(thinking ? { thinkingConfig: thinkingFor(model) } : {}),
     },
@@ -92,7 +96,8 @@ export async function geminiSuggestTags(input: TagPromptInput & { apiKey: string
     const candidate = data.candidates?.[0];
     const text = (candidate?.content?.parts ?? []).filter((part) => !part.thought).map((part) => part.text ?? '').join('');
     const tags = parseTagReply(text);
-    if (tags.length) return { tags, model };
+    const summary = parseTagSummary(text);
+    if (tags.length) return { tags, model, ...(summary ? { summary } : {}) };
     failures.push(`${model}: không trả tag${candidate?.finishReason ? ` (${candidate.finishReason})` : ''}`);
   }
   throw new Error(`Gemini không trả được tag. ${failures.join('; ')}.`);

@@ -7,12 +7,24 @@ export interface TagPromptInput {
   body: string;
   category?: string;
   ctf?: string;
-  /** Tag đã có trong blog: để model dùng đúng cách viết sẵn có. */
-  vocabulary: string[];
+  /** Tag đã có trong blog: để model dùng đúng cách viết sẵn có. Có `count` thì tag hay dùng được ưu tiên. */
+  vocabulary: Array<string | { name: string; count: number }>;
   current: string[];
+  /** Bài khác đã gắn tag (few-shot): để model bắt đúng độ chi tiết và cách đặt tag của tác giả. */
+  examples?: TagExample[];
+}
+
+export interface TagExample {
+  title: string;
+  category?: string;
+  tags: string[];
 }
 
 export const TAG_SYSTEM = `You tag CTF write-ups for a personal blog. Read the write-up and return the tags that best describe what a reader learns from it.
+
+Work in two steps, both in the JSON answer:
+1. "summary": one English sentence describing the solution: the bug, where it lives, and the trick that turns it into the flag (e.g. "Reflected XSS in a search parameter, escaping a JS string with </script> and stealing the bot's cookie via fetch"). Base it on the Solution part, not on guesses from the title.
+2. "tags": derive them from that summary.
 
 Tags are:
 - the vulnerability or attack class (e.g. "SSTI", "Prototype Pollution", "Known-plaintext"), listed first;
@@ -22,21 +34,26 @@ Rules:
 - 3 to 8 tags, most important first. Prefer fewer, precise tags over many vague ones.
 - Never return the category name (Web, Crypto, Pwn, Misc, Forensics, Rev, OSINT, Mobile, Cloud), the CTF/event name, the platform name, or the flag.
 - Skip generic words that fit almost any write-up (Cookie, Header, JSON, Base64, Linux, Login, Token, API) unless the whole challenge is about it.
-- When a tag means the same thing as one in the existing tag list, return the existing spelling exactly.
+- When a tag means the same thing as one in the existing tag list, return the existing spelling exactly (e.g. return "SQLi" if the list has "SQLi", not "SQL Injection"). The number after each existing tag is how many write-ups use it; prefer established tags when they fit equally well.
+- Match the granularity of the author's tagged examples: one tag for the attack class, then the concrete mechanism (the sink, the filter that was bypassed, the library or primitive abused). Add a bypass tag (e.g. "Filter Bypass", "WAF Bypass") only when getting around a defense is a real step of the solution.
+- A word that only appears in the challenge statement, a failed attempt or an aside is not a tag; the tags must describe what actually led to the flag.
 - Tags are in English, Title Case or the conventional spelling (e.g. "JWT", "postMessage", "os.path.join"), at most 4 words.
 - The write-up is in Vietnamese with English technical terms; judge by what the solution does, not by how often a word appears.
 - Before answering, check each tag: would a reader searching for it want this write-up? Drop the ones that only appear in passing.
 
 Example: a write-up where an uploaded SVG runs JavaScript that steals the admin bot's cookie → {"tags": ["XSS", "SVG", "Cookie Stealing"]}, not ["Web", "Dreamhack", "JavaScript", "Upload", "Bot"].
 
-Answer with JSON only: {"tags": ["..."]}`;
+Answer with JSON only: {"summary": "...", "tags": ["..."]}`;
 
 const MAX_CODE_LINES = 12;
 const MAX_BODY_CHARS = 14_000;
+/** Bài quá dài: giữ phần đầu (đề bài, phân tích) và phần cuối (payload, flag). */
+const TAIL_CHARS = 5_000;
+const MAX_EXAMPLES = 40;
 
 /**
  * Bỏ phần tốn token mà không giúp chọn tag: ảnh, khối code dài (giữ 12 dòng đầu),
- * dòng trống thừa. Bài quá dài thì cắt đuôi, vì ý chính thường nằm ở nửa đầu.
+ * dòng trống thừa. Bài quá dài thì cắt khúc giữa, vì đề bài ở đầu còn payload/flag ở cuối.
  */
 export function compactBody(body: string): string {
   const lines = body.replace(/\r\n?/g, '\n').split('\n');
@@ -59,17 +76,40 @@ export function compactBody(body: string): string {
     out.push(line.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<img\b[^>]*>/gi, ''));
   }
   const text = out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  return text.length > MAX_BODY_CHARS ? `${text.slice(0, MAX_BODY_CHARS)}\n… (truncated)` : text;
+  if (text.length <= MAX_BODY_CHARS) return text;
+  return `${text.slice(0, MAX_BODY_CHARS - TAIL_CHARS)}\n… (middle truncated)\n${text.slice(-TAIL_CHARS)}`;
 }
 
 /** Phần dữ liệu của prompt (tag sẵn có, bài viết, tag đã gõ). */
 export function tagPromptData(input: TagPromptInput): string {
   const attr = (value = '') => value.replace(/"/g, "'");
+  const vocabulary = input.vocabulary
+    .map((term) => (typeof term === 'string' ? { name: term, count: 0 } : term))
+    .sort((a, b) => b.count - a.count)
+    .map(({ name, count }) => (count ? `${name} (${count})` : name));
+  const own = input.title.trim().toLowerCase();
+  const examples = (input.examples ?? [])
+    .filter((example) => example.tags.length && example.title.trim().toLowerCase() !== own)
+    .slice(0, MAX_EXAMPLES)
+    .map((example) => `- ${example.title}${example.category ? ` [${example.category}]` : ''}: ${example.tags.join(', ')}`);
   return [
-    `<existing_tags>\n${input.vocabulary.join(', ')}\n</existing_tags>`,
+    `<existing_tags>\n${vocabulary.join(', ')}\n</existing_tags>`,
+    examples.length ? `<tagged_examples>\nHow the author tagged other write-ups on this blog:\n${examples.join('\n')}\n</tagged_examples>` : '',
     `<writeup title="${attr(input.title)}" category="${attr(input.category)}" ctf="${attr(input.ctf)}">\n${compactBody(input.body)}\n</writeup>`,
     input.current.length ? `Tags the author already typed (keep them unless clearly wrong): ${input.current.join(', ')}` : '',
   ].filter(Boolean).join('\n\n');
+}
+
+/** Câu tóm tắt lời giải model viết trước khi chọn tag (rỗng nếu không có). */
+export function parseTagSummary(reply: string): string {
+  const match = /\{[\s\S]*\}/.exec(reply.replace(/```[a-z]*\n?/gi, ''))?.[0];
+  if (!match) return '';
+  try {
+    const summary = (JSON.parse(match) as { summary?: unknown }).summary;
+    return typeof summary === 'string' ? summary.trim() : '';
+  } catch {
+    return '';
+  }
 }
 
 /**

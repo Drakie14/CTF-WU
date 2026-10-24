@@ -26,6 +26,12 @@ describe('geminiSuggestTags', () => {
     expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' });
   });
 
+  it('asks for a summary before the tags and returns it', async () => {
+    const { calls, impl } = fakeFetch([answer('{"summary": "SSTI in Jinja2 via the name field", "tags": ["SSTI", "Jinja2"]}')]);
+    await expect(geminiSuggestTags(input, impl)).resolves.toEqual({ tags: ['SSTI', 'Jinja2'], model: GEMINI_MODELS[0], summary: 'SSTI in Jinja2 via the name field' });
+    expect(JSON.parse(String(calls[0]!.init.body)).generationConfig.responseSchema.propertyOrdering).toEqual(['summary', 'tags']);
+  });
+
   it('keeps thinking short per model family and drops it when a model rejects it', async () => {
     expect(thinkingFor('gemini-2.5-pro')).toEqual({ thinkingBudget: 128 });
     expect(thinkingFor('gemini-2.5-flash')).toEqual({ thinkingBudget: 0 });
