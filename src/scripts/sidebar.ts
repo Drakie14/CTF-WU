@@ -352,13 +352,15 @@ function setupAdminGate(): void {
     if (!(target instanceof Element)) return;
     const link = target.closest<HTMLAnchorElement>('[data-admin-link]');
     if (!link) return;
+    // Chặn cả ClientRouter của Astro để trang blog đang xem không bị điều hướng.
     event.preventDefault();
+    event.stopPropagation();
     adminUrl = link.href;
 
     // Máy đã từng nhập PAT thì mở thẳng tab mới, trang studio tự xác thực bằng PAT đã lưu.
     if (savedAdminTokens().length) { window.open(adminUrl, '_blank'); return; }
     openDialog();
-  });
+  }, true);
 }
 
 // Khi ClientRouter chuyển phần tử `transition:persist` sang document mới, trình duyệt
