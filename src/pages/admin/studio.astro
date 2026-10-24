@@ -1381,18 +1381,26 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         $('[data-toast-title]').textContent = result.error ? 'Gemini không trả được tags' : empty ? 'Không còn tag nào để thêm' : `Gemini đã gợi ý ${result.tags!.length} tags`;
         $('[data-toast-post]').textContent = result.postTitle;
         const list = $('[data-toast-tags]');
-        list.replaceChildren(...(result.tags ?? []).map((tag, index) => {
+        // Mỗi pill là một ô sửa được tại chỗ; ô cuối để thêm tag mới (gợi ý từ tag sẵn có của blog).
+        const pills = (result.tags ?? []).map((tag, index) => {
           const item = document.createElement('li');
+          const edit = Object.assign(document.createElement('input'), { type: 'text', value: tag, size: Math.max(tag.length, 2), spellcheck: false });
+          edit.dataset.toastEdit = String(index); edit.setAttribute('aria-label', `Sửa tag ${tag}`); edit.setAttribute('list', 'tag-options');
           const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: `Bỏ tag ${tag}` });
           remove.dataset.toastRemove = String(index); remove.setAttribute('aria-label', `Bỏ tag ${tag}`);
-          item.append(tag, remove);
+          item.append(edit, remove);
           return item;
-        }));
+        });
+        const adder = document.createElement('li'); adder.className = 'toast-add';
+        const add = Object.assign(document.createElement('input'), { type: 'text', placeholder: '+ Thêm tag', size: 10, spellcheck: false });
+        add.dataset.toastAdd = ''; add.setAttribute('aria-label', 'Thêm tag'); add.setAttribute('list', 'tag-options');
+        adder.append(add);
+        list.replaceChildren(...pills, adder);
         list.hidden = Boolean(result.error);
         const body = $('[data-toast-body]');
         body.textContent = result.error ?? (result.summary ? `Gemini hiểu bài: ${result.summary}` : ''); body.hidden = !body.textContent;
         const more = [
-          result.error ? '' : `${result.model} · bấm × để bỏ tag không muốn · Not yet: chỉ thêm tags vào bài, chưa publish`,
+          result.error ? '' : `${result.model} · bấm vào tag để sửa, × để bỏ · Not yet: chỉ thêm tags vào bài, chưa publish`,
           result.postPath === currentPath() ? '' : 'Bài này không phải bài đang mở, bấm nút sẽ tự mở bài đó trước',
           toastQueue.length > 1 ? `Còn ${toastQueue.length - 1} bài đang chờ xử lý` : '',
           tagJobs.size ? `Gemini đang đọc thêm ${tagJobs.size} bài` : '',
@@ -1446,6 +1454,46 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         }
         if (target.closest('[data-toast-apply]')) return toastQueue[0]?.tags?.length === 0 ? closeTagToast() : void applyPendingTags();
         if (target.closest('[data-toast-publish]')) return void applyPendingTags().then((ok) => { if (ok) void publish(); });
+      });
+      /** Sửa một tag trong hộp thoại (rỗng thì bỏ) hoặc thêm tag mới; "a, b" thêm được nhiều tag một lần. */
+      function editToastTag(field: HTMLInputElement) {
+        const result = toastQueue[0];
+        if (!result?.tags) return;
+        const names = field.value.split(',').map((name) => name.trim().replace(/^#/, '')).filter(Boolean);
+        const index = field.dataset.toastEdit === undefined ? -1 : Number(field.dataset.toastEdit);
+        if (index < 0 && !names.length) return;
+        const others = result.tags.filter((_, i) => i !== index).map(tagKey);
+        const fresh = names.filter((name, i) => !others.includes(tagKey(name)) && names.findIndex((other) => tagKey(other) === tagKey(name)) === i);
+        if (index >= 0 && fresh.length === 1) {
+          // Đổi tên một tag: sửa tại chỗ, không vẽ lại để khỏi mất ô người dùng vừa bấm sang.
+          if (fresh[0] !== result.tags[index]) { result.tags[index] = fresh[0]!; result.curated = true; }
+          field.value = fresh[0]!;
+          return;
+        }
+        if (index >= 0) result.tags.splice(index, 1, ...fresh);
+        else result.tags.push(...fresh);
+        result.curated = true;
+        renderTagToast();
+        if (index < 0) $<HTMLInputElement>('[data-toast-add]').focus();
+      }
+      toast.addEventListener('change', (event) => {
+        const field = (event.target as HTMLElement).closest<HTMLInputElement>('[data-toast-edit], [data-toast-add]');
+        if (field) editToastTag(field);
+      });
+      toast.addEventListener('input', (event) => {
+        const field = (event.target as HTMLElement).closest<HTMLInputElement>('[data-toast-edit], [data-toast-add]');
+        if (field) field.size = Math.max(field.value.length, field.dataset.toastAdd === undefined ? 2 : 10);
+      });
+      toast.addEventListener('keydown', (event) => {
+        const field = (event.target as HTMLElement).closest<HTMLInputElement>('[data-toast-edit], [data-toast-add]');
+        if (!field) return;
+        if (event.key === 'Enter') { event.preventDefault(); editToastTag(field); }
+        else if (event.key === 'Escape' && field.dataset.toastEdit !== undefined) {
+          // Esc trong ô đang sửa chỉ huỷ phần vừa gõ, không đóng hộp thoại.
+          event.stopPropagation(); field.value = toastQueue[0]?.tags?.[Number(field.dataset.toastEdit)] ?? field.value; field.blur();
+        } else if (event.key === 'Backspace' && field.dataset.toastAdd !== undefined && !field.value && toastQueue[0]?.tags?.length) {
+          toastQueue[0].tags.pop(); toastQueue[0].curated = true; renderTagToast(); $<HTMLInputElement>('[data-toast-add]').focus();
+        }
       });
       document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !toast.hidden && !applying) closeTagToast(); });
       function setTagNote(message: string, kind: 'info' | 'error' | 'ok') {
@@ -1935,6 +1983,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
   .toast-card strong { font-size:.85rem; } .toast-post { color:var(--muted); font-size:.68rem; overflow-wrap:anywhere; } .toast-post b { color:var(--text); font-weight:700; } .toast-card p { margin:0; color:var(--text); font-size:.7rem; line-height:1.5; overflow-wrap:anywhere; } .toast-card small { color:var(--muted); font-size:.6rem; }
   .toast-tags { display:flex; flex-wrap:wrap; gap:.35rem; margin:0; padding:0; list-style:none; } .toast-tags[hidden], .toast-card p[hidden] { display:none; } .toast-tags li { padding:.25rem .6rem; border:1px solid #b05be8; border-radius:99px; background:var(--accent-soft); color:#e2bbff; font-size:.7rem; }
   .toast-tags li { display:inline-flex; align-items:center; gap:.3rem; padding-right:.3rem; } .toast-tags li button { display:grid; width:1.1rem; height:1.1rem; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:inherit; font-size:.85rem; line-height:1; opacity:.65; cursor:pointer; } .toast-tags li button:hover { background:#ffffff1f; opacity:1; } .toast-tags li button:focus-visible { outline:2px solid var(--accent); }
+  .toast-tags input { min-width:1.5rem; max-width:16rem; padding:0; border:0; background:transparent; color:inherit; font:inherit; } .toast-tags input:focus { outline:none; } .toast-tags li:focus-within { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 22%,transparent); }
+  .toast-tags .toast-add { padding-right:.6rem; border-style:dashed; background:transparent; } .toast-tags .toast-add input::placeholder { color:color-mix(in srgb,#e2bbff 60%,transparent); }
   .toast-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.5rem; margin-top:.3rem; } .toast-actions button { min-height:2.2rem; padding:.35rem .9rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font:inherit; font-size:.72rem; cursor:pointer; } .toast-actions button:hover { border-color:var(--accent); } .toast-actions .publish { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; } .toast-actions button[hidden] { display:none; } .toast-close { position:absolute; top:.45rem; right:.5rem; border:0; background:transparent; color:var(--muted); font-size:1.1rem; cursor:pointer; }
   @keyframes toast-fade { from { opacity:0; } } @keyframes toast-in { from { opacity:0; transform:translateY(.5rem) scale(.98); } } @media (prefers-reduced-motion:reduce) { .tag-toast, .toast-card { animation:none; } }
   .suggest-tags { min-height:2.35rem; padding:.4rem .8rem; border:1px solid #b05be8; border-radius:.4rem; background:var(--accent-soft); color:#e2bbff; font:inherit; font-size:.7rem; font-weight:700; white-space:nowrap; cursor:pointer; } .suggest-tags:hover:not(:disabled) { background:var(--accent); color:#21152b; } .suggest-tags[data-busy] { cursor:progress; animation:tag-busy .8s ease-in-out infinite alternate; }
