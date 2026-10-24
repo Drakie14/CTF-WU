@@ -679,6 +679,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
         $('[data-sidebar-new]').removeAttribute('hidden');
         $('[data-library-home]').setAttribute('hidden', '');
         $('[data-composer]').removeAttribute('hidden');
+        refreshTagButtons(); renderTagToast();
         setTimeout(() => editor.focus(), 0);
       }
       function showLibrary() {
@@ -1326,9 +1327,16 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
       });
       const tagInput = () => ({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() });
       const modelLabel = (model: string) => model.replace(/^gemini-/, 'Gemini ').replace(/-(flash|pro)/, (_, kind: string) => ` ${kind[0]!.toUpperCase()}${kind.slice(1)}`).replace(/-lite$/, '-Lite');
-      let autoTagsBusy = false;
+      /** Mỗi bài có một lượt Gemini riêng, nên bấm bài khác khi bài trước chưa xong vẫn chạy song song được. */
+      const tagJobs = new Set<string>();
+      function refreshTagButtons() {
+        document.querySelectorAll<HTMLButtonElement>('[data-auto-tags]').forEach((button) => {
+          if (tagJobs.has(currentPath())) button.dataset.busy = ''; else delete button.dataset.busy;
+        });
+      }
       async function autoTags() {
-        if (autoTagsBusy) return;
+        const postPath = currentPath();
+        if (tagJobs.has(postPath)) return setStatus('Gemini vẫn đang đọc bài này, đợi thông báo hoặc chuyển sang bài khác.', 'info');
         const vocabulary = tagVocabulary();
         const input = tagInput();
         const offline = suggestTags(input, vocabulary);
@@ -1337,72 +1345,104 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
           $<HTMLDetailsElement>('[data-ai-key]').open = true;
           return applyTagResult(offline, undefined, 'Chưa có Gemini API key nên đây là gợi ý offline. Dán key (miễn phí) vào ô bên dưới để Gemini đọc cả bài', 'info');
         }
-        autoTagsBusy = true;
-        const buttons = document.querySelectorAll<HTMLButtonElement>('[data-auto-tags]');
-        buttons.forEach((button) => { button.disabled = true; button.dataset.busy = ''; });
-        const postPath = currentPath();
         const postTitle = title.value.trim() || postPath.split('/').slice(-2, -1)[0] || postPath;
-        setTagNote('Gemini đang đọc bài. Cứ làm việc khác, xong sẽ có thông báo giữa màn hình', 'info');
+        tagJobs.add(postPath); refreshTagButtons();
+        setTagNote('Gemini đang đọc bài. Cứ làm việc khác (kể cả gợi ý tags bài khác), xong sẽ có thông báo giữa màn hình', 'info');
         try {
           const ai = await geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()].map((term) => term.name) });
           showTagToast({ tags: ai.tags, model: modelLabel(ai.model), postPath, postTitle });
         } catch (error) {
           showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, postPath, postTitle });
         } finally {
-          autoTagsBusy = false;
-          buttons.forEach((button) => { button.disabled = false; delete button.dataset.busy; });
+          tagJobs.delete(postPath); refreshTagButtons(); renderTagToast();
         }
       }
-      type TagToast = { postPath: string; postTitle: string; tags?: string[]; model?: string; error?: string };
-      let pendingToast: TagToast | null = null;
+      type TagToast = { postPath: string; postTitle: string; curated?: boolean; tags?: string[]; model?: string; error?: string };
+      /** Hàng đợi kết quả: bài nào xong trước hiện trước, bấm xử lý xong bài này mới tới bài kế. */
+      const toastQueue: TagToast[] = [];
+      let applying = false;
       const toast = $<HTMLElement>('[data-tag-toast]');
-      /** Thông báo khi Gemini xong; chưa đụng vào bài cho tới khi người dùng chọn. */
       function showTagToast(result: TagToast) {
-        pendingToast = result;
-        setTagNote('', 'info');
+        toastQueue.push(result);
+        if (result.postPath === currentPath()) setTagNote('', 'info');
+        renderTagToast();
+      }
+      function renderTagToast() {
+        const result = toastQueue[0];
+        toast.hidden = !result;
+        if (!result) return;
         toast.dataset.kind = result.error ? 'error' : 'ok';
-        $('[data-toast-title]').textContent = result.error ? 'Gemini không trả được tags' : `Gemini đã gợi ý ${result.tags!.length} tags`;
+        const empty = !result.error && result.tags!.length === 0;
+        $('[data-toast-title]').textContent = result.error ? 'Gemini không trả được tags' : empty ? 'Không còn tag nào để thêm' : `Gemini đã gợi ý ${result.tags!.length} tags`;
         $('[data-toast-post]').textContent = result.postTitle;
         const list = $('[data-toast-tags]');
-        list.replaceChildren(...(result.tags ?? []).map((tag) => Object.assign(document.createElement('li'), { textContent: tag })));
+        list.replaceChildren(...(result.tags ?? []).map((tag, index) => {
+          const item = document.createElement('li');
+          const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: `Bỏ tag ${tag}` });
+          remove.dataset.toastRemove = String(index); remove.setAttribute('aria-label', `Bỏ tag ${tag}`);
+          item.append(tag, remove);
+          return item;
+        }));
         list.hidden = Boolean(result.error);
         const body = $('[data-toast-body]');
         body.textContent = result.error ?? ''; body.hidden = !result.error;
-        $('[data-toast-hint]').textContent = result.error ? '' : `${result.model} · Not yet: chỉ thêm tags vào bài, chưa publish`;
-        $<HTMLButtonElement>('[data-toast-publish]').hidden = Boolean(result.error);
-        $('[data-toast-apply]').textContent = result.error ? 'Dùng gợi ý offline' : 'Not yet';
-        toast.hidden = false;
+        const more = [
+          result.error ? '' : `${result.model} · bấm × để bỏ tag không muốn · Not yet: chỉ thêm tags vào bài, chưa publish`,
+          result.postPath === currentPath() ? '' : 'Bài này không phải bài đang mở, bấm nút sẽ tự mở bài đó trước',
+          toastQueue.length > 1 ? `Còn ${toastQueue.length - 1} bài đang chờ xử lý` : '',
+          tagJobs.size ? `Gemini đang đọc thêm ${tagJobs.size} bài` : '',
+        ].filter(Boolean);
+        $('[data-toast-hint]').textContent = more.join(' · ');
+        $<HTMLButtonElement>('[data-toast-publish]').hidden = Boolean(result.error) || empty;
+        $('[data-toast-apply]').textContent = result.error ? 'Dùng gợi ý offline' : empty ? 'Đóng' : 'Not yet';
       }
-      function closeTagToast() { toast.hidden = true; pendingToast = null; }
+      function closeTagToast() { toastQueue.shift(); renderTagToast(); }
+      /** Mở đúng bài của kết quả (nếu đang ở bài khác) để áp tag vào editor. */
+      async function openPostForTags(path: string): Promise<boolean> {
+        if (currentPath() === path) return true;
+        const local = localOnly.find((file) => file.path === path);
+        const remote = remoteBlobs.find((item) => item.path === path);
+        if (local) await openLocalPost(local); else if (remote) await openPost({ path, sha: remote.sha });
+        return currentPath() === path;
+      }
       /** Áp tag vào bài mà không làm nhảy vị trí đang xem / đang gõ. */
       async function applyPendingTags(): Promise<boolean> {
-        const result = pendingToast;
-        if (!result) return false;
-        if (result.postPath !== currentPath()) {
-          setStatus('Tags này là của bài khác (đã đổi bài trong lúc Gemini chạy). Bấm Gợi ý tags lại.', 'error');
+        const result = toastQueue[0];
+        if (!result || applying) return false;
+        applying = true;
+        try {
+          if (!await openPostForTags(result.postPath)) {
+            setStatus(`Không mở lại được "${result.postTitle}" để áp tags (bài đã bị đổi tên hoặc chưa lưu). Bấm Gợi ý tags lại.`, 'error');
+            closeTagToast();
+            return false;
+          }
+          const scrolled = [document.scrollingElement, ...document.querySelectorAll('.workspace *')]
+            .filter((el): el is Element => Boolean(el) && el!.scrollTop > 0)
+            .map((el) => [el, el.scrollTop] as const);
+          const focused = document.activeElement;
+          const vocabulary = tagVocabulary();
+          const offline = suggestTags(tagInput(), vocabulary);
           closeTagToast();
-          return false;
-        }
-        const scrolled = [document.scrollingElement, ...document.querySelectorAll('.workspace *')]
-          .filter((el): el is Element => Boolean(el) && el!.scrollTop > 0)
-          .map((el) => [el, el.scrollTop] as const);
-        const focused = document.activeElement;
-        const vocabulary = tagVocabulary();
-        const offline = suggestTags(tagInput(), vocabulary);
-        closeTagToast();
-        if (result.error) await applyTagResult(offline, undefined, 'Gemini lỗi nên đây là gợi ý offline', 'info');
-        else await applyTagResult(mergeAiTags(offline, result.tags!, vocabulary), result.model);
-        for (const [el, top] of scrolled) el.scrollTop = top;
-        if (focused instanceof HTMLElement && focused !== document.body) focused.focus({ preventScroll: true });
-        return true;
+          if (result.error) await applyTagResult(offline, undefined, 'Gemini lỗi nên đây là gợi ý offline', 'info');
+          else await applyTagResult(mergeAiTags(offline, result.tags!, vocabulary, 8, !result.curated), result.model);
+          for (const [el, top] of scrolled) el.scrollTop = top;
+          if (focused instanceof HTMLElement && focused !== document.body) focused.focus({ preventScroll: true });
+          return true;
+        } finally { applying = false; }
       }
       toast.addEventListener('click', (event) => {
         const target = event.target as HTMLElement;
         if (target === toast || target.closest('[data-toast-close]')) return closeTagToast();
-        if (target.closest('[data-toast-apply]')) return void applyPendingTags();
+        const remove = target.closest<HTMLElement>('[data-toast-remove]');
+        if (remove && toastQueue[0]?.tags) {
+          toastQueue[0].tags.splice(Number(remove.dataset.toastRemove), 1);
+          toastQueue[0].curated = true;
+          return renderTagToast();
+        }
+        if (target.closest('[data-toast-apply]')) return toastQueue[0]?.tags?.length === 0 ? closeTagToast() : void applyPendingTags();
         if (target.closest('[data-toast-publish]')) return void applyPendingTags().then((ok) => { if (ok) void publish(); });
       });
-      document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !toast.hidden) closeTagToast(); });
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !toast.hidden && !applying) closeTagToast(); });
       function setTagNote(message: string, kind: 'info' | 'error' | 'ok') {
         const note = $('[data-tag-note]');
         note.textContent = message; note.dataset.kind = kind; note.hidden = !message;
@@ -1889,6 +1929,7 @@ const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ 
   .toast-card { position:relative; display:grid; gap:.65rem; width:min(26rem,100%); max-height:calc(100vh - 2rem); overflow:auto; padding:1.1rem 2.4rem 1rem 1.2rem; border:1px solid var(--line); border-top:3px solid var(--ok); border-radius:.6rem; background:var(--panel-hi); box-shadow:0 1.5rem 4rem #000c; animation:toast-in .2s ease-out; } .tag-toast[data-kind='error'] .toast-card { border-top-color:#f6c177; }
   .toast-card strong { font-size:.85rem; } .toast-post { color:var(--muted); font-size:.68rem; overflow-wrap:anywhere; } .toast-post b { color:var(--text); font-weight:700; } .toast-card p { margin:0; color:var(--text); font-size:.7rem; line-height:1.5; overflow-wrap:anywhere; } .toast-card small { color:var(--muted); font-size:.6rem; }
   .toast-tags { display:flex; flex-wrap:wrap; gap:.35rem; margin:0; padding:0; list-style:none; } .toast-tags[hidden], .toast-card p[hidden] { display:none; } .toast-tags li { padding:.25rem .6rem; border:1px solid #b05be8; border-radius:99px; background:var(--accent-soft); color:#e2bbff; font-size:.7rem; }
+  .toast-tags li { display:inline-flex; align-items:center; gap:.3rem; padding-right:.3rem; } .toast-tags li button { display:grid; width:1.1rem; height:1.1rem; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:inherit; font-size:.85rem; line-height:1; opacity:.65; cursor:pointer; } .toast-tags li button:hover { background:#ffffff1f; opacity:1; } .toast-tags li button:focus-visible { outline:2px solid var(--accent); }
   .toast-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.5rem; margin-top:.3rem; } .toast-actions button { min-height:2.2rem; padding:.35rem .9rem; border:1px solid var(--line); border-radius:.4rem; background:transparent; color:var(--text); font:inherit; font-size:.72rem; cursor:pointer; } .toast-actions button:hover { border-color:var(--accent); } .toast-actions .publish { border-color:#b05be8; background:var(--accent); color:#21152b; font-weight:800; } .toast-actions button[hidden] { display:none; } .toast-close { position:absolute; top:.45rem; right:.5rem; border:0; background:transparent; color:var(--muted); font-size:1.1rem; cursor:pointer; }
   @keyframes toast-fade { from { opacity:0; } } @keyframes toast-in { from { opacity:0; transform:translateY(.5rem) scale(.98); } } @media (prefers-reduced-motion:reduce) { .tag-toast, .toast-card { animation:none; } }
   .suggest-tags { min-height:2.35rem; padding:.4rem .8rem; border:1px solid #b05be8; border-radius:.4rem; background:var(--accent-soft); color:#e2bbff; font:inherit; font-size:.7rem; font-weight:700; white-space:nowrap; cursor:pointer; } .suggest-tags:hover:not(:disabled) { background:var(--accent); color:#21152b; } .suggest-tags[data-busy] { cursor:progress; animation:tag-busy .8s ease-in-out infinite alternate; }

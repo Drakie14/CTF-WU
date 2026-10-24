@@ -124,4 +124,11 @@ describe('mergeAiTags', () => {
     expect(base.novel).toEqual(['Alpha Trick']);
     expect(mergeAiTags(base, ['XSS'], vocabulary).tags).toEqual(['XSS']);
   });
+
+  it('does not backfill from offline guesses once the user curated the AI list', () => {
+    const base = suggestTags({ title: 'X', body: 'Gửi `../../../../etc/passwd`.', current: [] }, vocabulary);
+    expect(base.added).toContain('Path Traversal');
+    expect(mergeAiTags(base, ['XSS'], vocabulary, 8, false).tags).toEqual(['XSS']);
+    expect(mergeAiTags(base, [], vocabulary, 8, false).tags).toEqual([]);
+  });
 });

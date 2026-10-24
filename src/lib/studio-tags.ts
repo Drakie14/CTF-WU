@@ -380,9 +380,9 @@ export function suggestTags(input: TagSuggestionInput, vocabulary: TagVocabulary
 
 /**
  * Gộp tag Claude gợi ý vào kết quả offline: tag tác giả đã nhập giữ nguyên, tag AI ưu tiên trước,
- * tag offline sẵn có trong blog lấp chỗ còn trống. Tag AI cũng đi qua cách viết của blog và bộ lọc tên mảng.
+ * tag offline sẵn có trong blog lấp chỗ còn trống (`backfill = false` khi người dùng đã tự chọn lại danh sách tag AI). Tag AI cũng đi qua cách viết của blog và bộ lọc tên mảng.
  */
-export function mergeAiTags(base: TagSuggestion, ai: string[], vocabulary: TagVocabulary, limit = 8): TagSuggestion {
+export function mergeAiTags(base: TagSuggestion, ai: string[], vocabulary: TagVocabulary, limit = 8, backfill = true): TagSuggestion {
   const typed = base.tags.filter((name) => !base.added.includes(name));
   const keys = new Set(typed.map(tagKey));
   const removed = [...base.removed];
@@ -398,7 +398,7 @@ export function mergeAiTags(base: TagSuggestion, ai: string[], vocabulary: TagVo
     take(canonicalTag(tag, vocabulary).replace(/\s+/g, ' ').trim());
   }
   // AI đã đọc cả bài: chỉ bù bằng gợi ý offline khi AI trả quá ít tag, để không lẫn tag lệch chủ đề.
-  if (fresh.length < 3) for (const name of base.added) if (!base.novel.includes(name)) take(name);
+  if (backfill && fresh.length < 3) for (const name of base.added) if (!base.novel.includes(name)) take(name);
   const room = Math.max(limit - typed.length, 0);
   const freshVulns = fresh.filter(isVuln).slice(0, room);
   const freshKeywords = fresh.filter((name) => !isVuln(name)).slice(0, room - freshVulns.length);
