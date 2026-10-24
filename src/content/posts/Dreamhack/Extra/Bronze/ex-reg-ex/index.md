@@ -1,9 +1,13 @@
 ---
 title: ex-reg-ex
 date: 2026-10-23
-ctf: Dreamhack
+ctf: Bronze
 category: web
 difficulty: easy
+tags:
+  - re.match
+  - Regex
+  - Python
 ---
 
 # Đề bài
