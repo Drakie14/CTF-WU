@@ -348,6 +348,8 @@ function setupAdminGate(): void {
     if (!(target instanceof Element)) return;
     const link = target.closest<HTMLAnchorElement>('[data-admin-link]');
     if (!link) return;
+    // Ctrl/Cmd/Shift+click: để trình duyệt tự mở tab mới; trang studio tự đọc PAT đã lưu trong localStorage.
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
     event.preventDefault();
 
     const tokens = savedAdminTokens();
