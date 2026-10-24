@@ -5,9 +5,9 @@ ctf: Dreamhack
 category: web
 difficulty: easy
 tags:
-  - Command Injection
-  - File Upload
-  - PHP
+  - Regular Expression
+  - Python
+  - re.match
 ---
 
 # Đề bài 
