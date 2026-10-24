@@ -12,6 +12,8 @@ export interface GeminiTagResult {
   model: string;
   /** Model hiểu lời giải thế nào: hiện cho tác giả để soát tag có đúng ý không. */
   summary?: string;
+  /** Model mạnh hơn bị bỏ qua và lý do (hết lượt, quá lâu…), để tác giả biết vì sao tag đến từ model yếu hơn. */
+  skipped?: string[];
 }
 
 interface GeminiResponse {
@@ -32,8 +34,11 @@ export function thinkingFor(model: string): Record<string, unknown> {
   return { thinkingBudget: /pro/.test(model) ? 128 : 0 };
 }
 
-/** Mỗi model chờ tối đa chừng này rồi chuyển model kế tiếp. */
-const MODEL_TIMEOUT_MS = 30_000;
+/**
+ * Mỗi model chờ tối đa chừng này rồi mới chuyển model kế tiếp. Gợi ý chạy nền nên chờ lâu cũng không chặn ai;
+ * cắt sớm thì model mạnh nhất (hay chậm lúc đông) bị bỏ qua và tag rơi về model yếu hơn.
+ */
+const MODEL_TIMEOUT_MS = 120_000;
 
 export async function geminiSuggestTags(input: TagPromptInput & { apiKey: string }, fetchImpl: typeof fetch = fetch): Promise<GeminiTagResult> {
   const prompt = tagPromptData(input);
@@ -97,7 +102,7 @@ export async function geminiSuggestTags(input: TagPromptInput & { apiKey: string
     const text = (candidate?.content?.parts ?? []).filter((part) => !part.thought).map((part) => part.text ?? '').join('');
     const tags = parseTagReply(text);
     const summary = parseTagSummary(text);
-    if (tags.length) return { tags, model, ...(summary ? { summary } : {}) };
+    if (tags.length) return { tags, model, ...(summary ? { summary } : {}), ...(failures.length ? { skipped: failures } : {}) };
     failures.push(`${model}: không trả tag${candidate?.finishReason ? ` (${candidate.finishReason})` : ''}`);
   }
   throw new Error(`Gemini không trả được tag. ${failures.join('; ')}.`);

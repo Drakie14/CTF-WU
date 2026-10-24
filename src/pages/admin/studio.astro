@@ -88,6 +88,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
             <button type="button" class="back-library" data-library>← Thư mục</button>
             <strong data-file-label>Write-up mới</strong>
             <span data-save-state>Chưa publish</span>
+            <button type="button" data-stale-draft hidden title="Nháp này viết trên bản cũ hơn bản đang có trên GitHub">Mở nháp cũ</button>
             <button type="button" data-metadata-toggle>Thông tin bài</button>
           </div>
 
@@ -231,7 +232,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         requestPermission: (options?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
       };
       type ListableDirectory = FileSystemDirectoryHandle & { entries: () => AsyncIterableIterator<[string, FileSystemDirectoryHandle | FileSystemFileHandle]> };
-      type Draft = { title: string; folder: string; date: string; ctf: string; category: string; difficulty: string; tags: string; source: string };
+      type Draft = { title: string; folder: string; date: string; ctf: string; category: string; difficulty: string; tags: string; source: string; base?: string };
       type MermaidApi = { initialize: (config: Record<string, unknown>) => void; run: (config: { nodes: NodeListOf<Element> }) => Promise<void> };
       let repo = { name: '', branch: 'main' };
       let openFile: RepoFile | undefined;
@@ -319,6 +320,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       }
 
       const draftKey = () => `ctf-wu.studio.draft.${openFile?.path ?? `new:${relativeFolder()}`}`;
+      /** Hash bản GitHub mà editor đang dựa vào: nháp của bản cũ hơn thì không tự đè lên bản mới. */
+      let draftBase = '';
       function scheduleDraft() { clearTimeout(draftTimer); draftTimer = setTimeout(() => { draftTimer = undefined; saveDraft(); }, 450); }
       /** Ghi nốt nháp đang chờ và đợi chuỗi ghi file local xong trước khi đổi bài, để không ghi nội dung bài này vào thư mục bài kia. */
       async function settleDraft() {
@@ -328,7 +331,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       function saveDraft() {
         if ($('[data-composer]').hasAttribute('hidden') || !(title.value.trim() || editorSource().trim())) return;
         if (!openFile) { queueLocalSave(); if (localDraftPath) return; }
-        const draft: Draft = { title: title.value, folder: folder.value, date: date.value, ctf: ctf.value, category: category.value, difficulty: difficulty.value, tags: tags.value, source: editorSource() };
+        const draft: Draft = { title: title.value, folder: folder.value, date: date.value, ctf: ctf.value, category: category.value, difficulty: difficulty.value, tags: tags.value, source: editorSource(), ...(openFile ? { base: draftBase } : {}) };
         localStorage.setItem(draftKey(), JSON.stringify(draft));
         $('[data-save-state]').textContent = 'Nháp lưu trong trình duyệt';
       }
@@ -380,17 +383,41 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         for (const asset of assets) if (target && !writtenAssets.has(asset)) { await writeLocalFile(target, asset.name, asset.file); writtenAssets.add(asset); }
         $('[data-save-state]').textContent = 'Đã lưu file local · chưa publish';
       }
-      function restoreDraft() {
+      const staleButton = $<HTMLButtonElement>('[data-stale-draft]');
+      function applyDraft(draft: Draft) {
+        title.value = draft.title; folder.value = draft.folder; date.value = draft.date; ctf.value = draft.ctf;
+        category.value = draft.category; difficulty.value = draft.difficulty; tags.value = draft.tags; setEditorSource(draft.source);
+      }
+      /**
+       * Khôi phục nháp trong trình duyệt. Nháp của bài đã có trên GitHub mà viết trên bản cũ hơn (bài đã được sửa
+       * ở nơi khác sau đó) thì không tự đè: cất sang khoá `.stale`, hiện nút "Mở nháp cũ" để tự chọn.
+       */
+      function restoreDraft(): boolean | 'stale' {
+        staleButton.hidden = true;
         try {
           const value = localStorage.getItem(draftKey());
-          if (!value) return false;
+          if (!value) { staleButton.hidden = !localStorage.getItem(`${draftKey()}.stale`); return false; }
           const draft = JSON.parse(value) as Draft;
-          title.value = draft.title; folder.value = draft.folder; date.value = draft.date; ctf.value = draft.ctf;
-          category.value = draft.category; difficulty.value = draft.difficulty; tags.value = draft.tags; setEditorSource(draft.source);
+          if (openFile && draft.base !== draftBase) {
+            localStorage.setItem(`${draftKey()}.stale`, value); localStorage.removeItem(draftKey());
+            staleButton.hidden = false;
+            return 'stale';
+          }
+          applyDraft(draft);
           $('[data-save-state]').textContent = 'Đã khôi phục nháp cục bộ';
           return true;
         } catch { return false; }
       }
+      staleButton.addEventListener('click', () => {
+        try {
+          const value = localStorage.getItem(`${draftKey()}.stale`);
+          if (!value) { staleButton.hidden = true; return; }
+          applyDraft(JSON.parse(value) as Draft);
+          localStorage.removeItem(`${draftKey()}.stale`); staleButton.hidden = true;
+          scheduleDraft(); void renderPreview();
+          setStatus('Đã mở nháp cũ. Bản này dựa trên bản GitHub trước đó, rà lại trước khi Publish để không đè thay đổi mới.', 'info');
+        } catch { /* storage unavailable */ }
+      });
       function removeDraft() { localStorage.removeItem(draftKey()); }
 
       function storedToken(): string {
@@ -524,6 +551,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       }
       function resetEditor() {
         openFile = undefined; localDraftPath = undefined; localDraftOwned = false; writtenAssets.clear();
+        staleButton.hidden = true;
         assets.forEach((asset) => URL.revokeObjectURL(asset.url)); assets = [];
         title.value = ''; date.value = new Date().toISOString().slice(0, 10); ctf.value = ctfFromFolder(folder.value);
         category.value = ''; difficulty.value = ''; tags.value = ''; setEditorSource('');
@@ -623,10 +651,14 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           openFile = { path: file.path, sha: content.sha }; localDraftPath = undefined; localDraftOwned = false;
           folder.value = folderOf(file) || 'uncategorized';
           $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
-          const reconciled = await reconcileLocalArticle(file.path, decode(content.content));
+          const remoteSource = decode(content.content);
+          draftBase = await hashText(remoteSource);
+          const reconciled = await reconcileLocalArticle(file.path, remoteSource);
           $('[data-save-state]').textContent = 'Đã mở bài';
           populate(reconciled.source);
-          if (restoreDraft()) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok'); else setStatus(reconciled.message, reconciled.message.startsWith('Xung đột') ? 'error' : 'info');
+          const restored = restoreDraft();
+          if (restored === 'stale') setStatus('GitHub có bản mới hơn nháp trong trình duyệt nên đang mở bản GitHub. Bấm "Mở nháp cũ" nếu vẫn cần nháp đó.', 'info');
+          else if (restored) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok'); else setStatus(reconciled.message, reconciled.message.startsWith('Xung đột') ? 'error' : 'info');
           activeFolder = folderOf(file) || undefined; renderSidebar(); showComposer();
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
       }
@@ -1355,14 +1387,14 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         setTagNote('Gemini đang đọc bài. Cứ làm việc khác (kể cả gợi ý tags bài khác), xong sẽ có thông báo giữa màn hình', 'info');
         try {
           const ai = await geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()], examples: tagExamples });
-          showTagToast({ tags: ai.tags, model: modelLabel(ai.model), summary: ai.summary, postPath, postTitle });
+          showTagToast({ tags: ai.tags, model: modelLabel(ai.model), summary: ai.summary, skipped: ai.skipped?.map((reason) => modelLabel(reason)), postPath, postTitle });
         } catch (error) {
           showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, postPath, postTitle });
         } finally {
           tagJobs.delete(postPath); refreshTagButtons(); renderTagToast();
         }
       }
-      type TagToast = { postPath: string; postTitle: string; summary?: string; curated?: boolean; tags?: string[]; model?: string; error?: string };
+      type TagToast = { postPath: string; postTitle: string; summary?: string; skipped?: string[]; curated?: boolean; tags?: string[]; model?: string; error?: string };
       /** Hàng đợi kết quả: bài nào xong trước hiện trước, bấm xử lý xong bài này mới tới bài kế. */
       const toastQueue: TagToast[] = [];
       let applying = false;
@@ -1401,6 +1433,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         body.textContent = result.error ?? (result.summary ? `Gemini hiểu bài: ${result.summary}` : ''); body.hidden = !body.textContent;
         const more = [
           result.error ? '' : `${result.model} · bấm vào tag để sửa, × để bỏ · Not yet: chỉ thêm tags vào bài, chưa publish`,
+          result.skipped?.length ? `Đã bỏ qua ${result.skipped.join('; ')}` : '',
           result.postPath === currentPath() ? '' : 'Bài này không phải bài đang mở, bấm nút sẽ tự mở bài đó trước',
           toastQueue.length > 1 ? `Còn ${toastQueue.length - 1} bài đang chờ xử lý` : '',
           tagJobs.size ? `Gemini đang đọc thêm ${tagJobs.size} bài` : '',
@@ -1785,6 +1818,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           const commit = await api<{ sha: string; html_url: string }>('/git/commits', { method: 'POST', body: JSON.stringify({ message: `content: ${openFile ? 'sửa' : 'thêm'} "${title.value.trim()}"`, tree: tree.sha, parents: [ref.object.sha] }) });
           await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
           removeDraft();
+          draftBase = await hashText(composePost());
           openFile = { path: filePath, sha: '' }; localDraftPath = undefined; localDraftOwned = false; $('[data-file-label]').textContent = filePath.replace(`${postRoot}/`, '');
           activeFolder = relativeFolder();
           $('[data-save-state]').textContent = 'Đã publish';

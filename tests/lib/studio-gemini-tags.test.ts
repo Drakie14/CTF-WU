@@ -42,7 +42,7 @@ describe('geminiSuggestTags', () => {
 
   it('falls back to the next model when the free quota runs out', async () => {
     const { calls, impl } = fakeFetch([json(429, { error: { message: 'quota' } }), answer('{"tags": ["XSS"]}')]);
-    await expect(geminiSuggestTags(input, impl)).resolves.toEqual({ tags: ['XSS'], model: GEMINI_MODELS[1] });
+    await expect(geminiSuggestTags(input, impl)).resolves.toEqual({ tags: ['XSS'], model: GEMINI_MODELS[1], skipped: [`${GEMINI_MODELS[0]}: hết lượt free`] });
     expect(calls).toHaveLength(2);
   });
 
