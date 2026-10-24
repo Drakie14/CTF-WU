@@ -5,9 +5,9 @@ ctf: Dreamhack
 category: web
 difficulty: easy
 tags:
-  - Regular Expression
-  - Python
-  - re.match
+  - File Upload
+  - RCE
+  - PHP
 ---
 
 # Đề bài 
