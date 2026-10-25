@@ -1,16 +1,45 @@
 ---
-import EmptyState from '../components/EmptyState.astro';
+import Activity from '../components/Activity.astro';
 import PostRow from '../components/PostRow.astro';
+import WebRank from '../components/WebRank.astro';
 import AppLayout from '../layouts/AppLayout.astro';
 import { SITE } from '../config/site';
+import { CATEGORY_META, categoryColor } from '../lib/categories';
+import { CATEGORIES } from '../lib/content/constants';
+import { formatIsoDate } from '../lib/content/dates';
 import { getSiteContent } from '../lib/posts';
+import { activityGrid, webRank } from '../lib/stats';
 
 const { posts } = await getSiteContent();
 const latest = posts.slice(0, 5);
+const rank = webRank(posts.filter((p) => p.data.category === 'web').map((p) => p.data.difficulty));
+// "Hôm nay" là ngày build: site build lại mỗi lần publish nên lưới luôn kết thúc ở bài mới nhất.
+const activity = activityGrid(posts.map((p) => formatIsoDate(p.data.date)), formatIsoDate(new Date()), 26);
+const uncategorized = posts.filter((p) => !p.data.category).length;
+const categories = [
+  ...CATEGORIES.map((key) => ({ key, label: CATEGORY_META[key].label, color: CATEGORY_META[key].color, href: `/category/${key}/`, count: posts.filter((p) => p.data.category === key).length })),
+  { key: 'none', label: 'Khác', color: categoryColor(''), count: uncategorized },
+]
+  .filter((c) => c.count > 0)
+  .sort((a, b) => b.count - a.count);
 ---
 
 <AppLayout view="home" title={SITE.name}>
-  <EmptyState title="Select a write-up" description={SITE.description}>
+  <div class="home">
+    <header class="hero">
+      <svg class="hero-icon" viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M24 4 44 24 24 44 4 24Z" fill="none" stroke="currentColor" stroke-width="2.5"></path>
+        <path d="M24 15 33 24 24 33 15 24Z" fill="currentColor"></path>
+      </svg>
+      <div>
+        <h1>{SITE.author}</h1>
+        <p>{SITE.description}</p>
+      </div>
+    </header>
+
+    {posts.length > 0 && <WebRank rank={rank} />}
+    {posts.length > 0 && <Activity {...activity} categories={categories} />}
+
     {
       latest.length > 0 && (
         <section class="latest" aria-labelledby="latest-h">
@@ -21,17 +50,47 @@ const latest = posts.slice(0, 5);
         </section>
       )
     }
-  </EmptyState>
+  </div>
 </AppLayout>
 
 <style>
-  .latest {
-    width: min(100%, 36rem);
-    margin-top: 2.5rem;
-    text-align: left;
+  .home {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    width: min(100%, 42rem);
+    margin: 0 auto;
+    padding: 8vh 1.5rem 3rem;
+  }
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .hero-icon {
+    flex: none;
+    width: 2.6rem;
+    height: 2.6rem;
+    color: var(--accent);
+    filter: drop-shadow(0 0 10px rgb(244 114 182 / 0.5));
+  }
+  .hero h1 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .hero p {
+    margin: 0.2rem 0 0;
+    font-size: 0.9rem;
+    color: var(--text-soft);
   }
   .latest h2 {
-    margin: 0 0 0.6rem;
+    margin: 0.4rem 0 0.6rem;
     font-family: var(--font-mono);
     font-size: 0.72rem;
     font-weight: 600;
@@ -45,14 +104,12 @@ const latest = posts.slice(0, 5);
     padding: 0;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .latest :global(li) {
-      animation: rise 0.6s var(--ease-out) backwards;
+    .home > :global(*) {
+      animation: rise 0.7s var(--ease-out) backwards;
     }
-    .latest :global(li:nth-child(1)) { animation-delay: 0.45s; }
-    .latest :global(li:nth-child(2)) { animation-delay: 0.51s; }
-    .latest :global(li:nth-child(3)) { animation-delay: 0.57s; }
-    .latest :global(li:nth-child(4)) { animation-delay: 0.63s; }
-    .latest :global(li:nth-child(5)) { animation-delay: 0.69s; }
+    .home > :global(:nth-child(2)) { animation-delay: 0.08s; }
+    .home > :global(:nth-child(3)) { animation-delay: 0.16s; }
+    .home > :global(:nth-child(4)) { animation-delay: 0.24s; }
     .latest :global(.row) {
       transition:
         background-color 0.15s,
@@ -60,6 +117,11 @@ const latest = posts.slice(0, 5);
     }
     .latest :global(.row:hover) {
       transform: translateX(4px);
+    }
+  }
+  @media (max-width: 640px) {
+    .home {
+      padding: 1.5rem 1rem 3rem;
     }
   }
 </style>

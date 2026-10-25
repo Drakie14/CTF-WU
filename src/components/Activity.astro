@@ -1,0 +1,197 @@
+---
+import type { ActivityDay } from '../lib/stats';
+
+interface Props {
+  columns: ActivityDay[][];
+  total: number;
+  longest: number;
+  categories: Array<{ key: string; label: string; color: string; count: number; href?: string }>;
+}
+
+const { columns, total, longest, categories } = Astro.props;
+const CELL = 11;
+const STEP = 14;
+const LEFT = 22;
+const TOP = 16;
+const width = LEFT + columns.length * STEP;
+const height = TOP + 7 * STEP;
+const level = (count: number) => Math.min(count, 3);
+const display = (iso: string) => iso.split('-').reverse().join('/');
+// Nhãn tháng đặt ở cột có ngày mùng 1.
+const months = columns
+  .map((days, x) => ({ x, day: days.find((d) => d.iso.endsWith('-01')) }))
+  .filter((m): m is { x: number; day: ActivityDay } => Boolean(m.day))
+  .map(({ x, day }) => ({ x, label: `T${Number(day.iso.slice(5, 7))}` }));
+const sum = categories.reduce((n, c) => n + c.count, 0);
+---
+
+<section class="activity" aria-labelledby="activity-h">
+  <div class="a-head">
+    <h2 id="activity-h">Hoạt động</h2>
+    <p>{total} bài trong 6 tháng · chuỗi dài nhất {longest} ngày</p>
+  </div>
+  <svg class="heatmap" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${total} bài viết trong 6 tháng qua`}>
+    {months.map((m) => <text class="h-month" x={LEFT + m.x * STEP} y="10">{m.label}</text>)}
+    {['T2', 'T4', 'T6'].map((label, i) => <text class="h-day" x="0" y={TOP + (i * 2) * STEP + CELL - 2}>{label}</text>)}
+    {
+      columns.map((days, x) =>
+        days.map((d, y) => (
+          <rect class={`lv${level(d.count)}`} x={LEFT + x * STEP} y={TOP + y * STEP} width={CELL} height={CELL} rx="2.5">
+            <title>{`${display(d.iso)}: ${d.count ? `${d.count} bài` : 'không có bài'}`}</title>
+          </rect>
+        )),
+      )
+    }
+  </svg>
+  <div class="legend" aria-hidden="true">
+    Ít <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i> Nhiều
+  </div>
+
+  <div class="cats">
+    <div class="cats-bar" role="img" aria-label={categories.map((c) => `${c.label} ${c.count}`).join(', ')}>
+      {categories.map((c) => <span style={`flex:${c.count};--c:${c.color}`} title={`${c.label}: ${c.count}`}></span>)}
+    </div>
+    <ul class="cats-legend">
+      {
+        categories.map((c) => (
+          <li style={`--c:${c.color}`}>
+            {c.href ? <a href={c.href}>{c.label}</a> : <span>{c.label}</span>}
+            <b>{c.count}</b>
+            <small>{Math.round((c.count / sum) * 100)}%</small>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .activity {
+    padding: 1.3rem 1.5rem 1.4rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.75rem;
+    background: var(--panel-2);
+    text-align: left;
+  }
+  .a-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.3rem 1rem;
+    margin-bottom: 0.9rem;
+  }
+  .a-head h2 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .a-head p {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-soft);
+  }
+  .heatmap {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .h-month,
+  .h-day {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    fill: var(--muted);
+  }
+  .lv0 {
+    fill: rgb(255 255 255 / 0.05);
+    background: rgb(255 255 255 / 0.05);
+  }
+  .lv1 {
+    fill: rgb(244 114 182 / 0.35);
+    background: rgb(244 114 182 / 0.35);
+  }
+  .lv2 {
+    fill: rgb(244 114 182 / 0.65);
+    background: rgb(244 114 182 / 0.65);
+  }
+  .lv3 {
+    fill: var(--accent);
+    background: var(--accent);
+  }
+  rect.lv3 {
+    filter: drop-shadow(0 0 3px rgb(244 114 182 / 0.8));
+  }
+  .legend {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+  .legend i {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 2px;
+  }
+  .cats {
+    margin-top: 1.2rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--panel-border);
+  }
+  .cats-bar {
+    display: flex;
+    gap: 3px;
+    height: 0.55rem;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .cats-bar span {
+    background: var(--c);
+  }
+  .cats-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8rem;
+  }
+  .cats-legend li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+  }
+  .cats-legend li::before {
+    content: '';
+    width: 0.55rem;
+    height: 0.55rem;
+    align-self: center;
+    background: var(--c);
+    transform: rotate(45deg);
+  }
+  .cats-legend a,
+  .cats-legend span {
+    color: var(--text);
+    text-decoration: none;
+  }
+  .cats-legend a:hover {
+    color: var(--c);
+  }
+  .cats-legend b {
+    font-family: var(--font-mono);
+    color: var(--c);
+  }
+  .cats-legend small {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+</style>

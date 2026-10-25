@@ -14,7 +14,7 @@ export async function getStaticPaths() {
   // `posts` mới nhất trước: previous = bài cũ hơn, next = bài mới hơn.
   return posts.map((post, i) => ({
     params: { slug: post.id },
-    props: { post, prev: posts[i + 1], next: posts[i - 1], related: relatedPosts(post, posts, tags.slugOf) },
+    props: { post, prev: posts[i + 1], next: posts[i - 1], related: relatedPosts(post, posts.filter((p) => p !== posts[i + 1] && p !== posts[i - 1]), tags.slugOf) },
   }));
 }
 

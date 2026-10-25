@@ -608,11 +608,11 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
     color: var(--muted);
     white-space: nowrap;
   }
-  /* Cùng bảng màu với badge độ khó trong ArticleHeader. */
-  .row-meta .diff-easy { color: #86efac; }
-  .row-meta .diff-medium { color: #fcd34d; }
-  .row-meta .diff-hard { color: #fdba74; }
-  .row-meta .diff-insane { color: #fca5a5; }
+  /* Màu độ khó (dòng bài, Web rank); cùng bảng màu với badge trong ArticleHeader. */
+  .diff-easy { color: #86efac; }
+  .diff-medium { color: #fcd34d; }
+  .diff-hard { color: #fdba74; }
+  .diff-insane { color: #fca5a5; }
   @media (max-width: 639.98px) {
     .row {
       display: grid;
