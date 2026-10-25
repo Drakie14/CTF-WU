@@ -52,6 +52,7 @@ Bài mẫu chuẩn là [`XSS.md`](src/content/posts/PortSwigger/XSS.md), chính 
 ## Git
 
 - Remote `github.com/Drakie14/CTF-WU`, branch `main`. Có standing consent: tự `commit`/`push`/`pull --rebase`, không cần hỏi.
+- Kéo về bằng `npm run sync` thay cho `git pull --rebase`. Studio publish thẳng lên GitHub nhưng vẫn ghi file vào `src/content/posts` local, nên các file đó là untracked và làm `git pull` báo "untracked working tree files would be overwritten". `npm run sync` chỉ gỡ những file giống hệt bản trên origin rồi pull; gặp file khác bản origin thì dừng và liệt kê, khi đó hỏi tác giả.
 - Commit message tiếng Việt: `content: ...` / `content(<Giải>): ...` cho bài viết; `feat:` / `fix:` / `perf:` cho code blog.
 - Dừng lại hỏi khi có conflict hoặc thao tác mất dữ liệu (force-push, `reset --hard`, xoá bài).
 

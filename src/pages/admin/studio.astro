@@ -1865,14 +1865,15 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         if (version === renderVersion) { scheduleLayout(); await renderMermaidDiagrams(); }
         if (version === renderVersion) { previewState.textContent = 'Live preview'; scheduleLayout(); }
       }
-      /** Chỉ có khi mở Studio qua `npm run dev`: git pull về máy để file Studio vừa ghi không chặn lần pull sau. Bản deploy trả null. */
-      async function pullToGit(): Promise<string | null> {
+      /** Chỉ có khi mở Studio qua `npm run dev`: git pull về máy để file Studio vừa ghi không chặn lần pull sau. Bản deploy không có endpoint: nếu đã ghi file local thì nhắc tự đồng bộ, vì git trên máy chưa biết commit vừa publish. */
+      async function pullToGit(localSynced: boolean): Promise<string | null> {
+        const pending = localSynced ? 'Trên máy chạy npm run sync (hoặc npm run dev) để git nhận bài vừa publish.' : null;
         try {
           const reply = await fetch('/__studio/sync', { method: 'POST', headers: { 'x-studio-sync': '1' } });
-          if (!reply.ok) return null;
+          if (!reply.ok) return pending;
           const result = await reply.json() as { ok: boolean; message: string };
           return result.ok ? 'Đã git pull về máy.' : `Git: ${result.message}`;
-        } catch { return null; }
+        } catch { return pending; }
       }
       async function publish() {
         if (!token()) { $('[data-token-box]').hidden = false; return setStatus('Nhập GitHub token trước khi publish.', 'error'); }
@@ -1906,7 +1907,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           $('[data-save-state]').textContent = 'Đã publish';
           const localSynced = await syncLocal({ quiet: true });
           if (localSynced) localStorage.setItem(localBaselineKey(filePath), await hashText(composePost()));
-          const git = await pullToGit();
+          const git = await pullToGit(localSynced);
           setStatus([
             localSynced ? 'Đã publish GitHub và đồng bộ file trong src/content/posts local.' : 'Đã publish GitHub. Kết nối thư mục src/content/posts để đồng bộ local.',
             git ?? '',
