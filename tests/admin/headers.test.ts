@@ -34,6 +34,7 @@ describe('public/_headers', () => {
     expect(p).toMatch(/connect-src [^;]*https:\/\/api\.github\.com/);
     expect(p).toMatch(/frame-ancestors 'none'/);
     expect(p).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline|script-src[^;]*unpkg/);
+    expect(p).not.toMatch(/jsdelivr/);
     expect(admin).toContain('X-Robots-Tag: noindex, nofollow');
   });
 
@@ -42,6 +43,7 @@ describe('public/_headers', () => {
     expect(studio).toContain('! Content-Security-Policy');
     const p = csp('/admin/studio/*');
     expect(p).toMatch(/script-src 'self' 'wasm-unsafe-eval';/);
+    expect(p).not.toMatch(/jsdelivr/);
     expect(p).toMatch(/connect-src [^;]*https:\/\/api\.github\.com/);
     expect(p).not.toMatch(/script-src[^;]*unsafe-inline/);
     expect(p).not.toMatch(/script-src[^;]*'unsafe-eval'/);
