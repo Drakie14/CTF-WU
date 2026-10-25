@@ -144,15 +144,20 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
             <section class="source-pane">
               <div class="pane-head"><span>Markdown</span><span class="editor-keys" tabindex="0" title="Tab / Shift+Tab: thụt lề (dòng list thành list con)&#10;Bôi đen rồi gõ ` [ ( { &quot; * _ ~ = $ &lt;: bọc vùng chọn (` trên nhiều dòng thành code block)&#10;Ctrl+B đậm · Ctrl+I nghiêng · Ctrl+E code · Ctrl+Shift+X gạch · Ctrl+K link&#10;Bôi đen chữ rồi dán URL: thành link&#10;Ctrl+F tìm / thay · Ctrl+D chọn chữ giống tiếp theo&#10;Alt+↑/↓ chuyển dòng · Shift+Alt+↑/↓ nhân đôi dòng · Ctrl+Z / Ctrl+Shift+Z hoàn tác&#10;Ctrl+V ảnh để chèn">Ctrl+V ảnh · Phím tắt ⓘ</span></div>
               <div class="code-editor" data-editor></div>
-              <label class="asset-drop" data-drop>
-                <input type="file" multiple data-assets accept="image/*,.svg,.txt,.py,.js,.ts,.zip,.pdf" />
-                <span>Thả file hoặc bấm để thêm vào bài</span>
-              </label>
-              <ul class="assets" data-assets-list></ul>
+              <div class="asset-drawer" data-assets-drawer hidden>
+                <label class="asset-filter"><input type="checkbox" data-assets-unused /> Chỉ hiện chưa dùng</label>
+                <ul class="assets" data-assets-list></ul>
+              </div>
+              <div class="asset-bar">
+                <button type="button" class="asset-toggle" data-assets-toggle aria-expanded="false" aria-label="Mở kho tệp"><span data-assets-count>📎 0 tệp</span><i>▴</i></button>
+                <button type="button" class="asset-add" data-assets-add aria-label="Thêm tệp" title="Thêm tệp">＋</button>
+                <input type="file" multiple hidden data-assets accept="image/*,.svg,.txt,.py,.js,.ts,.zip,.pdf" />
+              </div>
+              <div class="drop-overlay" data-drop-overlay hidden>Thả để thêm</div>
             </section>
-            <div class="resize-handle" data-resize aria-label="Kéo để đổi độ rộng editor" role="separator" aria-orientation="vertical"><button type="button" class="sync-scroll" data-sync-scroll aria-label="Bật cuộn đồng bộ" aria-pressed="false" title="Bật cuộn đồng bộ">↕</button></div>
+            <div class="resize-handle" data-resize aria-label="Kéo để đổi độ rộng editor" role="separator" aria-orientation="vertical"></div>
             <section class="preview-pane">
-              <div class="pane-head"><span>Preview</span><span data-preview-state>Đang chờ nội dung</span></div>
+              <div class="pane-head"><span>Preview</span><span class="pane-tools"><button type="button" class="sync-mode" data-sync-mode data-mode="follow" title="Cuộn đồng bộ theo dòng nguồn: bấm để đổi chế độ">↕ Cuộn + con trỏ</button><span data-preview-state>Đang chờ nội dung</span></span></div>
               <article class="preview" data-preview><p class="placeholder">Preview Markdown sẽ hiện ở đây.</p></article>
             </section>
           </div>
@@ -190,17 +195,17 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
     </dialog>
 
     <script>
-      import { marked } from 'marked';
-      import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
+            import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
       import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
       import { STUDIO_REPO, STUDIO_TOKEN_KEY, ctfFromFolder } from '../../lib/studio';
       import { buildVocabulary, canonicalTag, mergeAiTags, suggestTags, tagKey, type TagSuggestion, type TagTerm } from '../../lib/studio-tags';
       import { geminiSuggestTags } from '../../lib/studio-gemini-tags';
       import type { TagExample } from '../../lib/tag-prompt';
       import { EditorState, Prec, type Extension, type TransactionSpec } from '@codemirror/state';
-      import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
+      import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type ViewUpdate } from '@codemirror/view';
       import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
       import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
+      import { type Anchor, escapeHtml, lineToTop, normalizeAnchors, normalizeCallouts, prepareExtensions, renderBlocks, topToLine } from '../../lib/studio-preview';
       import { codeFenceLanguages, insertIndent, insertLink, pasteLink, toggleMark, wrapSelection } from '../../lib/studio-editor';
       import { LANGUAGE_ALIASES } from '../../config/code-languages';
       import { acceptCompletion, autocompletion } from '@codemirror/autocomplete';
@@ -254,10 +259,34 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       let pending: PendingFolders = readPending();
       let localPermission: PermissionState = 'prompt';
       let mermaidReady: Promise<MermaidApi> | undefined;
-      let syncScrollEnabled = false;
-      let syncScrollFrame = 0;
-      let applyingSyncedScroll = false;
       let githubConnected = false;
+      type SyncMode = 'off' | 'scroll' | 'follow';
+      type SyncSide = 'editor' | 'preview';
+      type PreviewBlock = { el: HTMLElement; line: number; end: number; top: number; bottom: number };
+      const syncModeKey = 'ctf-wu.studio.sync-mode';
+      const assetsOpenKey = 'ctf-wu.studio.assets-open';
+      const assetMime = 'application/x-studio-asset';
+      let syncMode: SyncMode = (() => { try { const saved = localStorage.getItem(syncModeKey); return saved === 'off' || saved === 'scroll' || saved === 'follow' ? saved : 'follow'; } catch { return 'follow'; } })();
+      let anchors: Anchor[] = [];
+      let previewBlocks: PreviewBlock[] = [];
+      /** Dòng nguồn (có phần lẻ) đang nằm ở đỉnh preview: khối neo để giữ vị trí khi render lại hoặc layout đổi. */
+      let viewLine = 0;
+      const scrollLockUntil: Record<SyncSide, number> = { editor: 0, preview: 0 };
+      let syncSide: SyncSide | undefined;
+      let syncFrame = 0;
+      let layoutFrame = 0;
+      let followFrame = 0;
+      let skipFollow = false;
+      let cursorMovedAt = 0;
+      let cursorBlockLine: number | undefined;
+      let cursorBlockTimer: ReturnType<typeof setTimeout> | undefined;
+      let usageTimer: ReturnType<typeof setTimeout> | undefined;
+      let layoutObserver: ResizeObserver | undefined;
+      const observedBlocks = new WeakSet<Element>();
+      let renderPending: Promise<void> | undefined;
+      let tocScroll: (() => void) | undefined;
+      const imageSizes = new Map<string, { w: number; h: number }>();
+      const highlightCache = new Map<string, string>();
       let activeFolder: string | undefined;
       const treeOpenKey = 'ctf-wu.studio.tree-open';
       const treeOpen = new Set<string>((() => { try { return JSON.parse(localStorage.getItem(treeOpenKey) ?? '[]') as string[]; } catch { return []; } })());
@@ -280,6 +309,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       function setEditorSource(source: string) {
         editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: source } });
         editor.setState(EditorState.create({ doc: source, extensions: editorExtensions }));
+        viewLine = 0;
       }
       const run = (view: EditorView, spec: TransactionSpec | null) => { if (spec) view.dispatch(spec); return Boolean(spec); };
       function initEditor() {
@@ -310,7 +340,21 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           ])),
           keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
           EditorState.allowMultipleSelections.of(true),
-          EditorView.updateListener.of((update) => { if (update.docChanged) { void renderPreview(); scheduleDraft(); } }),
+          Prec.high(EditorView.domEventHandlers({
+            dragover: (event) => { const types = [...(event.dataTransfer?.types ?? [])]; if (!types.includes('Files') && !types.includes(assetMime)) return false; event.preventDefault(); return true; },
+            drop: (event, view) => {
+              const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+              const dropped = assets.find((asset) => asset.name === event.dataTransfer?.getData(assetMime));
+              if (dropped) { event.preventDefault(); insertOwnLine(assetMarkdown(dropped), pos); return true; }
+              if (!event.dataTransfer?.files.length) return false;
+              event.preventDefault(); view.dispatch({ selection: { anchor: pos } }); addFiles(event.dataTransfer.files);
+              return true;
+            },
+          })),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) { shiftViewLine(update); void renderPreview().then(scheduleFollow); scheduleDraft(); scheduleUsage(); }
+            if (update.docChanged || update.selectionSet) { cursorMovedAt = performance.now(); if (!update.docChanged) scheduleFollow(); }
+          }),
         ];
         editor = new EditorView({ state: EditorState.create({ doc: '', extensions: editorExtensions }), parent: $('[data-editor]') });
         editor.contentDOM.addEventListener('paste', (event) => {
@@ -1311,15 +1355,70 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           return true;
         } catch (error) { setStatus(errorMessage(error), 'error'); return false; }
       }
+      const assetsList = $('[data-assets-list]');
+      const assetsDrawer = $('[data-assets-drawer]');
+      const assetsToggle = $<HTMLButtonElement>('[data-assets-toggle]');
+      const assetsCount = $('[data-assets-count]');
+      const unusedOnly = $<HTMLInputElement>('[data-assets-unused]');
+      const assetCards = new Map<Asset, HTMLLIElement>();
+      const isImageAsset = (asset: Asset) => asset.file.type.startsWith('image/');
+      const assetMarkdown = (asset: Asset) => isImageAsset(asset) ? `![image](./${asset.name})` : `[${asset.name}](./${asset.name})`;
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      /** Rút gọn ở giữa, giữ đuôi file để vẫn đọc được loại tệp. */
+      function shortName(name: string, max = 18) {
+        if (name.length <= max) return name;
+        const dot = name.lastIndexOf('.');
+        const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
+        const stem = name.slice(0, name.length - ext.length);
+        const keep = max - ext.length - 1;
+        const head = Math.ceil(keep * 0.6);
+        return `${stem.slice(0, head)}…${stem.slice(stem.length - (keep - head))}${ext}`;
+      }
+      const usedAssetNames = () => new Set([...editorSource().matchAll(/\.\/([^\s)"'<>\]]+)/g)].map((match) => match[1]));
+      function jumpToAsset(asset: Asset) {
+        const match = new RegExp(`\\./${escapeRegExp(asset.name)}(?![^\\s)"'<>\\]])`).exec(editorSource());
+        if (!match) return;
+        const from = editor.state.doc.lineAt(match.index).from;
+        editor.dispatch({ selection: { anchor: from }, effects: EditorView.scrollIntoView(from, { y: 'center' }) });
+        editor.focus();
+      }
+      /** Chèn trên dòng riêng, cách đoạn kề bên bằng dòng trống để marked không gộp ảnh vào đoạn văn. */
+      function insertOwnLine(text: string, at = editor.state.selection.main.head) {
+        const doc = editor.state.doc; const line = doc.lineAt(at); const blank = !line.text.trim();
+        const next = line.number < doc.lines && doc.line(line.number + 1).text.trim() ? '\n' : '';
+        const before = blank ? (line.number > 1 && doc.line(line.number - 1).text.trim() ? '\n' : '') : '\n\n';
+        editor.dispatch({ changes: { from: blank ? line.from : line.to, to: line.to, insert: before + text + next }, selection: { anchor: (blank ? line.from : line.to) + before.length + text.length } });
+        editor.focus();
+      }
+      function updateUsage() {
+        usageTimer = undefined;
+        const used = usedAssetNames(); let unused = 0;
+        for (const [asset, card] of assetCards) {
+          const isUsed = used.has(asset.name); if (!isUsed) unused++;
+          card.dataset.used = String(isUsed); card.hidden = unusedOnly.checked && isUsed;
+          card.querySelector('.asset-badge')!.textContent = isUsed ? 'đã dùng' : 'chưa dùng';
+        }
+        assetsCount.textContent = `📎 ${assets.length} tệp${unused ? ` · ${unused} chưa dùng` : ''}`;
+      }
+      const scheduleUsage = () => { usageTimer ??= setTimeout(updateUsage, 250); };
       function renderAssets() {
-        const list = $('[data-assets-list]');
-        list.replaceChildren(...assets.map((asset) => {
-          const item = document.createElement('li');
-          item.innerHTML = `<span>${asset.name}</span><button type="button" aria-label="Bỏ ${asset.name}">×</button>`;
-          item.querySelector('button')!.addEventListener('click', () => {
+        assetCards.clear();
+        assetsList.replaceChildren(...assets.map((asset) => {
+          const item = document.createElement('li'); item.className = 'asset-card'; item.draggable = true; item.title = asset.name;
+          const face = document.createElement('div'); face.className = 'asset-face'; face.tabIndex = 0; face.setAttribute('role', 'button');
+          face.innerHTML = `${isImageAsset(asset) ? `<img src="${asset.url}" alt="" loading="lazy" draggable="false" />` : `<b class="asset-ext">${escapeHtml(asset.name.split('.').pop()?.slice(0, 5) ?? 'file')}</b>`}<span>${escapeHtml(shortName(asset.name))}</span><em class="asset-badge"></em>`;
+          const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'asset-remove'; remove.textContent = '×'; remove.setAttribute('aria-label', `Bỏ ${asset.name}`);
+          remove.addEventListener('click', () => {
             URL.revokeObjectURL(asset.url); assets = assets.filter((entry) => entry !== asset); renderAssets(); void renderPreview();
-          }); return item;
+          });
+          const use = (alt: boolean) => { if (alt && item.dataset.used === 'true') jumpToAsset(asset); else insertOwnLine(assetMarkdown(asset)); };
+          face.addEventListener('click', (event) => use(event.altKey));
+          face.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); use(event.altKey); } });
+          item.addEventListener('dragstart', (event) => { event.dataTransfer!.setData(assetMime, asset.name); event.dataTransfer!.effectAllowed = 'copy'; });
+          item.append(face, remove); assetCards.set(asset, item);
+          return item;
         }));
+        updateUsage();
       }
       function insertText(text: string) {
         const range = editor.state.selection.main;
@@ -1607,13 +1706,6 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         }
         renderAssets(); void renderPreview(); scheduleDraft();
       }
-      const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-      function normalizeCallouts(source: string) {
-        return source.replace(/^:::(info|warning|note|tip|danger|success)(?:\s+([^\n]+))?\s*\n([\s\S]*?)^:::\s*$/gim, (_all, kind, heading, content) => {
-          const title = heading || kind.charAt(0).toUpperCase() + kind.slice(1).toLowerCase();
-          return `> [!${kind.toUpperCase()}] ${title}\n> ${content.trim().replace(/\n/g, '\n> ')}`;
-        });
-      }
       function decorateCallouts() {
         for (const quote of preview.querySelectorAll('blockquote')) {
           const paragraph = quote.querySelector('p');
@@ -1649,7 +1741,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           nav.querySelectorAll<HTMLElement>('[data-toc-bar]').forEach((bar) => bar.toggleAttribute('data-active', bar.dataset.tocBar === active));
           nav.querySelectorAll<HTMLAnchorElement>('[data-toc-link]').forEach((link) => link.toggleAttribute('aria-current', link.dataset.tocLink === active));
         };
-        preview.addEventListener('scroll', updateActive, { passive: true }); updateActive();
+        if (tocScroll) preview.removeEventListener('scroll', tocScroll);
+        tocScroll = updateActive; preview.addEventListener('scroll', updateActive, { passive: true }); updateActive();
         toggle.addEventListener('click', () => { const open = !nav.hasAttribute('data-open'); nav.toggleAttribute('data-open', open); toggle.setAttribute('aria-expanded', String(open)); });
       }
       function renderMath() {
@@ -1682,49 +1775,6 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           console.error('Mermaid preview failed:', error);
         }
       }
-      function prepareExtensions(source: string) {
-        const protectedCode: string[] = [];
-        const protect = (value: string) => {
-          const marker = `STUDIOPROTECTEDCODE${protectedCode.length}END`;
-          protectedCode.push(value);
-          return marker;
-        };
-        // Chỉ mở rộng cú pháp trong phần văn bản. Dollar trong PHP/shell và các
-        // dấu == trong source code phải được giữ nguyên như HackMD.
-        const lines = source.match(/[^\n]*(?:\n|$)/g)?.filter(Boolean) ?? [];
-        let fencedBlock = '';
-        let fence: { char: string; length: number } | undefined;
-        const shielded: string[] = [];
-        for (const line of lines) {
-          const text = line.replace(/\r?\n$/, '');
-          if (!fence) {
-            const opening = /^ {0,3}(`{3,}|~{3,})/.exec(text)?.[1];
-            if (opening) {
-              fence = { char: opening[0], length: opening.length };
-              fencedBlock = line;
-            } else shielded.push(line);
-            continue;
-          }
-          fencedBlock += line;
-          const closing = new RegExp(`^ {0,3}${fence.char === '`' ? '`' : '~'}{${fence.length},}[\\t ]*$`).test(text);
-          if (closing) {
-            shielded.push(protect(fencedBlock));
-            fencedBlock = '';
-            fence = undefined;
-          }
-        }
-        if (fencedBlock) shielded.push(protect(fencedBlock));
-        source = shielded.join('');
-        source = source.replace(/(`+)([^`\n]+?)\1/g, (code) => protect(code));
-        const footnotes: string[] = [];
-        const withoutDefinitions = source.replace(/^\[\^(\d+)\]:\s*(.+)$/gim, (_all, id, content) => { footnotes[Number(id) - 1] = content; return ''; });
-        const withNotes = withoutDefinitions.replace(/\[\^(\d+)\]/g, (_all, id) => `<sup class="footnote-ref"><a href="#footnote-${id}">[${id}]</a></sup>`);
-        const withHighlight = withNotes.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
-        const withMath = withHighlight.replace(/\$\$\s*([\s\S]+?)\s*\$\$/g, (_all, expression) => `<span data-latex="${escapeHtml(expression.trim())}" data-display="true"></span>`).replace(/\$([^$\n]+)\$/g, (_all, expression) => `<span data-latex="${escapeHtml(expression.trim())}"></span>`);
-        const withToc = withMath.replace(/^\[TOC\]\s*$/gim, '');
-        const expanded = !footnotes.length ? withToc : `${withToc}\n\n<section class="footnotes"><hr><ol>${footnotes.map((content, index) => content ? `<li id="footnote-${index + 1}">${content}</li>` : '').join('')}</ol></section>`;
-        return expanded.replace(/STUDIOPROTECTEDCODE(\d+)END/g, (_marker, index) => protectedCode[Number(index)] ?? _marker);
-      }
       const languageAlias: Record<string, string> = { js: 'javascript', jsx: 'jsx', ts: 'typescript', tsx: 'tsx', py: 'python', sh: 'bash', shell: 'bash', shellscript: 'bash', yml: 'yaml', html: 'html', svg: 'xml', plaintext: 'text', txt: 'text', console: 'shellsession', terminal: 'shellsession', rb: 'ruby', rs: 'rust', cpp: 'cpp', 'c++': 'cpp', cs: 'csharp', 'c#': 'csharp', golang: 'go', md: 'markdown' };
       const bundledLanguageIds = new Map<string, string>();
       for (const language of bundledLanguagesInfo) {
@@ -1749,39 +1799,71 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         if (/^(?:const|let|var|function|async\s+function|import\s+.*from|console\.log|document\.)\b/m.test(text)) return 'javascript';
         return 'text';
       }
-      async function renderPreview() {
+      /** Gom các lần gọi trong cùng một frame thành một lần render; promise trả về xong khi phần đồng bộ đã dựng DOM. */
+      function renderPreview(): Promise<void> {
+        renderPending ??= new Promise<void>((resolve) => {
+          const run = () => { renderPending = undefined; renderNow().catch((error) => console.error('Preview render failed:', error)).finally(resolve); };
+          if (document.hidden) setTimeout(run, 0); else requestAnimationFrame(run);
+        });
+        return renderPending;
+      }
+      async function highlightCode(code: string, lang: string) {
+        const key = `${lang}\0${code}`;
+        const cached = highlightCache.get(key);
+        if (cached) return cached;
+        const html = await codeToHtml(code, { lang, theme: 'github-dark-default' });
+        if (highlightCache.size >= 200) highlightCache.delete(highlightCache.keys().next().value!);
+        highlightCache.set(key, html);
+        return html;
+      }
+      /** Thay khối bằng element mới nhưng giữ data-line/data-end để cuộn đồng bộ còn tìm được. */
+      function swapBlock(block: Element, next: Element) {
+        const { line, end } = (block as HTMLElement).dataset;
+        if (line !== undefined) (next as HTMLElement).dataset.line = line;
+        if (end !== undefined) (next as HTMLElement).dataset.end = end;
+        block.replaceWith(next);
+      }
+      const htmlElement = (html: string) => Object.assign(document.createElement('template'), { innerHTML: html }).content.firstElementChild!;
+      /** Ảnh đã biết kích thước thì đặt width/height để trình duyệt giữ chỗ trước khi ảnh tải xong. */
+      function sizeImages() {
+        for (const image of preview.querySelectorAll('img')) {
+          const size = imageSizes.get(image.getAttribute('src') ?? '');
+          if (size) { image.width = size.w; image.height = size.h; }
+        }
+      }
+      async function renderNow() {
         renderMetaChips();
         const version = ++renderVersion;
-        const scrollTop = preview.scrollTop;
         const source = prepareExtensions(normalizeCallouts(editorSource())).replace(/\]\(\.\/([^\s)]+)\)/g, (all, name) => assetUrl(name) ? `](${assetUrl(name)})` : all);
-        if (!source.trim()) { preview.innerHTML = '<p class="placeholder">Preview Markdown sẽ hiện ở đây.</p>'; previewState.textContent = 'Đang chờ nội dung'; return; }
+        if (!source.trim()) { preview.innerHTML = '<p class="placeholder">Preview Markdown sẽ hiện ở đây.</p>'; previewState.textContent = 'Đang chờ nội dung'; layoutNow(); return; }
         previewState.textContent = 'Đang render…';
-        preview.innerHTML = marked.parse(source, { gfm: true, breaks: true }) as string;
-        preview.scrollTop = scrollTop;
+        preview.innerHTML = renderBlocks(source, editor.state.doc.lines);
+        sizeImages();
         decorateCallouts();
         renderTableOfContents(); renderMath(); renderYoutube();
+        layoutNow();
         const codeBlocks = [...preview.querySelectorAll<HTMLElement>('pre > code')];
         await Promise.all(codeBlocks.map(async (code) => {
           const rawLanguage = ([...code.classList].find((name) => name.startsWith('language-'))?.slice(9) || '').replace(/!+$/, '').toLowerCase();
           if (rawLanguage === 'mermaid') {
-            const diagram = document.createElement('pre'); diagram.className = 'mermaid'; diagram.textContent = code.textContent ?? ''; code.parentElement?.replaceWith(diagram); return;
+            const diagram = document.createElement('pre'); diagram.className = 'mermaid'; diagram.textContent = code.textContent ?? ''; swapBlock(code.parentElement!, diagram); return;
           }
           const language = resolveCodeLanguage(rawLanguage, code.textContent ?? '');
           try {
-            const html = await codeToHtml(code.textContent ?? '', { lang: language, theme: 'github-dark-default' });
-            if (version === renderVersion) code.parentElement?.replaceWith(Object.assign(document.createElement('template'), { innerHTML: html }).content.firstElementChild!);
+            const html = await highlightCode(code.textContent ?? '', language);
+            if (version === renderVersion) swapBlock(code.parentElement!, htmlElement(html));
           } catch {
             try {
               const fallback = guessCodeLanguage(code.textContent ?? '');
               if (fallback !== 'text') {
-                const html = await codeToHtml(code.textContent ?? '', { lang: fallback, theme: 'github-dark-default' });
-                if (version === renderVersion) code.parentElement?.replaceWith(Object.assign(document.createElement('template'), { innerHTML: html }).content.firstElementChild!);
+                const html = await highlightCode(code.textContent ?? '', fallback);
+                if (version === renderVersion) swapBlock(code.parentElement!, htmlElement(html));
               } else code.innerHTML = escapeHtml(code.textContent ?? '');
             } catch { code.innerHTML = escapeHtml(code.textContent ?? ''); }
           }
         }));
-        if (version === renderVersion) await renderMermaidDiagrams();
-        if (version === renderVersion) previewState.textContent = 'Live preview';
+        if (version === renderVersion) { scheduleLayout(); await renderMermaidDiagrams(); }
+        if (version === renderVersion) { previewState.textContent = 'Live preview'; scheduleLayout(); }
       }
       /** Chỉ có khi mở Studio qua `npm run dev`: git pull về máy để file Studio vừa ghi không chặn lần pull sau. Bản deploy trả null. */
       async function pullToGit(): Promise<string | null> {
@@ -1935,11 +2017,6 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       });
       $('[data-connection]').addEventListener('click', () => { $('[data-token-box]').hidden = !($('[data-token-box]').hidden); if (!$('[data-token-box]').hidden) tokenInput.focus(); });
       [title, folder, date, ctf, category, difficulty, tags].forEach((input) => input.addEventListener('input', () => { void renderPreview(); scheduleDraft(); }));
-      assetsInput.addEventListener('change', () => { if (assetsInput.files) addFiles(assetsInput.files); assetsInput.value = ''; });
-      const drop = $('[data-drop]');
-      drop.addEventListener('dragover', (event) => { event.preventDefault(); drop.dataset.over = ''; });
-      drop.addEventListener('dragleave', () => delete drop.dataset.over);
-      drop.addEventListener('drop', (event) => { event.preventDefault(); delete drop.dataset.over; if (event.dataTransfer?.files) addFiles(event.dataTransfer.files); });
       $('[data-resize]').addEventListener('pointerdown', (event) => {
         const handle = event.currentTarget as HTMLElement; const grid = document.querySelector<HTMLElement>('.editor-grid')!;
         const stacked = matchMedia('(max-width: 58rem)').matches;
@@ -1956,29 +2033,141 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const finish = () => { document.body.removeAttribute('data-resizing'); handle.removeEventListener('pointermove', resize); handle.removeEventListener('pointerup', finish); handle.removeEventListener('pointercancel', finish); };
         handle.addEventListener('pointermove', resize); handle.addEventListener('pointerup', finish); handle.addEventListener('pointercancel', finish);
       });
-      const syncButton = $<HTMLButtonElement>('[data-sync-scroll]');
-      syncButton.addEventListener('pointerdown', (event) => event.stopPropagation());
-      syncButton.addEventListener('click', () => {
-        syncScrollEnabled = !syncScrollEnabled;
-        syncButton.setAttribute('aria-pressed', String(syncScrollEnabled));
-        syncButton.setAttribute('aria-label', syncScrollEnabled ? 'Tắt cuộn đồng bộ' : 'Bật cuộn đồng bộ');
-        syncButton.title = syncScrollEnabled ? 'Tắt cuộn đồng bộ' : 'Bật cuộn đồng bộ';
-        syncButton.dataset.active = String(syncScrollEnabled);
-        if (syncScrollEnabled) syncScroll(editor.scrollDOM, preview);
-      });
-      function syncScroll(from: HTMLElement, to: HTMLElement) {
-        if (!syncScrollEnabled || syncScrollFrame || applyingSyncedScroll) return;
-        syncScrollFrame = requestAnimationFrame(() => {
-          const fromRange = Math.max(1, from.scrollHeight - from.clientHeight);
-          const toRange = Math.max(0, to.scrollHeight - to.clientHeight);
-          applyingSyncedScroll = true;
-          to.scrollTop = (from.scrollTop / fromRange) * toRange;
-          requestAnimationFrame(() => { syncScrollFrame = 0; applyingSyncedScroll = false; });
-        });
+      const syncButton = $<HTMLButtonElement>('[data-sync-mode]');
+      const syncModes: SyncMode[] = ['off', 'scroll', 'follow'];
+      const syncLabels: Record<SyncMode, string> = { off: '↕ Tắt', scroll: '↕ Cuộn', follow: '↕ Cuộn + con trỏ' };
+      const syncTitles: Record<SyncMode, string> = { off: 'Cuộn đồng bộ: tắt. Bấm để bật cuộn theo dòng nguồn', scroll: 'Cuộn đồng bộ theo dòng nguồn. Bấm để thêm theo con trỏ', follow: 'Cuộn đồng bộ và preview theo con trỏ. Bấm để tắt' };
+      function applySyncMode(mode: SyncMode) {
+        syncMode = mode;
+        syncButton.dataset.mode = mode; syncButton.textContent = syncLabels[mode]; syncButton.title = syncTitles[mode]; syncButton.setAttribute('aria-label', syncTitles[mode]);
+        try { localStorage.setItem(syncModeKey, mode); } catch { /* storage unavailable */ }
       }
-      preview.addEventListener('scroll', () => syncScroll(preview, editor.scrollDOM), { passive: true });
+      syncButton.addEventListener('click', () => {
+        applySyncMode(syncModes[(syncModes.indexOf(syncMode) + 1) % syncModes.length]);
+        if (syncMode !== 'off') queueSync('editor');
+      });
+      applySyncMode(syncMode);
+
+      const lockScroll = (side: SyncSide, ms = 150) => { scrollLockUntil[side] = performance.now() + ms; };
+      const isLocked = (side: SyncSide) => performance.now() < scrollLockUntil[side];
+      const atEnd = (element: HTMLElement) => element.scrollTop > 0 && element.scrollTop + element.clientHeight >= element.scrollHeight - 2;
+      /** Mọi lần code tự cuộn đều qua đây để khoá 150ms (smooth thì lâu hơn): sự kiện scroll do code gây ra không bị tính là người dùng cuộn. */
+      function scrollPreviewTo(top: number, smooth = false) {
+        top = Math.min(Math.max(0, preview.scrollHeight - preview.clientHeight), Math.max(0, top));
+        if (Math.abs(preview.scrollTop - top) < 1) return;
+        lockScroll('preview', smooth ? 700 : 150);
+        if (smooth) preview.scrollTo({ top, behavior: 'smooth' }); else preview.scrollTop = top;
+      }
+      const editorPadding = () => editor.documentPadding.top;
+      /** Dòng (0-based, có phần lẻ) ở đỉnh vùng nhìn của editor. */
+      function editorTopLine() {
+        const y = Math.max(0, editor.scrollDOM.scrollTop - editorPadding());
+        const block = editor.lineBlockAtHeight(y);
+        return editor.state.doc.lineAt(block.from).number - 1 + (block.height ? Math.min(1, (y - block.top) / block.height) : 0);
+      }
+      function scrollEditorToLine(line: number) {
+        const doc = editor.state.doc; const index = Math.min(doc.lines - 1, Math.max(0, Math.floor(line)));
+        const block = editor.lineBlockAt(doc.line(index + 1).from);
+        lockScroll('editor');
+        editor.scrollDOM.scrollTop = block.top + (line - index) * block.height + editorPadding();
+      }
+      function queueSync(side: SyncSide) { syncSide = side; syncFrame ||= requestAnimationFrame(syncNow); }
+      function syncNow() {
+        syncFrame = 0;
+        const side = syncSide; syncSide = undefined;
+        if (!side || syncMode === 'off' || anchors.length < 2) return;
+        if (side === 'editor') {
+          viewLine = editorTopLine();
+          scrollPreviewTo(atEnd(editor.scrollDOM) ? preview.scrollHeight : lineToTop(anchors, viewLine));
+        } else if (atEnd(preview)) {
+          lockScroll('editor'); editor.scrollDOM.scrollTop = editor.scrollDOM.scrollHeight;
+        } else scrollEditorToLine(topToLine(anchors, preview.scrollTop));
+      }
+      preview.addEventListener('scroll', () => {
+        viewLine = topToLine(anchors, preview.scrollTop);
+        if (syncMode !== 'off' && !isLocked('preview')) queueSync('preview');
+      }, { passive: true });
+
+      /** Dựng lại bảng mốc {dòng nguồn, top trong preview} rồi đưa preview về đúng dòng neo. Gọi sau render và mỗi khi layout đổi. */
+      function scheduleLayout() { layoutFrame ||= requestAnimationFrame(layoutNow); }
+      function layoutNow() {
+        layoutFrame = 0;
+        const elements = [...preview.querySelectorAll<HTMLElement>(':scope > [data-line]')];
+        const origin = preview.getBoundingClientRect().top - preview.scrollTop;
+        previewBlocks = elements.map((el) => { const box = el.getBoundingClientRect(); return { el, line: Number(el.dataset.line), end: Number(el.dataset.end), top: box.top - origin, bottom: box.bottom - origin }; });
+        anchors = normalizeAnchors(previewBlocks.flatMap((block) => [{ line: block.line, top: block.top }, { line: block.end, top: block.bottom }]), editor.state.doc.lines, preview.scrollHeight);
+        layoutObserver ??= new ResizeObserver(scheduleLayout);
+        for (const el of elements) if (!observedBlocks.has(el)) { observedBlocks.add(el); layoutObserver.observe(el); }
+        if (cursorBlockLine !== undefined) previewBlocks.find((block) => block.line === cursorBlockLine)?.el.classList.add('is-cursor-block');
+        if (!isLocked('preview')) scrollPreviewTo(lineToTop(anchors, viewLine));
+      }
+      new ResizeObserver(scheduleLayout).observe(preview);
+      preview.addEventListener('load', (event) => {
+        const image = event.target;
+        if (image instanceof HTMLImageElement && image.naturalWidth) { imageSizes.set(image.getAttribute('src') ?? '', { w: image.naturalWidth, h: image.naturalHeight }); scheduleLayout(); }
+      }, true);
+      /** Sửa nội dung phía trên khối neo thì dời dòng neo theo, để preview không trượt sang nội dung khác. */
+      function shiftViewLine(update: ViewUpdate) {
+        const before = update.startState.doc; const index = Math.min(before.lines - 1, Math.max(0, Math.floor(viewLine)));
+        viewLine = update.state.doc.lineAt(update.changes.mapPos(before.line(index + 1).from, 1)).number - 1 + (viewLine - index);
+      }
+
+      function markCursorBlock(el: HTMLElement) {
+        preview.querySelectorAll('.is-cursor-block').forEach((old) => old !== el && old.classList.remove('is-cursor-block'));
+        el.classList.add('is-cursor-block'); cursorBlockLine = Number(el.dataset.line);
+        clearTimeout(cursorBlockTimer);
+        cursorBlockTimer = setTimeout(() => { cursorBlockLine = undefined; preview.querySelector('.is-cursor-block')?.classList.remove('is-cursor-block'); }, 1200);
+      }
+      function scheduleFollow() { if (syncMode === 'follow') followFrame ||= requestAnimationFrame(followCursor); }
+      function followCursor() {
+        followFrame = 0;
+        if (syncMode !== 'follow') return;
+        const line = editor.state.doc.lineAt(editor.state.selection.main.head).number - 1;
+        let block: PreviewBlock | undefined;
+        for (const candidate of previewBlocks) { if (candidate.line > line) break; block = candidate; }
+        if (!block) return;
+        markCursorBlock(block.el);
+        if (skipFollow) { skipFollow = false; return; }
+        const height = preview.clientHeight; const small = block.bottom - block.top <= height * 0.6;
+        const first = small ? block.top : lineToTop(anchors, line); const last = small ? block.bottom : lineToTop(anchors, line + 1);
+        if (first - preview.scrollTop < height * 0.2 || last - preview.scrollTop > height * 0.8) scrollPreviewTo(first - height / 3, true);
+      }
+      preview.addEventListener('dblclick', (event) => {
+        const block = (event.target as Element).closest<HTMLElement>('[data-line]');
+        if (!block) return;
+        const pos = editor.state.doc.line(Math.min(editor.state.doc.lines, Number(block.dataset.line) + 1)).from;
+        getSelection()?.removeAllRanges(); skipFollow = syncMode === 'follow'; lockScroll('editor', 400);
+        editor.focus(); editor.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 24 }) });
+      });
+
+      assetsInput.addEventListener('change', () => { if (assetsInput.files) addFiles(assetsInput.files); assetsInput.value = ''; });
+      $('[data-assets-add]').addEventListener('click', () => assetsInput.click());
+      function setAssetsOpen(open: boolean) {
+        assetsDrawer.hidden = !open; assetsToggle.setAttribute('aria-expanded', String(open)); assetsToggle.setAttribute('aria-label', open ? 'Đóng kho tệp' : 'Mở kho tệp');
+        try { localStorage.setItem(assetsOpenKey, String(open)); } catch { /* storage unavailable */ }
+      }
+      assetsToggle.addEventListener('click', () => setAssetsOpen(Boolean(assetsDrawer.hidden)));
+      unusedOnly.addEventListener('change', updateUsage);
+      try { if (localStorage.getItem(assetsOpenKey) === 'true') setAssetsOpen(true); } catch { /* storage unavailable */ }
+      // Kéo file từ hệ điều hành vào bất kỳ đâu trên source pane: overlay "Thả để thêm". Đếm enter/leave để overlay không chớp khi con trỏ đi qua phần tử con.
+      const sourcePane = $('.source-pane'); const dropOverlay = $('[data-drop-overlay]'); let dragDepth = 0;
+      const hasFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files');
+      const endFileDrag = () => { dragDepth = 0; dropOverlay.hidden = true; };
+      sourcePane.addEventListener('dragenter', (event) => { if (hasFiles(event)) { event.preventDefault(); dragDepth++; dropOverlay.hidden = false; } });
+      sourcePane.addEventListener('dragover', (event) => { if (hasFiles(event)) { event.preventDefault(); event.dataTransfer!.dropEffect = 'copy'; } });
+      sourcePane.addEventListener('dragleave', (event) => { if (hasFiles(event) && --dragDepth <= 0) endFileDrag(); });
+      sourcePane.addEventListener('drop', (event) => {
+        const handledByEditor = event.defaultPrevented; endFileDrag();
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        if (!handledByEditor && event.dataTransfer?.files.length) addFiles(event.dataTransfer.files);
+      });
+      window.addEventListener('dragend', endFileDrag); window.addEventListener('drop', endFileDrag);
       initEditor();
-      editor.scrollDOM.addEventListener('scroll', () => syncScroll(editor.scrollDOM, preview), { passive: true });
+      editor.scrollDOM.addEventListener('scroll', () => {
+        if (syncMode === 'off' || isLocked('editor') || (syncMode === 'follow' && performance.now() - cursorMovedAt < 250)) return;
+        queueSync('editor');
+      }, { passive: true });
       if (localStorage.getItem('ctf-wu.studio-sidebar-collapsed') === 'true') document.querySelector('.studio')!.setAttribute('data-sidebar-collapsed', '');
       loadConfig(); resetEditor();
     </script>
@@ -2026,13 +2215,18 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
   .tag-note { margin:-.4rem 0 0 5.2rem; color:var(--muted); font-size:.64rem; line-height:1.55; } .tag-note[data-kind='ok'] { color:#a6edbd; } .tag-note[data-kind='error'] { color:#f6c177; }
   .ai-key { padding-top:.75rem; border-top:1px solid var(--line); color:var(--muted); font-size:.66rem; } .ai-key summary { cursor:pointer; user-select:none; } .ai-key summary:hover { color:var(--text); } .ai-key em { margin-left:.3rem; color:var(--text); font-style:normal; } .ai-key[open] { display:grid; gap:.5rem; } .ai-key p { margin:0; line-height:1.55; } .ai-key a { color:#e2bbff; }
   .markdown-tools { display:flex; flex-wrap:nowrap; gap:.3rem; min-height:2.35rem; overflow-x:auto; overflow-y:hidden; padding:.25rem .55rem; border-bottom:1px solid var(--line); background:#292a2f; scrollbar-width:thin; } .markdown-tools button { flex:none; min-height:1.75rem; padding:.18rem .4rem; color:var(--muted); font-size:.6rem; }
-  .editor-grid { min-width:0; min-height:0; overflow:hidden; flex:1; display:grid; grid-template-columns:minmax(0,1fr) .55rem minmax(0,1fr); } .source-pane,.preview-pane { min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; } .source-pane { background:#1f2024; } .preview-pane { background:#25262a; } .resize-handle { position:relative; z-index:3; display:flex; align-items:center; justify-content:center; cursor:col-resize; background:var(--line); touch-action:none; } .resize-handle:hover { background:var(--accent); } .sync-scroll { position:relative; display:grid; width:2.6rem; height:2.6rem; flex:none; place-items:center; border:1px solid #5c5e68; border-radius:50%; background:#393a41; color:#f5f5f7; font-size:1rem; cursor:pointer; transform:translateX(0); } .sync-scroll[data-active='true'] { border-color:#55a975; background:#274332; color:#a6edbd; } body[data-resizing] { cursor:col-resize; user-select:none; } .pane-head { display:flex; flex:none; justify-content:space-between; padding:.6rem .85rem; border-bottom:1px solid var(--line); color:var(--muted); font-size:.62rem; letter-spacing:.07em; text-transform:uppercase; }.code-editor { min-height:0; flex:1; overflow:auto; } .code-editor .cm-editor { height:100%; font:.82rem/1.7 'JetBrains Mono Variable',ui-monospace,monospace; } .code-editor .cm-scroller { overflow:auto; } .code-editor .cm-gutters { border:0; background:#1d1e22; color:#6f727d; } .code-editor .cm-activeLineGutter,.code-editor .cm-activeLine { background:#ffffff08; }
-  .asset-drop { display:block; margin:.75rem; padding:.75rem; border:1px dashed #575964; border-radius:.42rem; color:var(--muted); font-size:.68rem; text-align:center; } .asset-drop[data-over] { border-color:var(--accent); color:#e2bbff; } .asset-drop input { position:absolute; width:1px; height:1px; opacity:0; } .assets { display:grid; gap:.25rem; margin:0 .75rem 1rem; padding:0; list-style:none; } .assets li { display:flex; align-items:center; gap:.5rem; min-width:0; padding:.35rem .5rem; background:var(--panel-hi); color:var(--muted); font-size:.64rem; } .assets li span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .assets li button { margin-left:auto; border:0; background:none; color:var(--muted); font-size:1rem; }
-  .preview { min-height:0; flex:1; overflow:auto; max-height:none; padding:1.5rem clamp(1rem,3vw,3rem) 4rem; font:1rem/1.8 system-ui,sans-serif; color:#dadbe2; } .preview .placeholder { color:var(--muted); } .preview h1,.preview h2,.preview h3 { color:#f5f5f7; line-height:1.25; scroll-margin-top:1rem; } .preview h1 { font-size:1.8rem; } .preview h2 { margin-top:2rem; font-size:1.35rem; } .preview a { color:#dea4ff; } .preview img { max-width:100%; height:auto; border:1px solid var(--line); border-radius:.5rem; } .preview pre { overflow:auto; padding:1rem; border:1px solid var(--line); border-radius:.45rem; } .preview pre.shiki { background:#18171d!important; color:#d4d4d8!important; } .preview pre.shiki code { background:transparent; } .preview code { padding:.1em .3em; border-radius:.2rem; background:#0004; } .preview pre code { padding:0; background:transparent; } .preview table { border-collapse:collapse; } .preview th,.preview td { padding:.4rem .6rem; border:1px solid var(--line); } .preview mark { border-radius:.15rem; padding:.05em .2em; background:#f6e05e; color:#27230c; } .preview .auto-toc { margin:1rem 0; padding:.8rem 1rem; border:1px solid var(--line); border-radius:.45rem; background:#1e1f24; } .preview .auto-toc ol { margin:.2rem 0; padding-left:1.2rem; } .preview .auto-toc li { margin:.2rem 0; } .preview .footnotes { margin-top:2.5rem; color:var(--muted); font-size:.9rem; } .preview .footnote-ref { margin-left:.1em; } .preview .youtube-embed { display:block; width:min(100%, 48rem); aspect-ratio:16/9; border:0; border-radius:.45rem; } .preview .callout { margin:1rem 0; padding:.75rem 1rem; border-left:3px solid #789cff; background:#789cff12; } .preview .callout-warning,.preview .callout-danger { border-left-color:#ed8a75; background:#ed8a7512; } .preview .callout-tip,.preview .callout-success { border-left-color:#68d391; background:#68d39112; } .preview .callout-label { display:block; margin-bottom:.35rem; color:#b5c8ff; font-size:.85rem; } .preview .callout-warning .callout-label,.preview .callout-danger .callout-label { color:#ffd09c; } .preview .callout p { margin:.25rem 0; }
+  .editor-grid { min-width:0; min-height:0; overflow:hidden; flex:1; display:grid; grid-template-columns:minmax(0,1fr) .55rem minmax(0,1fr); } .source-pane,.preview-pane { min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; } .source-pane { position:relative; background:#1f2024; } .preview-pane { background:#25262a; } .resize-handle { position:relative; z-index:3; display:flex; align-items:center; justify-content:center; cursor:col-resize; background:var(--line); touch-action:none; } .resize-handle:hover { background:var(--accent); } body[data-resizing] { cursor:col-resize; user-select:none; } .pane-head { display:flex; flex:none; align-items:center; justify-content:space-between; gap:.6rem; padding:.6rem .85rem; border-bottom:1px solid var(--line); color:var(--muted); font-size:.62rem; letter-spacing:.07em; text-transform:uppercase; }.code-editor { min-height:0; flex:1; overflow:auto; } .code-editor .cm-editor { height:100%; font:.82rem/1.7 'JetBrains Mono Variable',ui-monospace,monospace; } .code-editor .cm-scroller { overflow:auto; } .code-editor .cm-gutters { border:0; background:#1d1e22; color:#6f727d; } .code-editor .cm-activeLineGutter,.code-editor .cm-activeLine { background:#ffffff08; }
+  .asset-bar { position:relative; display:flex; flex:none; align-items:center; gap:.4rem; height:2rem; padding:0 .5rem; border-top:1px solid var(--line); background:var(--panel); } .asset-toggle { display:flex; align-items:center; gap:.4rem; min-width:0; height:1.5rem; padding:0 .5rem; border:0; border-radius:.3rem; background:transparent; color:var(--muted); font-size:.66rem; } .asset-toggle:hover { color:var(--text); } .asset-toggle span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .asset-toggle i { font-style:normal; transition:transform .15s ease; } .asset-toggle[aria-expanded='true'] i { transform:rotate(180deg); } .asset-add { display:grid; width:1.5rem; height:1.5rem; margin-left:auto; place-items:center; padding:0; border:1px solid var(--line); border-radius:.3rem; background:transparent; color:var(--muted); font-size:.9rem; } .asset-add:hover { border-color:var(--accent); color:#e2bbff; }
+  .asset-drawer { display:flex; flex:none; flex-direction:column; min-height:0; max-height:max(5.5rem,calc(40% - 4.5rem)); border-top:1px solid var(--line); background:#1b1c20; } .asset-drawer[hidden],.drop-overlay[hidden],.asset-card[hidden] { display:none; } .asset-filter { display:flex; flex:none; align-items:center; gap:.4rem; padding:.35rem .6rem; color:var(--muted); font-size:.62rem; } .asset-filter input { accent-color:var(--accent); }
+  .assets { display:grid; flex:1; min-height:0; grid-template-columns:repeat(auto-fill,minmax(5.6rem,1fr)); gap:.4rem; margin:0; padding:0 .6rem .6rem; overflow:auto; list-style:none; overscroll-behavior:contain; } .asset-card { position:relative; min-width:0; border:1px solid var(--line); border-radius:.35rem; background:var(--panel-hi); transition:opacity .15s ease,border-color .15s ease; cursor:grab; } .asset-card[data-used='false'] { opacity:.55; } .asset-card:hover { border-color:var(--accent); opacity:1; } .asset-face { display:grid; gap:.2rem; padding:.3rem; cursor:pointer; } .asset-face:focus-visible { outline:2px solid var(--accent); outline-offset:1px; } .asset-face img,.asset-ext { display:grid; width:100%; height:3.2rem; place-items:center; border-radius:.25rem; background:#0004; object-fit:cover; color:var(--muted); font-size:.7rem; text-transform:uppercase; } .asset-face span { overflow:hidden; color:var(--text); font-size:.6rem; text-overflow:ellipsis; white-space:nowrap; } .asset-badge { color:var(--muted); font-size:.55rem; font-style:normal; } .asset-card[data-used='true'] .asset-badge { color:#a6edbd; } .asset-remove { position:absolute; top:.15rem; right:.15rem; display:grid; width:1.1rem; height:1.1rem; place-items:center; padding:0; border:0; border-radius:50%; background:#000a; color:#fff; font-size:.8rem; line-height:1; opacity:0; } .asset-card:hover .asset-remove,.asset-remove:focus-visible { opacity:1; }
+  .drop-overlay { position:absolute; z-index:6; inset:0; display:grid; place-items:center; border:2px dashed var(--accent); background:#1f2024d9; color:#e2bbff; font-size:.9rem; font-weight:700; pointer-events:none; }
+  .pane-tools { display:flex; align-items:center; gap:.7rem; min-width:0; } .sync-mode { height:1.5rem; padding:0 .55rem; border:1px solid var(--line); border-radius:.3rem; background:transparent; color:var(--muted); font:inherit; font-size:.6rem; letter-spacing:.04em; text-transform:none; white-space:nowrap; } .sync-mode:hover { border-color:var(--accent); color:var(--text); } .sync-mode:not([data-mode='off']) { border-color:#55a975; background:#274332; color:#a6edbd; }
+  .preview .is-cursor-block { outline:1px solid #c674ff66; outline-offset:.35rem; border-radius:.3rem; }
+  .preview { position:relative; overflow-anchor:none; min-height:0; flex:1; overflow:auto; max-height:none; padding:1.5rem clamp(1rem,3vw,3rem) 4rem; font:1rem/1.8 system-ui,sans-serif; color:#dadbe2; } .preview .placeholder { color:var(--muted); } .preview h1,.preview h2,.preview h3 { color:#f5f5f7; line-height:1.25; scroll-margin-top:1rem; } .preview h1 { font-size:1.8rem; } .preview h2 { margin-top:2rem; font-size:1.35rem; } .preview a { color:#dea4ff; } .preview img { max-width:100%; height:auto; border:1px solid var(--line); border-radius:.5rem; } .preview pre { overflow:auto; padding:1rem; border:1px solid var(--line); border-radius:.45rem; } .preview pre.shiki { background:#18171d!important; color:#d4d4d8!important; } .preview pre.shiki code { background:transparent; } .preview code { padding:.1em .3em; border-radius:.2rem; background:#0004; } .preview pre code { padding:0; background:transparent; } .preview table { border-collapse:collapse; } .preview th,.preview td { padding:.4rem .6rem; border:1px solid var(--line); } .preview mark { border-radius:.15rem; padding:.05em .2em; background:#f6e05e; color:#27230c; } .preview .auto-toc { margin:1rem 0; padding:.8rem 1rem; border:1px solid var(--line); border-radius:.45rem; background:#1e1f24; } .preview .auto-toc ol { margin:.2rem 0; padding-left:1.2rem; } .preview .auto-toc li { margin:.2rem 0; } .preview .footnotes { margin-top:2.5rem; color:var(--muted); font-size:.9rem; } .preview .footnote-ref { margin-left:.1em; } .preview .youtube-embed { display:block; width:min(100%, 48rem); aspect-ratio:16/9; border:0; border-radius:.45rem; } .preview .callout { margin:1rem 0; padding:.75rem 1rem; border-left:3px solid #789cff; background:#789cff12; } .preview .callout-warning,.preview .callout-danger { border-left-color:#ed8a75; background:#ed8a7512; } .preview .callout-tip,.preview .callout-success { border-left-color:#68d391; background:#68d39112; } .preview .callout-label { display:block; margin-bottom:.35rem; color:#b5c8ff; font-size:.85rem; } .preview .callout-warning .callout-label,.preview .callout-danger .callout-label { color:#ffd09c; } .preview .callout p { margin:.25rem 0; }
   .studio-toc { position:sticky; top:.45rem; z-index:5; height:0; display:flex; justify-content:flex-end; font-size:.75rem; } .studio-toc-rail { display:flex; flex-direction:column; align-items:flex-end; gap:.35rem; width:2.25rem; max-height:min(45vh,20rem); overflow:hidden; padding:.65rem .5rem; border:1px solid #ffffff18; border-radius:.6rem; background:#222228aa; color:var(--muted); opacity:.75; cursor:pointer; } .studio-toc-rail:hover { opacity:1; } .studio-toc-label { display:none; } .studio-toc-bar { display:block; flex:none; width:100%; height:2px; border-radius:1px; background:var(--muted); transition:background-color .2s,transform .2s; } .studio-toc-l1.studio-toc-bar { width:78%; } .studio-toc-l2.studio-toc-bar { width:56%; } .studio-toc-bar[data-active] { background:var(--accent); transform:scaleY(2); } .studio-toc-pop { position:absolute; top:0; right:0; width:min(19rem,calc(100% - 1rem)); max-height:min(65vh,32rem); overflow:auto; padding:.4rem .6rem .6rem; border:1px solid var(--line); border-radius:.7rem; background:#222228ed; box-shadow:0 12px 32px #0008; opacity:0; visibility:hidden; transform:translateY(-4px); transition:opacity .15s,transform .15s,visibility 0s linear .15s; } .studio-toc:hover .studio-toc-pop,.studio-toc:focus-within .studio-toc-pop,.studio-toc[data-open] .studio-toc-pop { opacity:1; visibility:visible; transform:none; transition:opacity .15s,transform .15s; } .studio-toc-title { position:sticky; top:-.4rem; margin:0 -.6rem .25rem; padding:.55rem .9rem .4rem; background:#222228f5; color:var(--muted); font-size:.65rem; letter-spacing:.18em; text-transform:uppercase; } .studio-toc-pop ol { margin:0; padding:0; list-style:none; } .studio-toc-pop li { margin:.05rem 0; } .studio-toc-pop li.studio-toc-l1 { padding-left:.9rem; } .studio-toc-pop li.studio-toc-l2 { padding-left:1.8rem; } .studio-toc-pop a { display:block; padding:.22rem .5rem; border-left:2px solid transparent; color:#c9c7d0; line-height:1.4; text-decoration:none; } .studio-toc-pop a:hover,.studio-toc-pop a[aria-current='true'] { border-left-color:var(--accent); color:var(--accent); }
   .status { min-height:1.65rem; margin:0; padding:.35rem 1rem; background:var(--panel); color:var(--muted); font-size:.7rem; } .status[data-kind='ok'] { color:var(--ok); } .status[data-kind='error'] { color:var(--error); }
   .preview pre { max-width:100%; white-space:pre; } .preview pre.shiki { overflow:auto; max-width:100%; } .preview pre.shiki code { display:block; width:max-content; min-width:100%; }
-  @media (max-width:58rem) { .studio,.studio[data-sidebar-collapsed] { grid-template-columns:1fr; } .library { display:none; } .editor-grid { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) .55rem minmax(0,1fr); } .resize-handle { display:flex; width:auto; height:.55rem; cursor:row-resize; } .sync-scroll { position:absolute; width:2.4rem; height:2.4rem; } .source-pane { min-height:0; border-bottom:1px solid var(--line); } .preview { max-height:none; min-height:0; } .studio-toc { top:.25rem; } .studio-toc-rail { flex-direction:row; align-items:center; width:auto; max-width:9rem; max-height:none; min-height:2.4rem; gap:.3rem; padding:.4rem .6rem; opacity:.92; } .studio-toc-label { display:inline; margin-right:.2rem; font-size:.62rem; letter-spacing:.08em; text-transform:uppercase; } .studio-toc-bar { display:none; } .studio-toc-pop { top:calc(100% + .4rem); max-height:min(55svh,22rem); } }
+  @media (max-width:58rem) { .studio,.studio[data-sidebar-collapsed] { grid-template-columns:1fr; } .library { display:none; } .editor-grid { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) .55rem minmax(0,1fr); } .resize-handle { display:flex; width:auto; height:.55rem; cursor:row-resize; } .source-pane { min-height:0; border-bottom:1px solid var(--line); } .preview { max-height:none; min-height:0; } .studio-toc { top:.25rem; } .studio-toc-rail { flex-direction:row; align-items:center; width:auto; max-width:9rem; max-height:none; min-height:2.4rem; gap:.3rem; padding:.4rem .6rem; opacity:.92; } .studio-toc-label { display:inline; margin-right:.2rem; font-size:.62rem; letter-spacing:.08em; text-transform:uppercase; } .studio-toc-bar { display:none; } .studio-toc-pop { top:calc(100% + .4rem); max-height:min(55svh,22rem); } }
   @media (max-width:38rem) { .topbar { align-items:center; flex-direction:row; min-height:3.1rem; } .top-actions { width:auto; } .top-actions > * { flex:none; text-align:center; } .top-actions a { display:none; } .connection-pill span { display:none; } .browser-head { align-items:stretch; flex-direction:column; } .create-folder { width:100%; } .folder-grid,.recent-grid { grid-template-columns:1fr; } .metadata { position:fixed; top:6.2rem; right:.35rem; left:.35rem; width:auto; max-height:calc(100dvh - 7rem); overflow:auto; } .meta-line { grid-template-columns:1fr 1fr; } .meta-folder { grid-column:1/-1; } .meta-row,.meta-tags { grid-template-columns:minmax(0,1fr); gap:.35rem; } .meta-tags .meta-key { padding-top:0; } .tag-note { margin-left:0; } .editor-tools { flex-wrap:nowrap; overflow-x:auto; min-height:2.55rem; padding:.25rem .45rem; } .editor-tools strong { max-width:34vw; } .editor-tools span { order:initial; width:auto; } .editor-tools button { flex:none; } }
   /* Library polish: breadcrumb, selection bar, name dialog, empty state */
   .new-file[hidden],.create-folder[hidden],.back-folder[hidden],.selection-bar[hidden],.library-empty[hidden],.folder-grid[hidden],.folder-posts[hidden],.recent-posts[hidden] { display:none; }
