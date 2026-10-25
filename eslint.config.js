@@ -5,7 +5,7 @@ import astro from 'eslint-plugin-astro';
 
 export default defineConfig(
   {
-    ignores: ['dist/', 'dist-fixtures/', '.astro/', 'node_modules/', 'fixtures/', '.cache/', 'public/admin/', '.lighthouseci/'],
+    ignores: ['dist/', 'dist-fixtures/', '.astro/', 'node_modules/', 'fixtures/', '.cache/', 'public/admin/', '.lighthouseci/', '.claude/', 'graphify-out/'],
   },
   tseslint.configs.recommended,
   astro.configs.recommended,

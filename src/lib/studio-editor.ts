@@ -9,7 +9,7 @@ const PAIRS: Record<string, [string, string]> = {
 
 const LIST_ITEM = /^(\s*)([-*+]|\d+[.)])(\s+(\[[ xX]\]\s+)?)/;
 const FENCE = /^\s*(```|~~~)/;
-export const isUrl = (text: string) => /^https?:\/\/\S+$/i.test(text);
+const isUrl = (text: string) => /^https?:\/\/\S+$/i.test(text);
 
 const typed = (spec: TransactionSpec): TransactionSpec => ({ ...spec, scrollIntoView: true, userEvent: 'input.type' });
 

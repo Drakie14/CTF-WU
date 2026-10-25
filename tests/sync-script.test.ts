@@ -50,6 +50,19 @@ describe('sync', () => {
     expect(readFileSync(join(work, 'src/content/posts/draft.md'), 'utf8')).toBe('nháp khác');
   });
 
+  it('runs only one sync at a time and never deletes files the other sync pulled', async () => {
+    const { work, other } = setup();
+    publish(other, 'x/index.md', 'giống');
+    mkdirSync(join(work, 'src/content/posts/x'), { recursive: true });
+    writeFileSync(join(work, 'src/content/posts/x/index.md'), 'giống');
+    const results = await Promise.all([sync(work), sync(work)]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.find((result) => !result.ok)?.message).toMatch(/sync khác/);
+    expect(readFileSync(join(work, 'src/content/posts/x/index.md'), 'utf8')).toBe('giống');
+    expect(git(work, 'status', '--porcelain')).toBe('');
+    expect((await sync(work)).ok).toBe(true);
+  });
+
   it('keeps unpublished drafts and unstaged edits while pulling', async () => {
     const { work, other } = setup();
     publish(other, 'y.md', 'mới');

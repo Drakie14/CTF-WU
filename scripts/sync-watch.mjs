@@ -18,7 +18,9 @@ async function tick() {
   const branch = await git(['rev-parse', '--abbrev-ref', 'HEAD']);
   const remote = (await git(['ls-remote', 'origin', `refs/heads/${branch}`])).split(/\s/)[0];
   const known = await git(['rev-parse', `origin/${branch}`]).catch(() => '');
-  if (remote && remote === known) return;
+  // sync() fetch trước rồi mới có thể dừng (file local khác bản GitHub), nên còn phải xem HEAD đã chứa origin chưa, không thì không bao giờ thử lại.
+  const merged = await git(['merge-base', '--is-ancestor', `origin/${branch}`, 'HEAD']).then(() => true, () => false);
+  if (remote && remote === known && merged) return;
   const result = await sync(root);
   console[result.ok ? 'log' : 'error'](result.message);
 }
