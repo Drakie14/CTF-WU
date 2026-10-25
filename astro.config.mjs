@@ -66,6 +66,8 @@ export default defineConfig({
     build: {
       minify: true,
       cssMinify: true,
+      // mermaid.min (~2,7 MB) đã lazy-load trong Studio; cảnh báo chunk size chỉ làm nhiễu log build.
+      chunkSizeWarningLimit: 2700,
       // Không bao giờ inline JavaScript (CSP chỉ cho phép script từ 'self', không 'unsafe-inline')
       // và font (CSP font-src 'self', không data:). Asset khác giữ ngưỡng mặc định (4 KB).
       assetsInlineLimit: (file) => (/\.([cm]?js|woff2?|ttf|otf)$/.test(file) ? false : undefined),
