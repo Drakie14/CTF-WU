@@ -11,7 +11,7 @@ const COUNT = Number(process.argv[2] ?? 200);
 
 const CTFS = ['Fixture CTF 2024', 'Fixture Quals 2025', 'Giải Thử Nghiệm', 'Mock Finals', 'Sample Jam', 'Practice Arena'];
 const CATEGORIES = ['web', 'pwn', 'crypto', 'rev', 'forensics', 'misc', 'osint', 'mobile', 'cloud'];
-const DIFFS = ['easy', 'medium', 'hard', 'insane'];
+const DIFFS = ['Sprout', 'Bronze 3', 'Silver 2', 'Gold 1', 'Platinum 4'];
 const TAGS = ['sqli', 'xss', 'rop', 'heap', 'rsa', 'aes', 'jwt', 'ssrf', 'race', 'stego', 'pcap', 'z3', 'angr', 'deserialization'];
 const LANGS = ['python', 'c', 'cpp', 'js', 'sh', 'php', 'sql', 'rust', 'go', 'asm', 'python!', 'unknownlang'];
 

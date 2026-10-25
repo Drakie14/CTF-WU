@@ -12,7 +12,7 @@ Blog CTF cá nhân của Hiếu (Astro). Bài viết nằm trong `src/content/po
   date: 2026-09-29
   ctf: CSS CTF            # trùng tên thư mục giải
   category: web           # web | pwn | crypto | rev | forensics | misc | osint | mobile | cloud
-  difficulty: easy        # easy | medium | hard | insane
+  difficulty: Bronze 3    # thang Dreamhack: Sprout | Bronze/Silver/Gold/Platinum/Diamond/Master 4..1 (1 là khó nhất)
   tags: [Web, Cookie]
   ```
   Dữ liệu sai không làm build fail mà chỉ in warning ra log, nên phải tự kiểm tra lại.

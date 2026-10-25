@@ -1,6 +1,6 @@
 ---
 import { CATEGORY_META } from '../../lib/categories';
-import { CATEGORIES, DIFFICULTIES } from '../../lib/content/constants';
+import { CATEGORIES, DIFFICULTIES, difficultyFamily } from '../../lib/content/constants';
 import { getSiteContent } from '../../lib/posts';
 
 // Tag của mọi bài lúc build: làm từ điển cho "Tự thêm tags" khi chưa đọc được bài nào từ GitHub.
@@ -111,7 +111,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
               <div class="meta-row">
                 <span class="meta-key" id="meta-difficulty">Độ khó</span>
                 <div class="meta-chips" role="group" aria-labelledby="meta-difficulty" data-chip-group="difficulty">
-                  {DIFFICULTIES.map((d) => <button type="button" data-chip={d} aria-pressed="false" class={`diff-${d}`}>{d}</button>)}
+                  {DIFFICULTIES.map((d) => <button type="button" data-chip={d} aria-pressed="false" class={`diff-${difficultyFamily(d)}`}>{d}</button>)}
                 </div>
                 <input type="hidden" data-difficulty />
               </div>
@@ -2277,7 +2277,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
   .meta-field input,.ai-key input { width:100%; min-width:0; padding:.48rem .55rem; border:1px solid var(--line); border-radius:.35rem; background:#1d1e21; color:var(--text); font:inherit; font-size:.72rem; } .meta-field input:focus,.ai-key input:focus { border-color:var(--accent); outline:none; }
   .meta-row { display:grid; grid-template-columns:4.6rem minmax(0,1fr); align-items:center; gap:.6rem; } .meta-key { color:var(--muted); font-size:.66rem; }
   .meta-chips { display:flex; flex-wrap:wrap; gap:.3rem; } .meta-chips button { --c:var(--muted); padding:.26rem .52rem; border:1px solid color-mix(in srgb,var(--c) 28%,transparent); border-radius:.45rem; background:transparent; color:color-mix(in srgb,var(--c) 60%,var(--muted)); font:inherit; font-size:.68rem; text-transform:capitalize; cursor:pointer; } .meta-chips button:hover { border-color:var(--c); color:var(--c); } .meta-chips button[aria-pressed='true'] { border-color:transparent; background:color-mix(in srgb,var(--c) 20%,transparent); color:var(--c); font-weight:700; } .meta-chips button:focus-visible,.suggest-tags:focus-visible,.tag-chips button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-  .diff-easy { --c:#86efac; } .diff-medium { --c:#fcd34d; } .diff-hard { --c:#fdba74; } .diff-insane { --c:#fca5a5; }
+  .diff-sprout { --c:#86efac; } .diff-bronze { --c:#d6a274; } .diff-silver { --c:#cbd5e1; } .diff-gold { --c:#fcd34d; } .diff-platinum { --c:#5eead4; } .diff-diamond { --c:#7dd3fc; } .diff-master { --c:#f472b6; }
   .meta-tags { grid-template-columns:4.6rem minmax(0,1fr) auto; align-items:start; } .meta-tags .meta-key { padding-top:.6rem; }
   .tag-box { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; min-width:0; min-height:2.35rem; padding:.3rem .35rem; border:1px solid var(--line); border-radius:.4rem; background:#1d1e21; cursor:text; } .tag-box:focus-within { border-color:var(--accent); }
   .tag-chips { display:contents; margin:0; padding:0; list-style:none; } .tag-chips li { display:inline-flex; align-items:center; gap:.1rem; max-width:100%; padding:.1rem .15rem .1rem .5rem; border:1px solid #86efac4d; border-radius:999px; background:#86efac14; color:#86efac; font-size:.68rem; } .tag-chips li span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .tag-chips li span::before { content:'#'; opacity:.55; } .tag-chips li[data-novel] { border-style:dashed; border-color:#fcd34d80; background:#fcd34d12; color:#fcd34d; }

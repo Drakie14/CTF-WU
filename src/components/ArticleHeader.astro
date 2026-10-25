@@ -1,5 +1,6 @@
 ---
 import { categoryColor, categoryLabel } from '../lib/categories';
+import { difficultyFamily } from '../lib/content/constants';
 import { slugify } from '../lib/content/slug';
 import { formatDisplayDate, formatIsoDate } from '../lib/content/dates';
 import type { Taxonomy } from '../lib/content/tags';
@@ -28,7 +29,7 @@ const { title, ctf, category, difficulty, date, readingTime } = post.data;
         </a>
       )
     }
-    {difficulty && <span class={`badge diff diff-${difficulty}`}>{difficulty}</span>}
+    {difficulty && <span class={`badge diff diff-${difficultyFamily(difficulty)}`}>{difficulty}</span>}
     {isUnsorted(post) && <span class="badge unsorted">Chưa phân loại</span>}
   </div>
   <p class="art-sub" data-pagefind-ignore>
@@ -93,17 +94,26 @@ const { title, ctf, category, difficulty, date, readingTime } = post.data;
     text-decoration: none;
     text-transform: capitalize;
   }
-  .diff-easy {
+  .diff-sprout {
     --c: #86efac;
   }
-  .diff-medium {
+  .diff-bronze {
+    --c: #d6a274;
+  }
+  .diff-silver {
+    --c: #cbd5e1;
+  }
+  .diff-gold {
     --c: #fcd34d;
   }
-  .diff-hard {
-    --c: #fdba74;
+  .diff-platinum {
+    --c: #5eead4;
   }
-  .diff-insane {
-    --c: #fca5a5;
+  .diff-diamond {
+    --c: #7dd3fc;
+  }
+  .diff-master {
+    --c: #f472b6;
   }
   .badge.unsorted {
     --c: var(--warn);

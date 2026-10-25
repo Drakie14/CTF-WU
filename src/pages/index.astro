@@ -7,14 +7,14 @@ import { SITE } from '../config/site';
 import { CATEGORY_META, categoryColor } from '../lib/categories';
 import { CATEGORIES } from '../lib/content/constants';
 import { formatIsoDate } from '../lib/content/dates';
-import { getSiteContent } from '../lib/posts';
+import { getSiteContent, postUrl } from '../lib/posts';
 import { activityGrid, webRank } from '../lib/stats';
 
 const { posts } = await getSiteContent();
 const latest = posts.slice(0, 5);
 const rank = webRank(posts.filter((p) => p.data.category === 'web').map((p) => p.data.difficulty));
 // "Hôm nay" là ngày build: site build lại mỗi lần publish nên lưới luôn kết thúc ở bài mới nhất.
-const activity = activityGrid(posts.map((p) => formatIsoDate(p.data.date)), formatIsoDate(new Date()), 26);
+const activity = activityGrid(posts.map((p) => ({ iso: formatIsoDate(p.data.date), title: p.data.title, href: postUrl(p) })), formatIsoDate(new Date()), 26);
 const uncategorized = posts.filter((p) => !p.data.category).length;
 const categories = [
   ...CATEGORIES.map((key) => ({ key, label: CATEGORY_META[key].label, color: CATEGORY_META[key].color, href: `/category/${key}/`, count: posts.filter((p) => p.data.category === key).length })),

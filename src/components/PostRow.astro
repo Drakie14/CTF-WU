@@ -1,5 +1,6 @@
 ---
 import { categoryColor } from '../lib/categories';
+import { difficultyFamily } from '../lib/content/constants';
 import { formatDisplayDate, formatIsoDate } from '../lib/content/dates';
 import { getSiteContent, isUnsorted, postUrl, type Post } from '../lib/posts';
 
@@ -35,7 +36,7 @@ const color = categoryColor(category);
     </span>
     <span class="row-side">
       <span class="row-meta">
-        <time datetime={formatIsoDate(date)}>{formatDisplayDate(date)}</time>{difficulty && <> · <span class={`diff-${difficulty}`}>{difficulty}</span></>}
+        <time datetime={formatIsoDate(date)}>{formatDisplayDate(date)}</time>{difficulty && <> · <span class={`diff-${difficultyFamily(difficulty)}`}>{difficulty}</span></>}
       </span>
     </span>
   </a>

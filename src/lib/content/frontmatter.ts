@@ -1,5 +1,5 @@
 import { parse as parseYaml } from 'yaml';
-import { CATEGORIES, DIFFICULTIES, toCategory, type Category, type Difficulty } from './constants';
+import { CATEGORIES, toCategory, toDifficulty, type Category, type Difficulty } from './constants';
 import { parseSiteDate } from './dates';
 import { normalizeTagInput } from './tags';
 
@@ -211,9 +211,9 @@ export function normalizeFrontmatter(
   // difficulty
   let difficulty: NormalizedFrontmatter['difficulty'] = '';
   if (raw.difficulty !== undefined && raw.difficulty !== null && raw.difficulty !== '') {
-    const d = asTrimmedString(raw.difficulty)?.toLowerCase() ?? '';
-    if ((DIFFICULTIES as readonly string[]).includes(d)) difficulty = d as Difficulty;
-    else warn('difficulty', `must be one of ${DIFFICULTIES.join(', ')}`, raw.difficulty, '');
+    const d = toDifficulty(asTrimmedString(raw.difficulty) ?? '');
+    if (d) difficulty = d;
+    else warn('difficulty', 'must be Sprout or <Bronze|Silver|Gold|Platinum|Diamond|Master> <4..1>, e.g. "Gold 2"', raw.difficulty, '');
   }
 
   // points

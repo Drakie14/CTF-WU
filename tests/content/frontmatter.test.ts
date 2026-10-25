@@ -76,9 +76,12 @@ describe('normalizeFrontmatter', () => {
   });
 
   it('category/difficulty are case-insensitive', () => {
-    const { data } = run('---\ncategory: WEB\ndifficulty: Hard\n---\n');
+    const { data } = run('---\ncategory: WEB\ndifficulty: gold-2\n---\n');
     expect(data.category).toBe('web');
-    expect(data.difficulty).toBe('hard');
+    expect(data.difficulty).toBe('Gold 2');
+    expect(run('---\ndifficulty: SPROUT\n---\n').data.difficulty).toBe('Sprout');
+    expect(run('---\ndifficulty: master1\n---\n').data.difficulty).toBe('Master 1');
+    for (const bad of ['Gold 5', 'Gold', 'Sprout 2', 'hard']) expect(run(`---\ndifficulty: ${bad}\n---\n`).data.difficulty).toBe('');
   });
 
   it('tags as string (9) and array (10)', () => {

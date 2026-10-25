@@ -1,6 +1,5 @@
 ---
-import { DIFFICULTIES } from '../lib/content/constants';
-import { DIFFICULTY_POINTS, type WebRank } from '../lib/stats';
+import { FAMILY_COLORS, type Family, type WebRank } from '../lib/stats';
 
 interface Props {
   rank: WebRank;
@@ -9,17 +8,19 @@ interface Props {
 const { rank } = Astro.props;
 const fmt = (n: number) => n.toLocaleString('en-US');
 const percent = Math.round(rank.progress * 100);
+const families = (Object.keys(FAMILY_COLORS) as Family[]).filter((f) => rank.byFamily[f] > 0);
 ---
 
-<section class="rank" style={`--tier:${rank.tier.color}`} aria-labelledby="rank-h">
+<section class="rank" style={`--tier:${rank.rank.color}`} aria-labelledby="rank-h">
   <svg class="emblem" viewBox="0 0 64 64" aria-hidden="true">
     <path class="e-ring" d="M32 2 62 32 32 62 2 32Z"></path>
     <path class="e-mid" d="M32 12 52 32 32 52 12 32Z"></path>
-    <path class="e-core" d="M32 22 42 32 32 42 22 32Z"></path>
+    <path class="e-core" d="M32 20 44 32 32 44 20 32Z"></path>
+    <text class="e-num" x="32" y="32">{rank.rank.name.split(' ')[1]}</text>
   </svg>
   <div class="r-body">
     <h2 id="rank-h" class="r-label">Web rank</h2>
-    <p class="r-tier">{rank.tier.name}</p>
+    <p class="r-tier">{rank.rank.name}</p>
     <p class="r-score"><b>{fmt(rank.score)}</b> pts · {rank.solved} write-up web</p>
     <div class="r-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent} aria-label="Tiến độ lên bậc kế">
       <span style={`width:${percent}%`}></span>
@@ -28,10 +29,10 @@ const percent = Math.round(rank.progress * 100);
   </div>
   <ul class="r-diff">
     {
-      DIFFICULTIES.map((d) => (
-        <li class={`diff-${d}`} title={`${DIFFICULTY_POINTS[d]} pts / bài`}>
-          <b>{rank.byDifficulty[d]}</b>
-          {d}
+      families.map((f) => (
+        <li class={`diff-${f.toLowerCase()}`}>
+          <b>{rank.byFamily[f]}</b>
+          {f}
         </li>
       ))
     }
@@ -71,6 +72,14 @@ const percent = Math.round(rank.progress * 100);
   }
   .e-core {
     fill: var(--tier);
+  }
+  .e-num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 800;
+    fill: var(--panel-2);
+    text-anchor: middle;
+    dominant-baseline: central;
   }
   .r-body {
     min-width: 0;
@@ -127,7 +136,8 @@ const percent = Math.round(rank.progress * 100);
   .r-diff {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 0.5rem;
     margin: 0;
     padding: 0;
@@ -144,7 +154,9 @@ const percent = Math.round(rank.progress * 100);
     background: color-mix(in srgb, currentColor 8%, transparent);
     font-family: var(--font-mono);
     font-size: 0.68rem;
-    letter-spacing: 0.12em;
+    flex-wrap: wrap;
+    row-gap: 0;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
   }
   .r-diff b {
@@ -174,9 +186,6 @@ const percent = Math.round(rank.progress * 100);
     }
     .r-tier {
       font-size: 1.4rem;
-    }
-    .r-diff {
-      grid-template-columns: repeat(2, 1fr);
     }
   }
 </style>

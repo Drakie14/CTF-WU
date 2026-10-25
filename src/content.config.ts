@@ -25,7 +25,7 @@ const posts = defineCollection({
       ctf: z.string().catch(''),
       ctfInferred: z.boolean().catch(false),
       category: z.enum([...CATEGORIES, '']).catch(''),
-      difficulty: z.enum([...DIFFICULTIES, '']).catch(''),
+      difficulty: z.enum(DIFFICULTIES).or(z.literal('')).catch(''),
       points: z.number().int().nonnegative().nullable().catch(null),
       tags: z.array(z.string()).catch([]),
       summary: z.string().catch(''),

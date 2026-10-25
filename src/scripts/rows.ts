@@ -1,3 +1,4 @@
+import { difficultyFamily } from '../lib/content/constants';
 import type { SidebarItem } from '../pages/sidebar.json';
 
 /** Render một dòng sidebar giống hệt `PostRow.astro` (dùng cho kết quả search). */
@@ -20,7 +21,7 @@ export function rowHtml(item: SidebarItem, excerpt?: string): string {
     // Excerpt của Pagefind đã escape sẵn, chỉ chứa <mark> quanh từ khóa.
     (excerpt ? `<span class="row-excerpt">${excerpt}</span>` : '') +
     `</span><span class="row-side">` +
-    `<span class="row-meta"><time datetime="${esc(item.iso)}">${esc(item.date)}</time>${item.difficulty ? ` · <span class="diff-${esc(item.difficulty)}">${esc(item.difficulty)}</span>` : ''}</span>` +
+    `<span class="row-meta"><time datetime="${esc(item.iso)}">${esc(item.date)}</time>${item.difficulty ? ` · <span class="diff-${esc(difficultyFamily(item.difficulty))}">${esc(item.difficulty)}</span>` : ''}</span>` +
     `</span></a></li>`
   );
 }
