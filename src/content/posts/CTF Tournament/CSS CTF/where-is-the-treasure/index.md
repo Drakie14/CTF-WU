@@ -4,7 +4,7 @@ date: 2026-09-29
 ctf: CSS CTF
 category: osint
 draft: true
-difficulty: easy
+difficulty: Bronze 4
 tags:
   - Metadata
   - JPEG

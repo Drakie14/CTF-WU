@@ -3,7 +3,7 @@ title: Do You Know Lika?
 date: 2026-10-12
 ctf: FortID CTF 2026
 category: web
-difficulty: hard
+difficulty: Gold 2
 tags:
   - Prototype Pollution
   - Handlebars

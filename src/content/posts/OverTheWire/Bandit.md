@@ -2,7 +2,7 @@
 title: OverTheWire Bandit
 ctf: OverTheWire
 category: misc
-difficulty: easy
+difficulty: Bronze 2
 tags:
   - Linux
   - SSH

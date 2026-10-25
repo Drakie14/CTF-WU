@@ -3,7 +3,7 @@ title: Are you admin?
 date: 2026-10-12
 ctf: Dreamhack
 category: web
-difficulty: medium
+difficulty: Bronze 1
 tags:
   - XSS
   - Authorization Header

@@ -3,7 +3,7 @@ title: phpreg
 date: 2026-10-24
 ctf: Dreamhack
 category: web
-difficulty: easy
+difficulty: Bronze 4
 tags:
   - Command Injection
   - PHP

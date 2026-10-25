@@ -3,7 +3,7 @@ title: wannanime_rewind
 date: 2026-10-05
 ctf: aochinh26
 category: web
-difficulty: medium
+difficulty: Silver 1
 tags:
   - Flask Session
   - flask-unsign

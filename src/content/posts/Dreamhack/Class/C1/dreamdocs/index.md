@@ -3,7 +3,7 @@ title: DreamDocs
 date: 2026-10-14
 ctf: Dreamhack
 category: web
-difficulty: easy
+difficulty: Bronze 3
 tags:
   - Broken Access Control
   - Header Spoofing

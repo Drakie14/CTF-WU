@@ -3,7 +3,7 @@ title: NNS Travel
 date: 2026-09-27
 ctf: NNS CTF
 category: web
-difficulty: easy
+difficulty: Bronze 3
 tags:
   - Path Traversal
 ---

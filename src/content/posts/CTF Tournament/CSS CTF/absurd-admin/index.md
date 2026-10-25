@@ -3,7 +3,7 @@ title: Absurd Admin
 date: 2026-09-29
 ctf: CSS CTF
 category: web
-difficulty: easy
+difficulty: Bronze 4
 tags:
   - Broken Access Control
   - Cookie Tampering

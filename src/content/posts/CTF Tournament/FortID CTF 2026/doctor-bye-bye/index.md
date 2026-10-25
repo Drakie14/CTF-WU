@@ -3,7 +3,7 @@ title: Doctor Bye Bye
 date: 2026-10-12
 ctf: FortID CTF 2026
 category: web
-difficulty: medium
+difficulty: Silver 3
 tags:
   - SQL Injection
   - SQLite

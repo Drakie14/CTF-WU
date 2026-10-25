@@ -3,7 +3,7 @@ title: Locker Bruteforce
 date: 2026-10-14
 ctf: Dreamhack
 category: web
-difficulty: easy
+difficulty: Bronze 4
 tags:
   - Brute Force
   - Logic Bug

@@ -3,7 +3,7 @@ title: Flying chars
 date: 2026-10-25
 ctf: Dreamhack
 category: web
-difficulty: easy
+difficulty: Bronze 4
 tags:
   - Client-side
 ---

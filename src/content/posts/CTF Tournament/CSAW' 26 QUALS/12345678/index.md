@@ -4,7 +4,7 @@ draft: false
 date: 2026-09-27
 ctf: CSAW' 26 QUALS
 category: misc
-difficulty: easy
+difficulty: Bronze 4
 tags:
   - Steganography
   - Audio

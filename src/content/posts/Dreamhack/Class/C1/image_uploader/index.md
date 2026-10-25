@@ -3,7 +3,7 @@ title: Image Uploader
 date: 2026-10-14
 ctf: Dreamhack
 category: web
-difficulty: medium
+difficulty: Bronze 2
 tags:
   - PHP
   - File Upload

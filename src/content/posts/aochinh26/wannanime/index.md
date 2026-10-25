@@ -4,7 +4,7 @@ draft: false
 date: 2026-10-04
 ctf: aochinh26
 category: web
-difficulty: medium
+difficulty: Silver 2
 tags:
   - Flask Session
   - SQL Injection

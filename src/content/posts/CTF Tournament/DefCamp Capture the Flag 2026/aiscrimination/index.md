@@ -3,7 +3,7 @@ title: AIscrimination
 date: 2026-09-19
 ctf: DefCamp Capture the Flag 2026
 category: web
-difficulty: medium
+difficulty: Silver 2
 tags:
   - CSS Injection
   - LFI

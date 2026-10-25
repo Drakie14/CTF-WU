@@ -3,7 +3,7 @@ title: Secret Supernovas
 date: 2026-09-30
 ctf: CSS CTF
 category: web
-difficulty: medium
+difficulty: Bronze 1
 tags:
   - GraphQL
   - Introspection

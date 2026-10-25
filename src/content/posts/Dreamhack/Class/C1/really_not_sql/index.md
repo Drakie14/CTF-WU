@@ -3,7 +3,7 @@ title: Really not SQL, Just JSON
 date: 2026-10-18
 ctf: Dreamhack
 category: web
-difficulty: medium
+difficulty: Bronze 1
 tags:
   - PHP
   - .htaccess

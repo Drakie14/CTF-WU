@@ -3,7 +3,7 @@ title: ex-reg-ex
 date: 2026-10-23
 ctf: Bronze
 category: web
-difficulty: easy
+difficulty: Bronze 4
 tags:
   - Regex
   - re.match

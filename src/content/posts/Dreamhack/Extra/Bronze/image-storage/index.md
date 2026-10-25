@@ -3,7 +3,7 @@ title: image-storage
 date: 2026-10-23
 ctf: Dreamhack
 category: web
-difficulty: easy
+difficulty: Bronze 4
 tags:
   - File Upload
   - Web Shell

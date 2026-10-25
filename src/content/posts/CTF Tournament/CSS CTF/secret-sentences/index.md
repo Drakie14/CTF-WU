@@ -3,7 +3,7 @@ title: Secret Sentences
 date: 2026-09-29
 ctf: CSS CTF
 category: web
-difficulty: easy
+difficulty: Bronze 3
 tags:
   - Client-side
   - AES-GCM

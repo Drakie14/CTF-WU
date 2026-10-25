@@ -3,7 +3,7 @@ title: csrf-1
 date: 2026-10-22
 ctf: Dreamhack
 category: web
-difficulty: easy
+difficulty: Bronze 1
 tags:
   - CSRF
 ---

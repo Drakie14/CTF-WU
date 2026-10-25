@@ -3,7 +3,7 @@ title: MongoBoard
 date: 2026-10-14
 ctf: Dreamhack
 category: web
-difficulty: medium
+difficulty: Bronze 3
 tags:
   - MongoDB
   - ObjectId

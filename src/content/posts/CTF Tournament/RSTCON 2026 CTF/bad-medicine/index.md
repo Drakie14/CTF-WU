@@ -3,7 +3,7 @@ title: Bad Medicine
 date: 2026-10-25
 ctf: RSTCON 2026 CTF
 category: web
-difficulty: medium
+difficulty: Bronze 2
 tags:
   - SQL Injection
   - UNION

@@ -3,7 +3,7 @@ title: PTML
 date: 2026-10-21
 ctf: Dreamhack
 category: web
-difficulty: medium
+difficulty: Bronze 1
 tags:
   - XSS
   - SVG

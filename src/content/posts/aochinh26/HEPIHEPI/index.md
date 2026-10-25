@@ -4,7 +4,7 @@ draft: false
 date: 2026-10-05
 ctf: aochinh26
 category: web
-difficulty: insane
+difficulty: Platinum 4
 tags:
   - Node.js
   - Prototype Pollution

@@ -3,7 +3,7 @@ title: Shape of Query
 date: 2026-10-01
 ctf: Pointer Overflow CTF 2026
 category: web
-difficulty: medium
+difficulty: Silver 4
 tags:
   - GraphQL
   - Introspection

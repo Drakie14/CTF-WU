@@ -3,7 +3,7 @@ title: House of Hollow Houses
 date: 2026-09-27
 ctf: CSAW' 26 QUALS
 category: misc
-difficulty: easy
+difficulty: Bronze 3
 tags:
   - Puzzle
   - Web Enumeration

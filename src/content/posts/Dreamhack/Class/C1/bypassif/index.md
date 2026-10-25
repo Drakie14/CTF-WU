@@ -3,7 +3,7 @@ title: Bypass IF
 date: 2026-10-14
 ctf: Dreamhack
 category: web
-difficulty: easy
+difficulty: Bronze 3
 tags:
   - Command Injection
   - Timeout

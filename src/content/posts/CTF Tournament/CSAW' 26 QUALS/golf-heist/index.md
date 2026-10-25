@@ -3,7 +3,7 @@ title: Golf heist
 date: 2026-09-27
 ctf: CSAW' 26 QUALS
 category: web
-difficulty: hard
+difficulty: Gold 3
 tags:
   - Header Injection
   - Caddy

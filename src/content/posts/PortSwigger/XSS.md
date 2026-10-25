@@ -1,6 +1,7 @@
 ---
 title: XSS
 category: web
+difficulty: Silver 4
 tags:
   - XSS
   - Reflected XSS
