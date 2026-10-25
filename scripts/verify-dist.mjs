@@ -76,6 +76,8 @@ for (const file of files) {
 
   // <script>: phải là module ngoài từ nguồn cho phép, không có nội dung inline.
   for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    // Data block: trình duyệt không thực thi.
+    if (/\stype=["']?application\/(ld\+)?json["'\s]/i.test(m[1] + ' ')) continue;
     const src = /\ssrc="([^"]*)"/i.exec(m[1])?.[1];
     if (!src || m[2].trim()) problems.xss.push(`${rel}: inline <script>`);
     else if (!ALLOWED_SCRIPT_PREFIXES.some((p) => src.startsWith(p))) problems.xss.push(`${rel}: <script src="${src}">`);

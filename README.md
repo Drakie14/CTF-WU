@@ -54,9 +54,9 @@ Mọi npm script đều chạy bằng Node.js nên dùng được trên cả Win
 ### Build thử giống production
 
 ```powershell
-npm run build     # build ra dist/ + tạo index Pagefind
+npm run build     # build ra dist/ + tạo index Pagefind + verify (lỗi thì build fail)
 npm run preview   # xem bản build tại http://localhost:4321
-npm run verify    # quét dist/: XSS, ảnh remote, link hỏng, SEO/RSS/sitemap
+npm run verify    # chạy riêng: quét dist/ (XSS, ảnh remote, link hỏng, SEO/RSS/sitemap)
 ```
 
 ### Biến môi trường
@@ -168,7 +168,7 @@ git push -u origin main
 | Mục | Giá trị |
 | --- | --- |
 | Framework preset | `Astro` (hoặc None) |
-| Build command | `npm run build` |
+| Build command | `npm run build` (đã gồm `verify`: dist hỏng thì build fail, Cloudflare giữ bản cũ) |
 | Build output directory | `dist` |
 | Root directory | *(để trống)* |
 | Environment variables | `NODE_VERSION` = `24` (build image v3 cũng đọc `.nvmrc`), `SITE_URL` = `https://<project>.pages.dev` |
@@ -421,7 +421,7 @@ Shiki khởi tạo WebAssembly và tô màu code trong Preview. Test: `tests/adm
 | Lệnh | Việc |
 | --- | --- |
 | `npm run dev` | Dev server `http://localhost:4321` |
-| `npm run build` | Build `dist/` + index Pagefind |
+| `npm run build` | Build `dist/` + index Pagefind + `verify` (dist hỏng thì build fail) |
 | `npm run preview` | Xem bản build |
 | `npm run check` | Type check (`astro check`, TypeScript strict) |
 | `npm test` / `npm run test:watch` | Vitest |
