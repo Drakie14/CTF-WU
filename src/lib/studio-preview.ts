@@ -7,6 +7,25 @@ const newlines = (value: string) => value.split('\n').length - 1;
 
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+/** `:::spoiler Tiêu đề` ... `:::` thành cặp comment `<!--spoiler:…-->` / `<!--/spoiler-->`, mỗi comment một dòng nên số dòng không đổi và nội dung giữa vẫn là markdown thường; preview gom phần giữa vào `<details>`. Chạy trước `normalizeCallouts` để `:::` đóng spoiler không bị callout nhận nhầm. */
+export function normalizeSpoilers(source: string) {
+  const stack: boolean[] = [];
+  let fence: string | undefined;
+  return source.split('\n').map((line) => {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) { if (marker && marker[0] === fence[0] && marker.length >= fence.length && !line.trim().slice(marker.length).trim()) fence = undefined; return line; }
+    if (marker) { fence = marker; return line; }
+    const open = /^:::(\w+)(?:\s+(.*))?$/.exec(line.trim());
+    if (open) {
+      const spoiler = open[1].toLowerCase() === 'spoiler';
+      stack.push(spoiler);
+      return spoiler ? `<!--spoiler:${escapeHtml((open[2] || 'Spoiler').trim()).replace(/--/g, '&#45;&#45;')}-->` : line;
+    }
+    if (/^:::\s*$/.test(line) && stack.length) return stack.pop() ? '<!--/spoiler-->' : line;
+    return line;
+  }).join('\n');
+}
+
 /** `:::info` ... `:::` thành blockquote callout. Dòng `:::` đóng bị bỏ nên bù lại bằng dòng trống để số dòng không đổi. */
 export function normalizeCallouts(source: string) {
   return source.replace(/^:::(info|warning|note|tip|danger|success)(?:\s+([^\n]+))?\s*\n([\s\S]*?)^:::\s*$/gim, (all, kind, heading, content) => {

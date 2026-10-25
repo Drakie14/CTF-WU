@@ -119,3 +119,17 @@ describe('nội suy mốc', () => {
   });
   it('không có mốc', () => { expect(lineToTop([], 3)).toBe(0); expect(topToLine([], 3)).toBe(0); });
 });
+
+describe('normalizeSpoilers', () => {
+  it('đổi spoiler thành comment, giữ số dòng và bỏ qua code fence', async () => {
+    const { normalizeSpoilers } = await import('../../src/lib/studio-preview');
+    const source = ':::spoiler Gợi ý\nNội dung `code`\n:::info\nA\n:::\n```\n:::spoiler x\n```\n:::';
+    const out = normalizeSpoilers(source);
+    expect(out.split('\n').length).toBe(source.split('\n').length);
+    expect(out.split('\n')[0]).toBe('<!--spoiler:Gợi ý-->');
+    expect(out.split('\n')[4]).toBe(':::');
+    expect(out.split('\n')[6]).toBe(':::spoiler x');
+    expect(out.split('\n').at(-1)).toBe('<!--/spoiler-->');
+    expect(pipeline(out)).toContain('<code>code</code>');
+  });
+});
