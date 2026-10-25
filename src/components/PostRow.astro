@@ -35,7 +35,7 @@ const color = categoryColor(category);
     </span>
     <span class="row-side">
       <span class="row-meta">
-        <time datetime={formatIsoDate(date)}>{formatDisplayDate(date)}</time>{difficulty && <> · {difficulty}</>}
+        <time datetime={formatIsoDate(date)}>{formatDisplayDate(date)}</time>{difficulty && <> · <span class={`diff-${difficulty}`}>{difficulty}</span></>}
       </span>
     </span>
   </a>

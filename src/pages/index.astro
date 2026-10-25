@@ -1,9 +1,9 @@
 ---
 import EmptyState from '../components/EmptyState.astro';
+import PostRow from '../components/PostRow.astro';
 import AppLayout from '../layouts/AppLayout.astro';
 import { SITE } from '../config/site';
-import { formatDisplayDate } from '../lib/content/dates';
-import { getSiteContent, postUrl } from '../lib/posts';
+import { getSiteContent } from '../lib/posts';
 
 const { posts } = await getSiteContent();
 const latest = posts.slice(0, 5);
@@ -16,16 +16,7 @@ const latest = posts.slice(0, 5);
         <section class="latest" aria-labelledby="latest-h">
           <h2 id="latest-h">Mới nhất</h2>
           <ul>
-            {latest.map((p) => (
-              <li>
-                <a href={postUrl(p)}>
-                  <span class="l-title">{p.data.title}</span>
-                  <span class="l-meta">
-                    {p.data.ctf || 'Chưa phân loại'} · {formatDisplayDate(p.data.date)}
-                  </span>
-                </a>
-              </li>
-            ))}
+            {latest.map((p) => <PostRow post={p} />)}
           </ul>
         </section>
       )
@@ -35,7 +26,7 @@ const latest = posts.slice(0, 5);
 
 <style>
   .latest {
-    width: min(100%, 30rem);
+    width: min(100%, 36rem);
     margin-top: 2.5rem;
     text-align: left;
   }
@@ -52,47 +43,23 @@ const latest = posts.slice(0, 5);
     list-style: none;
     margin: 0;
     padding: 0;
-    border: 1px solid var(--panel-border);
-    border-radius: 0.75rem;
-    overflow: hidden;
-  }
-  .latest li + li {
-    border-top: 1px solid var(--panel-border);
-  }
-  .latest a {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.7rem 1rem;
-    text-decoration: none;
-    background: var(--panel-2);
-  }
-  .latest a:hover {
-    background: #2a2a31;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .latest li {
+    .latest :global(li) {
       animation: rise 0.6s var(--ease-out) backwards;
     }
-    .latest li:nth-child(1) { animation-delay: 0.45s; }
-    .latest li:nth-child(2) { animation-delay: 0.51s; }
-    .latest li:nth-child(3) { animation-delay: 0.57s; }
-    .latest li:nth-child(4) { animation-delay: 0.63s; }
-    .latest li:nth-child(5) { animation-delay: 0.69s; }
-    .latest a {
+    .latest :global(li:nth-child(1)) { animation-delay: 0.45s; }
+    .latest :global(li:nth-child(2)) { animation-delay: 0.51s; }
+    .latest :global(li:nth-child(3)) { animation-delay: 0.57s; }
+    .latest :global(li:nth-child(4)) { animation-delay: 0.63s; }
+    .latest :global(li:nth-child(5)) { animation-delay: 0.69s; }
+    .latest :global(.row) {
       transition:
         background-color 0.15s,
         transform 0.3s var(--ease-out);
     }
-    .latest a:hover {
+    .latest :global(.row:hover) {
       transform: translateX(4px);
     }
-  }
-  .l-title {
-    color: var(--text);
-  }
-  .l-meta {
-    font-size: 0.8rem;
-    color: var(--muted);
   }
 </style>

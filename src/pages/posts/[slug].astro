@@ -2,17 +2,19 @@
 import { getImage } from 'astro:assets';
 import { render } from 'astro:content';
 import ArticleHeader from '../../components/ArticleHeader.astro';
+import PostRow from '../../components/PostRow.astro';
 import PrevNext from '../../components/PrevNext.astro';
 import Toc from '../../components/Toc.astro';
 import AppLayout from '../../layouts/AppLayout.astro';
 import { getSiteContent, type Post } from '../../lib/posts';
+import { relatedPosts } from '../../lib/related';
 
 export async function getStaticPaths() {
-  const { posts } = await getSiteContent();
+  const { posts, tags } = await getSiteContent();
   // `posts` mới nhất trước: previous = bài cũ hơn, next = bài mới hơn.
   return posts.map((post, i) => ({
     params: { slug: post.id },
-    props: { post, prev: posts[i + 1], next: posts[i - 1] },
+    props: { post, prev: posts[i + 1], next: posts[i - 1], related: relatedPosts(post, posts, tags.slugOf) },
   }));
 }
 
@@ -20,9 +22,10 @@ interface Props {
   post: Post;
   prev?: Post;
   next?: Post;
+  related: Post[];
 }
 
-const { post, prev, next } = Astro.props;
+const { post, prev, next, related } = Astro.props;
 const { tags, ctfs } = await getSiteContent();
 const { Content, headings } = await render(post);
 // Cover (nếu có) làm ảnh Open Graph: JPEG rộng tối đa 1200px để mọi mạng xã hội đọc được.
@@ -52,11 +55,43 @@ const ogImage = cover
         <Content />
       </div>
     </div>
+    {
+      related.length > 0 && (
+        <section class="related" aria-labelledby="related-h" data-pagefind-ignore="all">
+          <h2 id="related-h">Bài liên quan</h2>
+          <ul>
+            {related.map((p) => <PostRow post={p} />)}
+          </ul>
+        </section>
+      )
+    }
     <PrevNext prev={prev} next={next} />
   </article>
 </AppLayout>
 
 <style>
+  .related {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--panel-border);
+  }
+  .related h2 {
+    margin: 0 0 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .related ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .related + :global(.pn) {
+    margin-top: 1.5rem;
+  }
   /* Bài chiếm trọn panel; TOC nổi ở góc phải (xem Toc.astro), không còn cột riêng. */
   .article {
     padding: 2.25rem clamp(1.25rem, 3vw, 2.75rem) 4rem;
