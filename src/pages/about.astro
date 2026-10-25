@@ -23,6 +23,17 @@ const socials = [
     icon: 'M22.5 12a10.5 10.5 0 1 0-12.1 10.4v-7.3H7.7V12h2.7V9.7c0-2.6 1.6-4.1 4-4.1 1.1 0 2.3.2 2.3.2v2.6h-1.3c-1.3 0-1.7.8-1.7 1.6V12h2.9l-.5 3.1h-2.4v7.3A10.5 10.5 0 0 0 22.5 12Z',
   },
 ].filter((s) => s.href);
+
+const profiles = [
+  { title: 'Dreamhack', sub: 'Wargame profile', href: 'https://dreamhack.io/users/104151', color: '#7dd3fc', icon: 'M12 2 22 12 12 22 2 12Zm0 5-5 5 5 5 5-5Z' },
+  { title: 'UIT-AncungbaTuyet', sub: 'Team trên CTFtime', href: 'https://ctftime.org/team/450980', color: 'var(--accent)', icon: 'M5 2h2v20H5Zm3 1h11l-2.5 4.5L19 12H8Z' },
+];
+
+const friends: Array<{ host?: string; category: keyof typeof CATEGORY_META }> = [
+  { host: 'lunathewanderer.github.io', category: 'forensics' },
+  { host: 'lunuyennhi-dev.github.io', category: 'crypto' },
+  { category: 'pwn' },
+];
 ---
 
 <AppLayout view="page" title="About" description={`Giới thiệu về ${SITE.name}`}>
@@ -82,18 +93,57 @@ const socials = [
           ))
         }
       </ul>
-      <h2>Hồ sơ CTF</h2>
-      <ul>
-        <li><a href="https://dreamhack.io/users/104151" target="_blank" rel="noopener noreferrer">Dreamhack</a>: hồ sơ wargame của {SITE.author}</li>
-        <li><a href="https://ctftime.org/team/450980" target="_blank" rel="noopener noreferrer">UIT-AncungbaTuyet</a>: team của {SITE.author} trên CTFtime</li>
-      </ul>
-      <h2>Blog của bạn bè</h2>
-      <ul>
-        <li><a href="https://lunathewanderer.github.io/" target="_blank" rel="noopener noreferrer">lunathewanderer.github.io</a>: write-up forensics</li>
-        <li><a href="https://lunuyennhi-dev.github.io/" target="_blank" rel="noopener noreferrer">lunuyennhi-dev.github.io</a>: write-up crypto</li>
-        <li>Pwn: bạn chơi pwn của {SITE.author}, chưa có blog</li>
-      </ul>
     </div>
+    <section class="links" aria-labelledby="profiles-h">
+      <h2 id="profiles-h" class="label">Hồ sơ CTF</h2>
+      <ul class="cards two">
+        {
+          profiles.map((p) => (
+            <li>
+              <a class="card" href={p.href} target="_blank" rel="noopener noreferrer" style={`--c:${p.color}`}>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d={p.icon} /></svg>
+                <span class="c-body">
+                  <strong>{p.title}</strong>
+                  <small>{p.sub}</small>
+                </span>
+                <span class="arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+    <section class="links" aria-labelledby="friends-h">
+      <h2 id="friends-h" class="label">Blog của bạn bè</h2>
+      <ul class="cards stack">
+        {
+          friends.map((f) => {
+            const meta = CATEGORY_META[f.category];
+            const body = (
+              <>
+                <span class="badge">{meta.label}</span>
+                <span class="c-body">
+                  <strong>{f.host ? f.host.replace('.github.io', '') : meta.label}</strong>
+                  <small>{f.host ?? 'Chưa có blog'}</small>
+                </span>
+              </>
+            );
+            return (
+              <li>
+                {f.host ? (
+                  <a class="card" href={`https://${f.host}/`} target="_blank" rel="noopener noreferrer" style={`--c:${meta.color}`}>
+                    {body}
+                    <span class="arrow" aria-hidden="true">↗</span>
+                  </a>
+                ) : (
+                  <div class="card pending" style={`--c:${meta.color}`}>{body}</div>
+                )}
+              </li>
+            );
+          })
+        }
+      </ul>
+    </section>
   </article>
 </AppLayout>
 
@@ -230,6 +280,137 @@ const socials = [
     width: 1.1rem;
     height: 1.1rem;
     fill: currentColor;
+  }
+  .links {
+    margin-top: 2rem;
+  }
+  .label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .label::before {
+    content: '◆';
+    color: var(--accent);
+    letter-spacing: 0;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 0.7rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .cards.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stack .card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.55rem;
+  }
+  .two .c-body strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .stack .c-body {
+    width: 100%;
+  }
+  .card {
+    --c: var(--accent);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    height: 100%;
+    padding: 0.95rem 2.2rem 0.95rem 1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.75rem;
+    background: var(--panel-2);
+    color: var(--text);
+    text-decoration: none;
+  }
+  a.card:hover,
+  a.card:focus-visible {
+    border-color: var(--c);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--c) 22%, transparent);
+    outline: none;
+  }
+  .icon {
+    flex: none;
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0.45rem;
+    border-radius: 0.55rem;
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+    fill: var(--c);
+  }
+  .c-body {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .c-body strong {
+    overflow: hidden;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .c-body small {
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .badge {
+    flex: none;
+    padding: 0.15rem 0.55rem;
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, var(--c) 16%, transparent);
+    color: var(--c);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .arrow {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.8rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  a.card:hover .arrow,
+  a.card:focus-visible .arrow {
+    color: var(--c);
+  }
+  .pending {
+    border-style: dashed;
+    opacity: 0.6;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    a.card {
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.2s var(--ease-out);
+    }
+    a.card:hover,
+    a.card:focus-visible {
+      transform: translateY(-2px);
+    }
+  }
+  @media (max-width: 520px) {
+    .cards.two {
+      grid-template-columns: 1fr;
+    }
   }
   .cats {
     display: flex;
