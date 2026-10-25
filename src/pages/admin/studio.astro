@@ -1875,12 +1875,25 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           return result.ok ? 'Đã git pull về máy.' : `Git: ${result.message}`;
         } catch { return pending; }
       }
+      /** Ảnh dán rồi xoá khỏi bài: bỏ khỏi kho tệp và xoá file local để không publish và không thành untracked. File đã có trên GitHub thì giữ, vì xoá local sẽ thành thay đổi git. */
+      async function pruneUnusedAssets() {
+        const used = usedAssetNames(); const directory = articleDirectory();
+        const unused = assets.filter((asset) => !used.has(asset.name) && !remoteBlobs.some((item) => item.path === `${directory}/${asset.name}`));
+        if (!unused.length) return;
+        const target = localDirectory ? await localEntry(directory).catch(() => undefined) : undefined;
+        for (const asset of unused) {
+          URL.revokeObjectURL(asset.url);
+          if (target) await target.removeEntry(asset.name).catch(() => undefined);
+        }
+        assets = assets.filter((asset) => !unused.includes(asset)); renderAssets();
+      }
       async function publish() {
         if (!token()) { $('[data-token-box]').hidden = false; return setStatus('Nhập GitHub token trước khi publish.', 'error'); }
         if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
         if (!slugify(title.value)) return setStatus('Tiêu đề chưa tạo được tên folder hợp lệ.', 'error');
         if (!(await savePending())) return;
         await settleDraft();
+        await pruneUnusedAssets();
         const filePath = currentPath();
         if (!openFile && remoteBlobs.some((item) => item.path.startsWith(`${articleDirectory()}/`))) {
           return setStatus(`GitHub đã có ${relPath(articleDirectory())}; đổi tiêu đề hoặc folder để không ghi đè bài khác.`, 'error');
