@@ -1709,11 +1709,14 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       function decorateCallouts() {
         for (const quote of preview.querySelectorAll('blockquote')) {
           const paragraph = quote.querySelector('p');
-          const match = /^\[!(INFO|WARNING|NOTE|TIP|DANGER|SUCCESS)\]\s+([^\n]+)\n?/.exec(paragraph?.textContent ?? '');
-          if (!match || !paragraph) continue;
+          // Chỉ cắt dòng `[!INFO] Tiêu đề` ở text node đầu và <br> theo sau; gán lại textContent sẽ làm mất <br> và <code> của nội dung.
+          const first = paragraph?.firstChild;
+          const match = first?.nodeType === Node.TEXT_NODE ? /^\[!(INFO|WARNING|NOTE|TIP|DANGER|SUCCESS)\]\s+([^\n]*)\n?/.exec(first.textContent ?? '') : null;
+          if (!match || !paragraph || !first) continue;
           quote.classList.add('callout', `callout-${match[1].toLowerCase()}`);
-          const label = document.createElement('strong'); label.className = 'callout-label'; label.textContent = match[2];
-          paragraph.textContent = (paragraph.textContent ?? '').replace(match[0], '');
+          const label = document.createElement('strong'); label.className = 'callout-label'; label.textContent = match[2].trim();
+          first.textContent = (first.textContent ?? '').slice(match[0].length);
+          while (paragraph.firstChild && (paragraph.firstChild.nodeName === 'BR' || (paragraph.firstChild.nodeType === Node.TEXT_NODE && !paragraph.firstChild.textContent?.trim()))) paragraph.firstChild.remove();
           quote.prepend(label);
         }
       }
