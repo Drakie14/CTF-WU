@@ -377,6 +377,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         if (!openFile) { queueLocalSave(); if (localDraftPath) return; }
         const draft: Draft = { title: title.value, folder: folder.value, date: date.value, ctf: ctf.value, category: category.value, difficulty: difficulty.value, tags: tags.value, source: editorSource(), ...(openFile ? { base: draftBase } : {}) };
         localStorage.setItem(draftKey(), JSON.stringify(draft));
+        saveDraftAssets();
         $('[data-save-state]').textContent = 'Nháp lưu trong trình duyệt';
       }
       function queueLocalSave() {
@@ -416,7 +417,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
             await copyDirectory(old, target);
             const holder = parentOf(previous) === postRoot ? localDirectory : await localEntry(parentOf(previous));
             await holder?.removeEntry(leafName(previous), { recursive: true });
-          } else localStorage.removeItem(draftKey());
+          } else removeDraft();
           localDraftPath = path; localDraftOwned = true;
           $('[data-file-label]').textContent = relPath(path);
           setStatus(`Đã tạo file local ${relPath(path)}. Bài chỉ lên GitHub khi bấm Publish.`, 'ok');
@@ -444,10 +445,11 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           const draft = JSON.parse(value) as Draft;
           if (openFile && draft.base !== draftBase) {
             localStorage.setItem(`${draftKey()}.stale`, value); localStorage.removeItem(draftKey());
+            void moveDraftAssets(draftKey(), `${draftKey()}.stale`).catch(() => { /* storage unavailable */ });
             staleButton.hidden = false;
             return 'stale';
           }
-          applyDraft(draft);
+          applyDraft(draft); void restoreDraftAssets(draftKey());
           $('[data-save-state]').textContent = 'Đã khôi phục nháp cục bộ';
           return true;
         } catch { return false; }
@@ -457,12 +459,14 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           const value = localStorage.getItem(`${draftKey()}.stale`);
           if (!value) { staleButton.hidden = true; return; }
           applyDraft(JSON.parse(value) as Draft);
-          localStorage.removeItem(`${draftKey()}.stale`); staleButton.hidden = true;
+          const staleKey = `${draftKey()}.stale`;
+          void restoreDraftAssets(staleKey).then(() => putDraftAssets(staleKey, [])).catch(() => { /* storage unavailable */ });
+          localStorage.removeItem(staleKey); staleButton.hidden = true;
           scheduleDraft(); void renderPreview();
           setStatus('Đã mở nháp cũ. Bản này dựa trên bản GitHub trước đó, rà lại trước khi Publish để không đè thay đổi mới.', 'info');
         } catch { /* storage unavailable */ }
       });
-      function removeDraft() { localStorage.removeItem(draftKey()); }
+      function removeDraft() { localStorage.removeItem(draftKey()); void putDraftAssets(draftKey(), []).catch(() => { /* storage unavailable */ }); }
 
       function storedToken(): string {
         try {
@@ -474,8 +478,10 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       const localBaselineKey = (path: string) => `ctf-wu.studio.sync-baseline.${path}`;
       function localHandleDb(): Promise<IDBDatabase> {
         return new Promise((resolve, reject) => {
-          const request = indexedDB.open('ctf-wu-studio-local', 1);
-          request.onupgradeneeded = () => request.result.createObjectStore('handles');
+          const request = indexedDB.open('ctf-wu-studio-local', 2);
+          request.onupgradeneeded = () => {
+            for (const store of ['handles', 'draft-assets']) if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store);
+          };
           request.onsuccess = () => resolve(request.result);
           request.onerror = () => reject(request.error);
         });
@@ -499,6 +505,32 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         });
         db.close();
         return handle as LocalDirectoryHandle | undefined;
+      }
+      /** Ảnh dán vào nháp chỉ nằm trong RAM; cất File vào IndexedDB cùng khoá với nháp localStorage để tắt máy mở lại vẫn còn. */
+      async function draftAssetsStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+        const db = await localHandleDb();
+        try {
+          return await new Promise<T>((resolve, reject) => {
+            const request = run(db.transaction('draft-assets', mode).objectStore('draft-assets'));
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+        } finally { db.close(); }
+      }
+      type StoredAsset = { name: string; file: File };
+      const putDraftAssets = (key: string, list: StoredAsset[]) => draftAssetsStore<unknown>('readwrite', (store) => (list.length ? store.put(list, key) : store.delete(key)) as IDBRequest<unknown>);
+      const getDraftAssets = async (key: string) => ((await draftAssetsStore('readonly', (store) => store.get(key))) ?? []) as StoredAsset[];
+      async function moveDraftAssets(from: string, to: string) { await putDraftAssets(to, await getDraftAssets(from)); await putDraftAssets(from, []); }
+      function saveDraftAssets() {
+        const list = assets.filter((asset) => !writtenAssets.has(asset)).map(({ name, file }) => ({ name, file }));
+        void putDraftAssets(draftKey(), list).catch(() => { /* storage unavailable */ });
+      }
+      async function restoreDraftAssets(key: string) {
+        for (const { name, file } of await getDraftAssets(key).catch(() => [])) {
+          if (assets.some((asset) => asset.name === name)) continue;
+          assets.push({ file, name, url: URL.createObjectURL(file) });
+        }
+        renderAssets(); void renderPreview();
       }
       function updateLocalButton() {
         const button = document.querySelector<HTMLButtonElement>('[data-local-connect]');
@@ -1409,7 +1441,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           face.innerHTML = `${isImageAsset(asset) ? `<img src="${asset.url}" alt="" loading="lazy" draggable="false" />` : `<b class="asset-ext">${escapeHtml(asset.name.split('.').pop()?.slice(0, 5) ?? 'file')}</b>`}<span>${escapeHtml(shortName(asset.name))}</span><em class="asset-badge"></em>`;
           const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'asset-remove'; remove.textContent = '×'; remove.setAttribute('aria-label', `Bỏ ${asset.name}`);
           remove.addEventListener('click', () => {
-            URL.revokeObjectURL(asset.url); assets = assets.filter((entry) => entry !== asset); renderAssets(); void renderPreview();
+            URL.revokeObjectURL(asset.url); assets = assets.filter((entry) => entry !== asset); renderAssets(); void renderPreview(); scheduleDraft();
           });
           const use = (alt: boolean) => { if (alt && item.dataset.used === 'true') jumpToAsset(asset); else insertOwnLine(assetMarkdown(asset)); };
           face.addEventListener('click', (event) => use(event.altKey));
