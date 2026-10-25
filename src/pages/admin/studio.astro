@@ -208,6 +208,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
       import { type Anchor, escapeHtml, lineToTop, normalizeAnchors, normalizeCallouts, normalizeSpoilers, prepareExtensions, renderBlocks, topToLine } from '../../lib/studio-preview';
       import { codeFenceLanguages, insertIndent, insertLink, pasteLink, toggleMark, wrapSelection } from '../../lib/studio-editor';
+      import { reconcileAction } from '../../lib/studio-sync';
       import { LANGUAGE_ALIASES } from '../../config/code-languages';
       import { acceptCompletion, autocompletion } from '@codemirror/autocomplete';
       import { markdown } from '@codemirror/lang-markdown';
@@ -703,17 +704,17 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           return { source: remoteSource, message: copied ? 'Đã tải bản GitHub về thư mục posts local.' : 'Chưa kết nối được thư mục posts local.' };
         }
         const localHash = await hashText(localSource);
-        if (localHash === remoteHash) {
+        const action = reconcileAction(localStorage.getItem(localBaselineKey(path)) ?? undefined, localHash, remoteHash);
+        if (action === 'in-sync') {
           localStorage.setItem(localBaselineKey(path), remoteHash);
           return { source: remoteSource, message: 'Bản local và GitHub đã đồng bộ.' };
         }
-        const baseline = localStorage.getItem(localBaselineKey(path));
-        if (baseline && localHash === baseline) {
+        if (action === 'use-remote') {
           const copied = await writeLocalArticle(path, remoteSource).catch(() => false);
           if (copied) localStorage.setItem(localBaselineKey(path), remoteHash);
           return { source: remoteSource, message: copied ? 'GitHub có bản mới hơn; đã cập nhật file local.' : 'GitHub có bản mới hơn nhưng chưa cấp quyền ghi thư mục local.' };
         }
-        if (baseline && remoteHash === baseline) {
+        if (action === 'use-local-unpublished') {
           return { source: localSource, message: 'Phát hiện chỉnh sửa local chưa publish; đang mở bản local.' };
         }
         return { source: localSource, message: 'Xung đột đồng bộ: cả local và GitHub đều đổi. Đang giữ bản local để bạn rà soát trước khi Publish.' };
