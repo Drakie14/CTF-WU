@@ -41,3 +41,5 @@ Thumbs.db
 # graphify (cài local qua pipx, graph tự sinh)
 graphify-out/
 .claude/
+.agents/
+.codex/
