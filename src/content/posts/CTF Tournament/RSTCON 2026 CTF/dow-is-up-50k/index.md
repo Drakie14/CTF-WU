@@ -3,7 +3,7 @@ title: Dow is Up 50k
 date: 2026-10-26
 ctf: RSTCON 2026 CTF
 category: web
-difficulty: Silver 4
+difficulty: Silver 2
 tags:
   - RCE
   - Deserialization
