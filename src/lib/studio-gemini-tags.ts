@@ -1,4 +1,5 @@
-import { TAG_SYSTEM, parseTagReply, parseTagSummary, tagPromptData, type TagPromptInput } from './tag-prompt';
+import { DIFFICULTIES, type Difficulty } from './content/constants';
+import { TAG_SYSTEM, parseTagDifficulty, parseTagReply, parseTagSummary, tagPromptData, type TagPromptInput } from './tag-prompt';
 
 /**
  * Model có free tier của Gemini API, mạnh nhất trước (theo bảng giá ngày 22/10/2026:
@@ -10,6 +11,8 @@ export const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-pro', 'gemini-3.6-
 export interface GeminiTagResult {
   tags: string[];
   model: string;
+  /** Độ khó model chấm theo thang Dreamhack. */
+  difficulty?: Difficulty;
   /** Model hiểu lời giải thế nào: hiện cho tác giả để soát tag có đúng ý không. */
   summary?: string;
   /** Model mạnh hơn bị bỏ qua và lý do (hết lượt, quá lâu…), để tác giả biết vì sao tag đến từ model yếu hơn. */
@@ -51,10 +54,10 @@ export async function geminiSuggestTags(input: TagPromptInput & { apiKey: string
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'object',
-        // summary đứng trước để model tóm lời giải rồi mới chọn tag.
-        properties: { summary: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } },
-        propertyOrdering: ['summary', 'tags'],
-        required: ['summary', 'tags'],
+        // summary đứng trước để model tóm lời giải rồi mới chấm độ khó và chọn tag.
+        properties: { summary: { type: 'string' }, difficulty: { type: 'string', enum: [...DIFFICULTIES] }, tags: { type: 'array', items: { type: 'string' } } },
+        propertyOrdering: ['summary', 'difficulty', 'tags'],
+        required: ['summary', 'difficulty', 'tags'],
       },
       ...(thinking ? { thinkingConfig: thinkingFor(model) } : {}),
     },
@@ -102,7 +105,8 @@ export async function geminiSuggestTags(input: TagPromptInput & { apiKey: string
     const text = (candidate?.content?.parts ?? []).filter((part) => !part.thought).map((part) => part.text ?? '').join('');
     const tags = parseTagReply(text);
     const summary = parseTagSummary(text);
-    if (tags.length) return { tags, model, ...(summary ? { summary } : {}), ...(failures.length ? { skipped: failures } : {}) };
+    const difficulty = parseTagDifficulty(text);
+    if (tags.length) return { tags, model, ...(difficulty ? { difficulty } : {}), ...(summary ? { summary } : {}), ...(failures.length ? { skipped: failures } : {}) };
     failures.push(`${model}: không trả tag${candidate?.finishReason ? ` (${candidate.finishReason})` : ''}`);
   }
   throw new Error(`Gemini không trả được tag. ${failures.join('; ')}.`);

@@ -6,8 +6,8 @@ import { getSiteContent } from '../../lib/posts';
 // Tag của mọi bài lúc build: làm từ điển cho "Tự thêm tags" khi chưa đọc được bài nào từ GitHub.
 const { tags: taxonomy, posts } = await getSiteContent();
 const tagVocabulary = JSON.stringify(taxonomy.terms.map(({ name, count }) => ({ name, count }))).replace(/</g, '\\u003c');
-// Bài đã gắn tag: few-shot cho Gemini bắt đúng cách gắn tag của tác giả.
-const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length).map(({ data }) => ({ title: data.title, category: data.category, tags: data.tags }))).replace(/</g, '\\u003c');
+// Bài đã gắn tag: few-shot cho Gemini bắt đúng cách gắn tag và chấm độ khó của tác giả.
+const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length).map(({ data }) => ({ title: data.title, category: data.category, difficulty: data.difficulty, tags: data.tags }))).replace(/</g, '\\u003c');
 ---
 
 <!doctype html>
@@ -123,7 +123,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
                   <datalist id="tag-options" data-tag-options></datalist>
                   <input type="hidden" data-tags />
                 </div>
-                <button type="button" class="suggest-tags" data-auto-tags title="Gemini đọc cả bài rồi chọn tag; chưa có key thì dùng gợi ý offline.">Gợi ý tags</button>
+                <button type="button" class="suggest-tags" data-auto-tags title="Gemini đọc cả bài rồi chấm độ khó và chọn tag; chưa có key thì chỉ có gợi ý tags offline.">Đánh giá độ khó và các tags phù hợp</button>
               </div>
               <p class="tag-note" data-tag-note hidden></p>
               <details class="ai-key" data-ai-key>
@@ -167,6 +167,12 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
               <button type="button" class="toast-close" data-toast-close aria-label="Đóng">×</button>
               <strong id="toast-title" data-toast-title></strong>
               <span class="toast-post">Bài: <b data-toast-post></b></span>
+              <label class="toast-difficulty" data-toast-difficulty-row>Độ khó
+                <select data-toast-difficulty>
+                  <option value="">Giữ nguyên</option>
+                  {DIFFICULTIES.map((d) => <option value={d}>{d}</option>)}
+                </select>
+              </label>
               <ul class="toast-tags" data-toast-tags></ul>
               <p data-toast-body hidden></p>
               <small data-toast-hint></small>
@@ -1504,7 +1510,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         showKeyState();
       });
       const tagExamples: TagExample[] = (() => { try { return JSON.parse($('[data-tag-examples]').textContent ?? '[]') as TagExample[]; } catch { return []; } })();
-      const tagInput = () => ({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, current: currentTags() });
+      const tagInput = () => ({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, difficulty: difficulty.value, current: currentTags() });
       const modelLabel = (model: string) => model.replace(/^gemini-/, 'Gemini ').replace(/-(flash|pro)/, (_, kind: string) => ` ${kind[0]!.toUpperCase()}${kind.slice(1)}`).replace(/-lite$/, '-Lite');
       /** Mỗi bài có một lượt Gemini riêng, nên bấm bài khác khi bài trước chưa xong vẫn chạy song song được. */
       const tagJobs = new Set<string>();
@@ -1522,21 +1528,21 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const apiKey = geminiKeyInput.value.trim();
         if (!apiKey) {
           $<HTMLDetailsElement>('[data-ai-key]').open = true;
-          return applyTagResult(offline, undefined, 'Chưa có Gemini API key nên đây là gợi ý offline. Dán key (miễn phí) vào ô bên dưới để Gemini đọc cả bài', 'info');
+          return applyTagResult(offline, undefined, 'Chưa có Gemini API key nên đây là gợi ý tags offline, chưa chấm độ khó. Dán key (miễn phí) vào ô bên dưới để Gemini đọc cả bài', 'info');
         }
         const postTitle = title.value.trim() || postPath.split('/').slice(-2, -1)[0] || postPath;
         tagJobs.add(postPath); refreshTagButtons();
-        setTagNote('Gemini đang đọc bài. Cứ làm việc khác (kể cả gợi ý tags bài khác), xong sẽ có thông báo giữa màn hình', 'info');
+        setTagNote('Gemini đang đọc bài để chấm độ khó và chọn tags. Cứ làm việc khác (kể cả đánh giá bài khác), xong sẽ có thông báo giữa màn hình', 'info');
         try {
           const ai = await geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()], examples: tagExamples });
-          showTagToast({ tags: ai.tags, model: modelLabel(ai.model), summary: ai.summary, skipped: ai.skipped?.map((reason) => modelLabel(reason)), postPath, postTitle });
+          showTagToast({ tags: ai.tags, difficulty: ai.difficulty, model: modelLabel(ai.model), summary: ai.summary, skipped: ai.skipped?.map((reason) => modelLabel(reason)), postPath, postTitle });
         } catch (error) {
           showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, postPath, postTitle });
         } finally {
           tagJobs.delete(postPath); refreshTagButtons(); renderTagToast();
         }
       }
-      type TagToast = { postPath: string; postTitle: string; summary?: string; skipped?: string[]; curated?: boolean; tags?: string[]; model?: string; error?: string };
+      type TagToast = { postPath: string; postTitle: string; difficulty?: string; summary?: string; skipped?: string[]; curated?: boolean; tags?: string[]; model?: string; error?: string };
       /** Hàng đợi kết quả: bài nào xong trước hiện trước, bấm xử lý xong bài này mới tới bài kế. */
       const toastQueue: TagToast[] = [];
       let applying = false;
@@ -1551,8 +1557,10 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         toast.hidden = !result;
         if (!result) return;
         toast.dataset.kind = result.error ? 'error' : 'ok';
-        const empty = !result.error && result.tags!.length === 0;
-        $('[data-toast-title]').textContent = result.error ? 'Gemini không trả được tags' : empty ? 'Không còn tag nào để thêm' : `Gemini đã gợi ý ${result.tags!.length} tags`;
+        const empty = toastEmpty(result);
+        $('[data-toast-title]').textContent = result.error ? 'Gemini không đánh giá được bài' : empty ? 'Không còn gì để thêm' : [result.difficulty ? `Gemini chấm ${result.difficulty}` : 'Gemini chưa chấm được độ khó', `${result.tags!.length} tags`].join(' · ');
+        $<HTMLSelectElement>('[data-toast-difficulty]').value = result.difficulty ?? '';
+        $('[data-toast-difficulty-row]').hidden = Boolean(result.error);
         $('[data-toast-post]').textContent = result.postTitle;
         const list = $('[data-toast-tags]');
         // Mỗi pill là một ô sửa được tại chỗ; ô cuối để thêm tag mới (gợi ý từ tag sẵn có của blog).
@@ -1574,7 +1582,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const body = $('[data-toast-body]');
         body.textContent = result.error ?? (result.summary ? `Gemini hiểu bài: ${result.summary}` : ''); body.hidden = !body.textContent;
         const more = [
-          result.error ? '' : `${result.model} · bấm vào tag để sửa, × để bỏ · Not yet: chỉ thêm tags vào bài, chưa publish`,
+          result.error ? '' : `${result.model} · đổi độ khó ở ô trên, bấm vào tag để sửa, × để bỏ · Not yet: chỉ áp vào bài, chưa publish`,
           result.skipped?.length ? `Đã bỏ qua ${result.skipped.join('; ')}` : '',
           result.postPath === currentPath() ? '' : 'Bài này không phải bài đang mở, bấm nút sẽ tự mở bài đó trước',
           toastQueue.length > 1 ? `Còn ${toastQueue.length - 1} bài đang chờ xử lý` : '',
@@ -1584,6 +1592,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         $<HTMLButtonElement>('[data-toast-publish]').hidden = Boolean(result.error) || empty;
         $('[data-toast-apply]').textContent = result.error ? 'Dùng gợi ý offline' : empty ? 'Đóng' : 'Not yet';
       }
+      const toastEmpty = (result: TagToast) => !result.error && result.tags!.length === 0 && !result.difficulty;
       function closeTagToast() { toastQueue.shift(); renderTagToast(); }
       /** Mở đúng bài của kết quả (nếu đang ở bài khác) để áp tag vào editor. */
       async function openPostForTags(path: string): Promise<boolean> {
@@ -1600,7 +1609,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         applying = true;
         try {
           if (!await openPostForTags(result.postPath)) {
-            setStatus(`Không mở lại được "${result.postTitle}" để áp tags (bài đã bị đổi tên hoặc chưa lưu). Bấm Gợi ý tags lại.`, 'error');
+            setStatus(`Không mở lại được "${result.postTitle}" để áp độ khó và tags (bài đã bị đổi tên hoặc chưa lưu). Bấm Đánh giá độ khó và các tags phù hợp lại.`, 'error');
             closeTagToast();
             return false;
           }
@@ -1612,12 +1621,21 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           const offline = suggestTags(tagInput(), vocabulary);
           closeTagToast();
           if (result.error) await applyTagResult(offline, undefined, 'Gemini lỗi nên đây là gợi ý offline', 'info');
-          else await applyTagResult(mergeAiTags(offline, result.tags!, vocabulary, 8, !result.curated), result.model);
+          else {
+            if (result.difficulty) difficulty.value = result.difficulty;
+            await applyTagResult(mergeAiTags(offline, result.tags!, vocabulary, 8, !result.curated), result.model, undefined, 'error', result.difficulty);
+          }
           for (const [el, top] of scrolled) el.scrollTop = top;
           if (focused instanceof HTMLElement && focused !== document.body) focused.focus({ preventScroll: true });
           return true;
         } finally { applying = false; }
       }
+      $('[data-toast-difficulty]').addEventListener('change', (event) => {
+        const result = toastQueue[0];
+        if (!result) return;
+        result.difficulty = (event.target as HTMLSelectElement).value || undefined;
+        renderTagToast();
+      });
       toast.addEventListener('click', (event) => {
         const target = event.target as HTMLElement;
         if (target === toast || target.closest('[data-toast-close]')) return closeTagToast();
@@ -1627,7 +1645,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           toastQueue[0].curated = true;
           return renderTagToast();
         }
-        if (target.closest('[data-toast-apply]')) return toastQueue[0]?.tags?.length === 0 ? closeTagToast() : void applyPendingTags();
+        if (target.closest('[data-toast-apply]')) return toastQueue[0] && toastEmpty(toastQueue[0]) ? closeTagToast() : void applyPendingTags();
         if (target.closest('[data-toast-publish]')) return void applyPendingTags().then((ok) => { if (ok) void publish(); });
       });
       /** Sửa một tag trong hộp thoại (rỗng thì bỏ) hoặc thêm tag mới; "a, b" thêm được nhiều tag một lần. */
@@ -1676,11 +1694,12 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         note.textContent = message; note.dataset.kind = kind; note.hidden = !message;
         setStatus(message, kind);
       }
-      async function applyTagResult(result: TagSuggestion, source?: string, warning?: string, warningKind: 'info' | 'error' = 'error') {
+      async function applyTagResult(result: TagSuggestion, source?: string, warning?: string, warningKind: 'info' | 'error' = 'error', rated?: string) {
         tags.value = result.tags.join(', ');
         const known = result.added.filter((name) => !result.novel.includes(name));
         const notes = [
           warning ?? '',
+          rated ? `Độ khó: ${rated}` : '',
           known.length ? `Đã thêm tags${source ? ` (${source})` : ''}: ${known.join(', ')}` : '',
           result.novel.length ? `Tag mới (chưa có trong blog, soát lại nhé): ${result.novel.join(', ')}` : '',
           result.renamed.length ? `Đổi theo cách viết sẵn có: ${result.renamed.map(([from, to]) => `${from} → ${to}`).join(', ')}` : '',
@@ -2299,7 +2318,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
   .tag-toast { position:fixed; z-index:40; inset:0; display:grid; place-items:center; padding:1rem; background:#0009; backdrop-filter:blur(3px); animation:toast-fade .15s ease-out; } .tag-toast[hidden] { display:none; }
   .toast-card { position:relative; display:grid; gap:.65rem; width:min(26rem,100%); max-height:calc(100vh - 2rem); overflow:auto; padding:1.1rem 2.4rem 1rem 1.2rem; border:1px solid var(--line); border-top:3px solid var(--ok); border-radius:.6rem; background:var(--panel-hi); box-shadow:0 1.5rem 4rem #000c; animation:toast-in .2s ease-out; } .tag-toast[data-kind='error'] .toast-card { border-top-color:#f6c177; }
   .toast-card strong { font-size:.85rem; } .toast-post { color:var(--muted); font-size:.68rem; overflow-wrap:anywhere; } .toast-post b { color:var(--text); font-weight:700; } .toast-card p { margin:0; color:var(--text); font-size:.7rem; line-height:1.5; overflow-wrap:anywhere; } .toast-card small { color:var(--muted); font-size:.6rem; }
-  .toast-tags { display:flex; flex-wrap:wrap; gap:.35rem; margin:0; padding:0; list-style:none; } .toast-tags[hidden], .toast-card p[hidden] { display:none; } .toast-tags li { padding:.25rem .6rem; border:1px solid #b05be8; border-radius:99px; background:var(--accent-soft); color:#e2bbff; font-size:.7rem; }
+  .toast-tags { display:flex; flex-wrap:wrap; gap:.35rem; margin:0; padding:0; list-style:none; } .toast-tags[hidden], .toast-card p[hidden], .toast-difficulty[hidden] { display:none; } .toast-difficulty { display:flex; align-items:center; gap:.5rem; color:var(--muted); font-size:.7rem; } .toast-difficulty select { padding:.25rem .4rem; border:1px solid var(--line); border-radius:.4rem; background:var(--panel); color:var(--text); font:inherit; } .toast-tags li { padding:.25rem .6rem; border:1px solid #b05be8; border-radius:99px; background:var(--accent-soft); color:#e2bbff; font-size:.7rem; }
   .toast-tags li { display:inline-flex; align-items:center; gap:.3rem; padding-right:.3rem; } .toast-tags li button { display:grid; width:1.1rem; height:1.1rem; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:inherit; font-size:.85rem; line-height:1; opacity:.65; cursor:pointer; } .toast-tags li button:hover { background:#ffffff1f; opacity:1; } .toast-tags li button:focus-visible { outline:2px solid var(--accent); }
   .toast-tags input { min-width:1.5rem; max-width:16rem; padding:0; border:0; background:transparent; color:inherit; font:inherit; } .toast-tags input:focus { outline:none; } .toast-tags li:focus-within { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 22%,transparent); }
   .toast-tags .toast-add { padding-right:.6rem; border-style:dashed; background:transparent; } .toast-tags .toast-add input::placeholder { color:color-mix(in srgb,#e2bbff 60%,transparent); }

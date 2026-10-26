@@ -41,10 +41,13 @@ describe('compactBody / tagPromptData', () => {
       body: 'Body',
       vocabulary: [{ name: 'Cookie', count: 1 }, { name: 'XSS', count: 9 }],
       current: [],
-      examples: [{ title: 'CSRF-2', tags: ['csrf'] }, { title: 'XSS-1', category: 'web', tags: ['XSS', 'innerHTML'] }],
+      examples: [{ title: 'CSRF-2', tags: ['csrf'] }, { title: 'XSS-1', category: 'web', difficulty: 'Bronze 3', tags: ['XSS', 'innerHTML'] }, { title: 'Pwn-1', tags: ['ROP'] }],
+      difficulty: 'Silver 4',
     });
     expect(prompt).toContain('XSS (9), Cookie (1)');
-    expect(prompt).toContain('- XSS-1 [web]: XSS, innerHTML');
+    expect(prompt).toContain('- XSS-1 [web · Bronze 3]: XSS, innerHTML');
+    expect(prompt).toContain('- Pwn-1: ROP');
+    expect(prompt).toContain('Difficulty the author already chose: Silver 4');
     expect(prompt).not.toContain('- CSRF-2');
   });
 
