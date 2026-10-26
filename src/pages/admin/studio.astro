@@ -167,7 +167,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
               <button type="button" class="toast-close" data-toast-close aria-label="Đóng">×</button>
               <strong id="toast-title" data-toast-title></strong>
               <span class="toast-post">Bài: <b data-toast-post></b></span>
-              <label class="toast-difficulty" data-toast-difficulty-row>Độ khó
+              <label class="toast-difficulty" data-toast-difficulty-row><span data-toast-difficulty-source>Độ khó</span>
                 <select data-toast-difficulty>
                   <option value="">Giữ nguyên</option>
                   {DIFFICULTIES.map((d) => <option value={d}>{d}</option>)}
@@ -207,6 +207,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       import { slugify } from '../../lib/content/slug';
       import { buildVocabulary, canonicalTag, mergeAiTags, suggestTags, tagKey, type TagSuggestion, type TagTerm } from '../../lib/studio-tags';
       import { geminiSuggestTags } from '../../lib/studio-gemini-tags';
+      import { dreamhackChallengeId } from '../../lib/dreamhack';
       import type { TagExample } from '../../lib/tag-prompt';
       import { EditorState, Prec, type Extension, type TransactionSpec } from '@codemirror/state';
       import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type ViewUpdate } from '@codemirror/view';
@@ -1519,6 +1520,16 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           if (tagJobs.has(currentPath())) button.dataset.busy = ''; else delete button.dataset.busy;
         });
       }
+      type DifficultySource = 'author' | 'dreamhack' | 'gemini';
+      const difficultySourceLabel: Record<DifficultySource, string> = { author: 'giữ độ khó đã chọn', dreamhack: 'chính thức từ Dreamhack', gemini: 'Gemini ước lượng' };
+      /** Tier chính thức qua /api/dreamhack (Pages Function khi deploy, middleware khi npm run dev); lỗi thì để Gemini đoán. */
+      async function dreamhackLookup(id: string): Promise<string | undefined> {
+        try {
+          const reply = await fetch(`/api/dreamhack/${id}`);
+          if (!reply.ok) return undefined;
+          return ((await reply.json()) as { difficulty?: string | null }).difficulty ?? undefined;
+        } catch { return undefined; }
+      }
       async function autoTags() {
         const postPath = currentPath();
         if (tagJobs.has(postPath)) return setStatus('Gemini vẫn đang đọc bài này, đợi thông báo hoặc chuyển sang bài khác.', 'info');
@@ -1526,23 +1537,32 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const input = tagInput();
         const offline = suggestTags(input, vocabulary);
         const apiKey = geminiKeyInput.value.trim();
+        // Độ khó tác giả đã chọn không bao giờ bị đổi; chưa chọn mà bài có link Dreamhack thì lấy tier chính thức song song với Gemini.
+        const chosen = input.difficulty;
+        const dreamhackId = chosen ? undefined : dreamhackChallengeId(input.body);
+        const official = dreamhackId ? dreamhackLookup(dreamhackId) : Promise.resolve(undefined);
         if (!apiKey) {
           $<HTMLDetailsElement>('[data-ai-key]').open = true;
-          return applyTagResult(offline, undefined, 'Chưa có Gemini API key nên đây là gợi ý tags offline, chưa chấm độ khó. Dán key (miễn phí) vào ô bên dưới để Gemini đọc cả bài', 'info');
+          const rated = await official;
+          if (rated && currentPath() === postPath) difficulty.value = rated;
+          return applyTagResult(offline, undefined, `Chưa có Gemini API key nên đây là gợi ý tags offline${rated || chosen ? '' : ', chưa chấm độ khó'}. Dán key (miễn phí) vào ô bên dưới để Gemini đọc cả bài`, 'info', rated ? `${rated} (Dreamhack)` : undefined);
         }
         const postTitle = title.value.trim() || postPath.split('/').slice(-2, -1)[0] || postPath;
         tagJobs.add(postPath); refreshTagButtons();
         setTagNote('Gemini đang đọc bài để chấm độ khó và chọn tags. Cứ làm việc khác (kể cả đánh giá bài khác), xong sẽ có thông báo giữa màn hình', 'info');
         try {
-          const ai = await geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()], examples: tagExamples });
-          showTagToast({ tags: ai.tags, difficulty: ai.difficulty, model: modelLabel(ai.model), summary: ai.summary, skipped: ai.skipped?.map((reason) => modelLabel(reason)), postPath, postTitle });
+          const gemini = geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()], examples: tagExamples });
+          const [ai, rated] = await Promise.all([gemini, official]);
+          const pick: [string | undefined, DifficultySource] = chosen ? [chosen, 'author'] : rated ? [rated, 'dreamhack'] : [ai.difficulty, 'gemini'];
+          showTagToast({ tags: ai.tags, difficulty: pick[0], difficultySource: pick[0] ? pick[1] : undefined, model: modelLabel(ai.model), summary: ai.summary, skipped: ai.skipped?.map((reason) => modelLabel(reason)), postPath, postTitle });
         } catch (error) {
-          showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, postPath, postTitle });
+          const rated = await official;
+          showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, difficulty: rated, difficultySource: rated ? 'dreamhack' : undefined, postPath, postTitle });
         } finally {
           tagJobs.delete(postPath); refreshTagButtons(); renderTagToast();
         }
       }
-      type TagToast = { postPath: string; postTitle: string; difficulty?: string; summary?: string; skipped?: string[]; curated?: boolean; tags?: string[]; model?: string; error?: string };
+      type TagToast = { postPath: string; postTitle: string; difficulty?: string; difficultySource?: DifficultySource; summary?: string; skipped?: string[]; curated?: boolean; tags?: string[]; model?: string; error?: string };
       /** Hàng đợi kết quả: bài nào xong trước hiện trước, bấm xử lý xong bài này mới tới bài kế. */
       const toastQueue: TagToast[] = [];
       let applying = false;
@@ -1558,9 +1578,10 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         if (!result) return;
         toast.dataset.kind = result.error ? 'error' : 'ok';
         const empty = toastEmpty(result);
-        $('[data-toast-title]').textContent = result.error ? 'Gemini không đánh giá được bài' : empty ? 'Không còn gì để thêm' : [result.difficulty ? `Gemini chấm ${result.difficulty}` : 'Gemini chưa chấm được độ khó', `${result.tags!.length} tags`].join(' · ');
+        $('[data-toast-title]').textContent = result.error ? 'Gemini không đánh giá được bài' : empty ? 'Không còn gì để thêm' : [result.difficulty ? `Độ khó ${result.difficulty}` : 'Chưa có độ khó', `${result.tags!.length} tags`].join(' · ');
         $<HTMLSelectElement>('[data-toast-difficulty]').value = result.difficulty ?? '';
         $('[data-toast-difficulty-row]').hidden = Boolean(result.error);
+        $('[data-toast-difficulty-source]').textContent = result.difficultySource ? `Độ khó (${difficultySourceLabel[result.difficultySource]})` : 'Độ khó';
         $('[data-toast-post]').textContent = result.postTitle;
         const list = $('[data-toast-tags]');
         // Mỗi pill là một ô sửa được tại chỗ; ô cuối để thêm tag mới (gợi ý từ tag sẵn có của blog).
@@ -1620,11 +1641,10 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           const vocabulary = tagVocabulary();
           const offline = suggestTags(tagInput(), vocabulary);
           closeTagToast();
-          if (result.error) await applyTagResult(offline, undefined, 'Gemini lỗi nên đây là gợi ý offline', 'info');
-          else {
-            if (result.difficulty) difficulty.value = result.difficulty;
-            await applyTagResult(mergeAiTags(offline, result.tags!, vocabulary, 8, !result.curated), result.model, undefined, 'error', result.difficulty);
-          }
+          const rated = result.difficulty && `${result.difficulty}${result.difficultySource ? ` (${difficultySourceLabel[result.difficultySource]})` : ''}`;
+          if (result.difficulty) difficulty.value = result.difficulty;
+          if (result.error) await applyTagResult(offline, undefined, 'Gemini lỗi nên đây là gợi ý offline', 'info', rated);
+          else await applyTagResult(mergeAiTags(offline, result.tags!, vocabulary, 8, !result.curated), result.model, undefined, 'error', rated);
           for (const [el, top] of scrolled) el.scrollTop = top;
           if (focused instanceof HTMLElement && focused !== document.body) focused.focus({ preventScroll: true });
           return true;
@@ -1634,6 +1654,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const result = toastQueue[0];
         if (!result) return;
         result.difficulty = (event.target as HTMLSelectElement).value || undefined;
+        result.difficultySource = undefined;
         renderTagToast();
       });
       toast.addEventListener('click', (event) => {

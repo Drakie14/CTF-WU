@@ -1,12 +1,14 @@
 import type { AstroIntegration } from 'astro';
 import { fileURLToPath } from 'node:url';
 import { sync } from '../../scripts/sync.mjs';
+import { dreamhackProxy } from '../lib/dreamhack';
 
 /**
  * Chỉ khi `npm run dev`: POST /__studio/sync cho Studio gọi sau Publish để git pull về máy.
  * Chặn request từ trang khác (Sec-Fetch-Site) và cần header riêng, vì endpoint chạy lệnh git.
  * Lúc dev server khởi động cũng đồng bộ một lần: bài publish từ Studio bản deploy (không có endpoint này)
  * vẫn ghi file vào thư mục local, nên cần pull ở đây để chúng không thành untracked chặn lần pull sau.
+ * GET /api/dreamhack/<id> giống Pages Function trong `functions/`, để Studio lúc dev cũng lấy được độ khó Dreamhack.
  */
 export default function studioSync(): AstroIntegration {
   const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -14,6 +16,14 @@ export default function studioSync(): AstroIntegration {
     name: 'studio-sync',
     hooks: {
       'astro:server:setup': ({ server }) => {
+        server.middlewares.use('/api/dreamhack', (request, response) => {
+          if (request.method !== 'GET') { response.statusCode = 405; response.end(); return; }
+          void dreamhackProxy((request.url ?? '').replace(/^\/+|\/+$|\?.*$/g, '')).then(async (reply) => {
+            response.statusCode = reply.status;
+            reply.headers.forEach((value, key) => response.setHeader(key, value));
+            response.end(await reply.text());
+          });
+        });
         server.middlewares.use('/__studio/sync', (request, response) => {
           const sameOrigin = request.headers['sec-fetch-site'] === 'same-origin' && request.headers['x-studio-sync'] === '1';
           if (request.method !== 'POST' || !sameOrigin) { response.statusCode = 403; response.end(); return; }
