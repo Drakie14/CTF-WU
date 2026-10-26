@@ -29,13 +29,15 @@ describe('geminiSuggestTags', () => {
   it('asks for a summary before the tags and returns it', async () => {
     const { calls, impl } = fakeFetch([answer('{"summary": "SSTI in Jinja2 via the name field", "tags": ["SSTI", "Jinja2"]}')]);
     await expect(geminiSuggestTags(input, impl)).resolves.toEqual({ tags: ['SSTI', 'Jinja2'], model: GEMINI_MODELS[0], summary: 'SSTI in Jinja2 via the name field' });
-    expect(JSON.parse(String(calls[0]!.init.body)).generationConfig.responseSchema.propertyOrdering).toEqual(['summary', 'difficulty', 'tags']);
+    expect(JSON.parse(String(calls[0]!.init.body)).generationConfig.responseSchema.propertyOrdering).toEqual(['summary', 'difficultyReason', 'difficulty', 'tags']);
   });
 
   it('returns the difficulty on the Dreamhack scale and drops unknown levels', async () => {
-    const { impl } = fakeFetch([answer('{"summary": "s", "difficulty": "silver 2", "tags": ["XSS"]}'), answer('{"difficulty": "Hard", "tags": ["XSS"]}')]);
-    await expect(geminiSuggestTags(input, impl)).resolves.toMatchObject({ difficulty: 'Silver 2', tags: ['XSS'] });
-    expect(await geminiSuggestTags(input, impl)).not.toHaveProperty('difficulty');
+    const { impl } = fakeFetch([answer('{"summary": "s", "difficultyReason": "harder than CSRF-2", "difficulty": "silver 2", "tags": ["XSS"]}'), answer('{"difficultyReason": "r", "difficulty": "Hard", "tags": ["XSS"]}')]);
+    await expect(geminiSuggestTags(input, impl)).resolves.toMatchObject({ difficulty: 'Silver 2', difficultyReason: 'harder than CSRF-2', tags: ['XSS'] });
+    const unrated = await geminiSuggestTags(input, impl);
+    expect(unrated).not.toHaveProperty('difficulty');
+    expect(unrated).not.toHaveProperty('difficultyReason');
   });
 
   it('keeps thinking short per model family and drops it when a model rejects it', async () => {

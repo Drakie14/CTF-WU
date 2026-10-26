@@ -47,8 +47,29 @@ describe('compactBody / tagPromptData', () => {
     expect(prompt).toContain('XSS (9), Cookie (1)');
     expect(prompt).toContain('- XSS-1 [web · Bronze 3]: XSS, innerHTML');
     expect(prompt).toContain('- Pwn-1: ROP');
-    expect(prompt).toContain('Difficulty the author already chose: Silver 4');
+    expect(prompt).toContain('Difficulty is fixed by the author: Silver 4.');
     expect(prompt).not.toContain('- CSRF-2');
+  });
+
+  it('marks official Dreamhack tiers and puts the most similar examples first', () => {
+    const prompt = tagPromptData({
+      title: 'New',
+      body: 'Ta dùng SSTI trong Jinja2 để đọc flag, không phải Google.',
+      category: 'web',
+      vocabulary: [],
+      current: [],
+      examples: [
+        { title: 'Go-1', category: 'pwn', tags: ['Go'] },
+        { title: 'Tide', category: 'web', ctf: 'RSTCON 2026 CTF', difficulty: 'Bronze 4', tags: ['SSTI'] },
+        { title: 'Board', category: 'web', ctf: 'Dreamhack', difficulty: 'Bronze 3', official: true, tags: ['NoSQLi'] },
+      ],
+    });
+    const lines = prompt.split('\n').filter((line) => line.startsWith('- '));
+    expect(lines).toEqual([
+      '- Tide [web · Bronze 4 · RSTCON 2026 CTF]: SSTI',
+      '- Board [web · Bronze 3 · Dreamhack official]: NoSQLi',
+      '- Go-1 [pwn]: Go',
+    ]);
   });
 
   it('keeps both the start and the end of very long write-ups', () => {
