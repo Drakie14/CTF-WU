@@ -4,7 +4,7 @@ date: 2026-09-27
 ctf: NNS CTF
 category: misc
 draft: true
-difficulty: Gold 4
+difficulty: Gold 3
 tags:
   - NoSQL Injection
   - SSJI

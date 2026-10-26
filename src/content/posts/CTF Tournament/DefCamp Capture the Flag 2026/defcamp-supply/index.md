@@ -3,7 +3,7 @@ title: DefCamp Supply
 date: 2026-09-19
 ctf: DefCamp Capture the Flag 2026
 category: web
-difficulty: Bronze 2
+difficulty: Bronze 3
 tags:
   - Command Injection
   - RCE

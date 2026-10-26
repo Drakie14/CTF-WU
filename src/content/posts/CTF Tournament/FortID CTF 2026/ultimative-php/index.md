@@ -3,7 +3,7 @@ title: Ultimative PHP
 date: 2026-10-12
 ctf: FortID CTF 2026
 category: web
-difficulty: Silver 4
+difficulty: Silver 2
 tags:
   - PHP
   - Type Juggling

@@ -5,10 +5,10 @@ ctf: CSAW' 26 QUALS
 category: misc
 difficulty: Bronze 3
 tags:
-  - Puzzle
   - Web Enumeration
-  - Base64
   - robots.txt
+  - Base64
+  - Morse Code
 ---
 
 # Đề bài

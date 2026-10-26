@@ -4,7 +4,7 @@ date: 2026-09-29
 ctf: CSS CTF
 category: osint
 draft: true
-difficulty: Bronze 4
+difficulty: Sprout
 tags:
   - Metadata
   - JPEG

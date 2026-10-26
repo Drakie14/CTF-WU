@@ -6,6 +6,8 @@ category: web
 difficulty: Bronze 4
 tags:
   - SSTI
+  - Jinja2
+  - RCE
 ---
 
 # Đề bài 
