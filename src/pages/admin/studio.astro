@@ -232,7 +232,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       const tokenInput = $<HTMLInputElement>('[data-token]');
       const assetsInput = $<HTMLInputElement>('[data-assets]');
 
-      type Asset = { file: File; name: string; url: string };
+      /** remote: file đã có trên GitHub, chỉ hiện tên để chèn lại; file rỗng nên không bao giờ upload hay ghi ra local. */
+      type Asset = { file: File; name: string; url: string; remote?: true };
       type RepoFile = { path: string; sha: string };
       type LocalDirectoryHandle = FileSystemDirectoryHandle & {
         queryPermission: (options?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
@@ -724,8 +725,18 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         try {
           setStatus('Đang mở write-up…');
           const content = await api<{ content: string; sha: string }>(`/contents/${file.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repo.branch)}`);
+          resetEditor();
           openFile = { path: file.path, sha: content.sha }; localDraftPath = undefined; localDraftOwned = false;
           folder.value = folderOf(file) || 'uncategorized';
+          const directory = parentOf(file.path);
+          for (const blob of remoteBlobs) {
+            const name = blob.path.slice(directory.length + 1);
+            if (!blob.path.startsWith(`${directory}/`) || name.includes('/') || name === leafName(file.path)) continue;
+            const image = /\.(png|jpe?g|gif|webp|avif|svg)$/i.exec(name);
+            const asset: Asset = { file: new File([], name, { type: image ? `image/${image[1].toLowerCase()}` : '' }), name, url: assetUrl(name) ?? '', remote: true };
+            assets.push(asset); writtenAssets.add(asset);
+          }
+          renderAssets();
           $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
           const remoteSource = decode(content.content);
           draftBase = await hashText(remoteSource);
@@ -1972,7 +1983,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
             if (remote?.sha !== openFile.sha) return setStatus('Bài trên GitHub đã đổi hoặc bị xoá từ lúc mở (có thể đã sửa ở thiết bị khác). Lưu nội dung đang sửa ra chỗ khác, mở lại bài rồi mới Publish để không ghi đè.', 'error');
           }
           const parent = await api<{ tree: { sha: string } }>(`/git/commits/${ref.object.sha}`);
-          const blobEntries = await Promise.all(assets.map(async (asset) => {
+          const blobEntries = await Promise.all(assets.filter((asset) => !asset.remote).map(async (asset) => {
             const binary = new Uint8Array(await asset.file.arrayBuffer());
             const encoded = encodeBinary(binary);
             const blob = await api<{ sha: string }>('/git/blobs', { method: 'POST', body: JSON.stringify({ content: encoded, encoding: 'base64' }) });
@@ -2041,7 +2052,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           let target: FileSystemDirectoryHandle = localDirectory;
           for (const part of parts.slice(0, -1)) target = await target.getDirectoryHandle(part, { create: true });
           const write = async (name: string, data: File | string) => { const handle = await target.getFileHandle(name, { create: true }); const stream = await handle.createWritable(); await stream.write(data); await stream.close(); };
-          await write(parts.at(-1)!, composePost()); for (const asset of assets) await write(asset.name, asset.file);
+          await write(parts.at(-1)!, composePost()); for (const asset of assets) if (!asset.remote) await write(asset.name, asset.file);
           if (!quiet) setStatus('Đã đồng bộ write-up và file đính kèm vào src/content/posts local.', 'ok');
           return true;
         } catch (error) {
