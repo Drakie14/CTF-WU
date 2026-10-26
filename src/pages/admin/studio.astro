@@ -454,13 +454,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           const value = localStorage.getItem(draftKey());
           if (!value) { staleButton.hidden = !localStorage.getItem(`${draftKey()}.stale`); return false; }
           const draft = JSON.parse(value) as Draft;
-          if (openFile && draft.base !== draftBase) {
-            localStorage.setItem(`${draftKey()}.stale`, value); localStorage.removeItem(draftKey());
-            void moveDraftAssets(draftKey(), `${draftKey()}.stale`).catch(() => { /* storage unavailable */ });
-            staleButton.hidden = false;
-            return 'stale';
-          }
           applyDraft(draft); void restoreDraftAssets(draftKey());
+          if (openFile && draft.base !== draftBase) return 'stale';
           $('[data-save-state]').textContent = 'Đã khôi phục nháp cục bộ';
           return true;
         } catch { return false; }
@@ -531,7 +526,6 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       type StoredAsset = { name: string; file: File };
       const putDraftAssets = (key: string, list: StoredAsset[]) => draftAssetsStore<unknown>('readwrite', (store) => (list.length ? store.put(list, key) : store.delete(key)) as IDBRequest<unknown>);
       const getDraftAssets = async (key: string) => ((await draftAssetsStore('readonly', (store) => store.get(key))) ?? []) as StoredAsset[];
-      async function moveDraftAssets(from: string, to: string) { await putDraftAssets(to, await getDraftAssets(from)); await putDraftAssets(from, []); }
       function saveDraftAssets() {
         const list = assets.filter((asset) => !writtenAssets.has(asset)).map(({ name, file }) => ({ name, file }));
         void putDraftAssets(draftKey(), list).catch(() => { /* storage unavailable */ });
@@ -541,6 +535,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           if (assets.some((asset) => asset.name === name)) continue;
           assets.push({ file, name, url: URL.createObjectURL(file) });
         }
+        // Lượt lưu nháp chạy trước khi đọc xong IndexedDB sẽ ghi danh sách ảnh rỗng; ghi lại đủ ảnh để không mất khi tải lại trang.
+        saveDraftAssets();
         renderAssets(); void renderPreview();
       }
       function updateLocalButton() {
@@ -752,7 +748,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           $('[data-save-state]').textContent = 'Đã mở bài';
           populate(reconciled.source);
           const restored = restoreDraft();
-          if (restored === 'stale') setStatus('GitHub có bản mới hơn nháp trong trình duyệt nên đang mở bản GitHub. Bấm "Mở nháp cũ" nếu vẫn cần nháp đó.', 'info');
+          if (restored === 'stale') setStatus('Đã mở nháp cũ. Bài trên GitHub đã đổi sau khi viết nháp này, rà lại trước khi Publish để không đè thay đổi mới.', 'info');
           else if (restored) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok'); else setStatus(reconciled.message, reconciled.message.startsWith('Xung đột') ? 'error' : 'info');
           activeFolder = folderOf(file) || undefined; renderSidebar(); showComposer();
         } catch (error) { setStatus(error instanceof Error ? error.message : String(error), 'error'); }
