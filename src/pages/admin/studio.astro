@@ -354,7 +354,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
             },
           })),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) { shiftViewLine(update); void renderPreview().then(scheduleFollow); scheduleDraft(); scheduleUsage(); }
+            if (update.docChanged) { scheduleDraft(); scheduleUsage(); void renderPreview().then(scheduleFollow); shiftViewLine(update); }
             if (update.docChanged || update.selectionSet) { cursorMovedAt = performance.now(); if (!update.docChanged) scheduleFollow(); }
           }),
         ];
@@ -1769,6 +1769,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           while (open.nextSibling && open.nextSibling !== comment) details.append(open.nextSibling);
           const line = (details.querySelector('[data-line]') as HTMLElement | null)?.dataset.line;
           if (line) details.dataset.line = line;
+          const end = [...details.querySelectorAll<HTMLElement>('[data-end]')].pop()?.dataset.end;
+          if (end) details.dataset.end = end;
           open.replaceWith(details); comment.remove();
         }
       }

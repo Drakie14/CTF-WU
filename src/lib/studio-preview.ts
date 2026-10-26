@@ -105,7 +105,10 @@ export function normalizeAnchors(raw: Anchor[], totalLines: number, height: numb
   const anchors: Anchor[] = [{ line: 0, top: 0 }];
   for (const { line, top } of raw) {
     const last = anchors[anchors.length - 1];
-    anchors.push({ line: Math.min(Math.max(line, last.line), totalLines), top: Math.min(Math.max(top, last.top), Math.max(height, last.top)) });
+    // Mốc có line/top không hữu hạn (VD khối không có data-end) bị hút về mốc trước, để nội suy không sinh NaN và làm `doc.line(NaN)` ném lỗi.
+    const safeLine = Number.isFinite(line) ? line : last.line;
+    const safeTop = Number.isFinite(top) ? top : last.top;
+    anchors.push({ line: Math.min(Math.max(safeLine, last.line), totalLines), top: Math.min(Math.max(safeTop, last.top), Math.max(height, last.top)) });
   }
   const last = anchors[anchors.length - 1];
   anchors.push({ line: Math.max(totalLines, last.line), top: Math.max(height, last.top) });

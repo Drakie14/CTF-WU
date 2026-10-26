@@ -117,6 +117,12 @@ describe('nội suy mốc', () => {
     for (const value of [0, 2.5, 3, 5, 8, 10]) expect(Number.isFinite(lineToTop(flat, value))).toBe(true);
     for (const value of [0, 20, 30, 31, 100]) expect(Number.isFinite(topToLine(flat, value))).toBe(true);
   });
+  it('mốc có line/top NaN không sinh nội suy NaN', () => {
+    const anchors = normalizeAnchors([{ line: 2, top: 20 }, { line: NaN, top: 40 }, { line: 6, top: NaN }], 10, 80);
+    for (const { line, top } of anchors) { expect(Number.isFinite(line)).toBe(true); expect(Number.isFinite(top)).toBe(true); }
+    for (const value of [0, 20, 40, 80, 200]) expect(Number.isFinite(topToLine(anchors, value))).toBe(true);
+    for (const value of [0, 2, 6, 10]) expect(Number.isFinite(lineToTop(anchors, value))).toBe(true);
+  });
   it('không có mốc', () => { expect(lineToTop([], 3)).toBe(0); expect(topToLine([], 3)).toBe(0); });
 });
 
