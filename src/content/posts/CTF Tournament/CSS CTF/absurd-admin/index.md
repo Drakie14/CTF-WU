@@ -25,7 +25,7 @@ Vào `/login`, có tài khoản mặc định `guest / guest67`:
 ![image](./02-login.png)
 
 Đăng nhập bằng `guest`, ta vào được nhưng nhận thông báo `guest does not have access to the flag` 
--> ta cần là `admin` mới xem được flag.
+-> Ta cần là `admin` mới xem được flag.
 
 ![image](./03-guest-view.png)
 
