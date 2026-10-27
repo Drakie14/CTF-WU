@@ -1524,6 +1524,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         if (!reply.ok) throw new Error(data.error ?? `Claude ${reply.status}`);
         return data;
       }
+      const aiName = () => (providerSelect.value === 'claude' ? 'Claude' : 'Gemini');
       const tagExamples: TagExample[] = (() => { try { return JSON.parse($('[data-tag-examples]').textContent ?? '[]') as TagExample[]; } catch { return []; } })();
       const tagInput = () => ({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, difficulty: difficulty.value, current: currentTags() });
       const modelLabel = (model: string) => model.replace(/^gemini-/, 'Gemini ').replace(/-(flash|pro)/, (_, kind: string) => ` ${kind[0]!.toUpperCase()}${kind.slice(1)}`).replace(/-lite$/, '-Lite');
@@ -1535,7 +1536,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         });
       }
       type DifficultySource = 'author' | 'dreamhack' | 'gemini';
-      const difficultySourceLabel: Record<DifficultySource, string> = { author: 'giữ độ khó đã chọn', dreamhack: 'chính thức từ Dreamhack', gemini: 'Gemini ước lượng' };
+      const difficultySourceLabel: Record<DifficultySource, string> = { author: 'giữ độ khó đã chọn', dreamhack: 'chính thức từ Dreamhack', gemini: 'AI ước lượng' };
       /** Tier chính thức qua /api/dreamhack (Pages Function khi deploy, middleware khi npm run dev); lỗi thì để Gemini đoán. */
       async function dreamhackLookup(id: string): Promise<string | undefined> {
         try {
@@ -1546,7 +1547,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       }
       async function autoTags() {
         const postPath = currentPath();
-        if (tagJobs.has(postPath)) return setStatus('Gemini vẫn đang đọc bài này, đợi thông báo hoặc chuyển sang bài khác.', 'info');
+        if (tagJobs.has(postPath)) return setStatus(`${aiName()} vẫn đang đọc bài này, đợi thông báo hoặc chuyển sang bài khác.`, 'info');
         const vocabulary = tagVocabulary();
         const input = tagInput();
         const offline = suggestTags(input, vocabulary);
@@ -1556,6 +1557,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const dreamhackId = chosen ? undefined : dreamhackChallengeId(input.body);
         const official = dreamhackId ? dreamhackLookup(dreamhackId) : Promise.resolve(undefined);
         const useClaude = providerSelect.value === 'claude';
+        const engine = aiName();
         if (!apiKey && !useClaude) {
           $<HTMLDetailsElement>('[data-ai-key]').open = true;
           const rated = await official;
@@ -1564,21 +1566,21 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         }
         const postTitle = title.value.trim() || postPath.split('/').slice(-2, -1)[0] || postPath;
         tagJobs.add(postPath); refreshTagButtons();
-        setTagNote(`${useClaude ? 'Claude' : 'Gemini'} đang đọc bài để chấm độ khó và chọn tags. Cứ làm việc khác (kể cả đánh giá bài khác), xong sẽ có thông báo giữa màn hình`, 'info');
+        setTagNote(`${engine} đang đọc bài để chấm độ khó và chọn tags. Cứ làm việc khác (kể cả đánh giá bài khác), xong sẽ có thông báo giữa màn hình`, 'info');
         try {
           const request = { ...input, vocabulary: [...vocabulary.values()], examples: tagExamples };
           const gemini = useClaude ? claudeSuggestTags(request) : geminiSuggestTags({ ...request, apiKey });
           const [ai, rated] = await Promise.all([gemini, official]);
           const pick: [string | undefined, DifficultySource] = chosen ? [chosen, 'author'] : rated ? [rated, 'dreamhack'] : [ai.difficulty, 'gemini'];
-          showTagToast({ tags: ai.tags, difficulty: pick[0], difficultySource: pick[0] ? pick[1] : undefined, difficultyReason: ai.difficultyReason, model: modelLabel(ai.model), summary: ai.summary, skipped: ai.skipped?.map((reason) => modelLabel(reason)), postPath, postTitle });
+          showTagToast({ ai: engine, tags: ai.tags, difficulty: pick[0], difficultySource: pick[0] ? pick[1] : undefined, difficultyReason: ai.difficultyReason, model: modelLabel(ai.model), summary: ai.summary, skipped: ai.skipped?.map((reason) => modelLabel(reason)), postPath, postTitle });
         } catch (error) {
           const rated = await official;
-          showTagToast({ error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, difficulty: rated, difficultySource: rated ? 'dreamhack' : undefined, postPath, postTitle });
+          showTagToast({ ai: engine, error: `${error instanceof Error ? error.message : String(error)} Có thể dùng gợi ý offline thay thế`, difficulty: rated, difficultySource: rated ? 'dreamhack' : undefined, postPath, postTitle });
         } finally {
           tagJobs.delete(postPath); refreshTagButtons(); renderTagToast();
         }
       }
-      type TagToast = { postPath: string; postTitle: string; difficulty?: string; difficultySource?: DifficultySource; difficultyReason?: string; summary?: string; skipped?: string[]; curated?: boolean; tags?: string[]; model?: string; error?: string };
+      type TagToast = { ai: string; postPath: string; postTitle: string; difficulty?: string; difficultySource?: DifficultySource; difficultyReason?: string; summary?: string; skipped?: string[]; curated?: boolean; tags?: string[]; model?: string; error?: string };
       /** Hàng đợi kết quả: bài nào xong trước hiện trước, bấm xử lý xong bài này mới tới bài kế. */
       const toastQueue: TagToast[] = [];
       let applying = false;
@@ -1594,7 +1596,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         if (!result) return;
         toast.dataset.kind = result.error ? 'error' : 'ok';
         const empty = toastEmpty(result);
-        $('[data-toast-title]').textContent = result.error ? 'Gemini không đánh giá được bài' : empty ? 'Không còn gì để thêm' : [result.difficulty ? `Độ khó ${result.difficulty}` : 'Chưa có độ khó', `${result.tags!.length} tags`].join(' · ');
+        $('[data-toast-title]').textContent = result.error ? `${result.ai} không đánh giá được bài` : empty ? 'Không còn gì để thêm' : [result.difficulty ? `Độ khó ${result.difficulty}` : 'Chưa có độ khó', `${result.tags!.length} tags`].join(' · ');
         $<HTMLSelectElement>('[data-toast-difficulty]').value = result.difficulty ?? '';
         $('[data-toast-difficulty-row]').hidden = Boolean(result.error);
         $('[data-toast-difficulty-source]').textContent = result.difficultySource ? `Độ khó (${difficultySourceLabel[result.difficultySource]})` : 'Độ khó';
@@ -1617,15 +1619,15 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         list.replaceChildren(...pills, adder);
         list.hidden = Boolean(result.error);
         const body = $('[data-toast-body]');
-        // Lý do chỉ có nghĩa khi độ khó đang hiện đúng là mức Gemini chấm.
+        // Lý do chỉ có nghĩa khi độ khó đang hiện đúng là mức AI chấm.
         const reason = result.difficultySource === 'gemini' && result.difficultyReason ? `Vì sao ${result.difficulty}: ${result.difficultyReason}` : '';
-        body.textContent = result.error ?? [result.summary ? `Gemini hiểu bài: ${result.summary}` : '', reason].filter(Boolean).join('\n'); body.hidden = !body.textContent;
+        body.textContent = result.error ?? [result.summary ? `${result.ai} hiểu bài: ${result.summary}` : '', reason].filter(Boolean).join('\n'); body.hidden = !body.textContent;
         const more = [
           result.error ? '' : `${result.model} · đổi độ khó ở ô trên, bấm vào tag để sửa, × để bỏ · Not yet: chỉ áp vào bài, chưa publish`,
           result.skipped?.length ? `Đã bỏ qua ${result.skipped.join('; ')}` : '',
           result.postPath === currentPath() ? '' : 'Bài này không phải bài đang mở, bấm nút sẽ tự mở bài đó trước',
           toastQueue.length > 1 ? `Còn ${toastQueue.length - 1} bài đang chờ xử lý` : '',
-          tagJobs.size ? `Gemini đang đọc thêm ${tagJobs.size} bài` : '',
+          tagJobs.size ? `${aiName()} đang đọc thêm ${tagJobs.size} bài` : '',
         ].filter(Boolean);
         $('[data-toast-hint]').textContent = more.join(' · ');
         $<HTMLButtonElement>('[data-toast-publish]').hidden = Boolean(result.error) || empty;
@@ -1661,7 +1663,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           closeTagToast();
           const rated = result.difficulty && `${result.difficulty}${result.difficultySource ? ` (${difficultySourceLabel[result.difficultySource]})` : ''}`;
           if (result.difficulty) difficulty.value = result.difficulty;
-          if (result.error) await applyTagResult(offline, undefined, 'Gemini lỗi nên đây là gợi ý offline', 'info', rated);
+          if (result.error) await applyTagResult(offline, undefined, `${result.ai} lỗi nên đây là gợi ý offline`, 'info', rated);
           else await applyTagResult(mergeAiTags(offline, result.tags!, vocabulary, 8, !result.curated), result.model, undefined, 'error', rated);
           for (const [el, top] of scrolled) el.scrollTop = top;
           if (focused instanceof HTMLElement && focused !== document.body) focused.focus({ preventScroll: true });
