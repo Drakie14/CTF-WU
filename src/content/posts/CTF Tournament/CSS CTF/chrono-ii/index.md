@@ -4,7 +4,7 @@ date: 2026-10-01
 ctf: CSS CTF
 category: crypto
 draft: true
-difficulty: Silver 4
+difficulty: Silver 3
 tags:
   - Vigenère
   - Known-plaintext

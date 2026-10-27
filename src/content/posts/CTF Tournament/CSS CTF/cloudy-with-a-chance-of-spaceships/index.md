@@ -3,7 +3,7 @@ title: Cloudy with a Chance of Spaceships
 date: 2026-10-01
 ctf: CSS CTF
 category: web
-difficulty: Gold 1
+difficulty: Gold 2
 tags:
   - SSRF
   - Length Oracle

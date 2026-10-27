@@ -3,7 +3,7 @@ title: TrustDinOIDC
 date: 2026-09-27
 ctf: CSAW' 26 QUALS
 category: web
-difficulty: Silver 1
+difficulty: Gold 4
 tags:
   - JWT
   - OIDC

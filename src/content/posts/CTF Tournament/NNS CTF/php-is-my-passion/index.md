@@ -3,7 +3,7 @@ title: PHP is my passion
 date: 2026-09-27
 ctf: NNS CTF
 category: web
-difficulty: Silver 3
+difficulty: Bronze 2
 tags:
   - phpBB
   - CVE-2026-48611

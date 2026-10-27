@@ -3,7 +3,7 @@ title: Golf heist
 date: 2026-09-27
 ctf: CSAW' 26 QUALS
 category: web
-difficulty: Bronze 1
+difficulty: Silver 4
 tags:
   - Header Injection
   - Auth Bypass

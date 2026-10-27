@@ -3,7 +3,7 @@ title: ASS
 date: 2026-09-27
 ctf: NNS CTF
 category: web
-difficulty: Silver 1
+difficulty: Silver 2
 tags:
   - PKI
   - Certificate

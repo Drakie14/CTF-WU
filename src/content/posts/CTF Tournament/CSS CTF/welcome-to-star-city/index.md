@@ -3,7 +3,7 @@ title: Welcome to Star City
 date: 2026-09-30
 ctf: CSS CTF
 category: web
-difficulty: Bronze 4
+difficulty: Sprout
 tags:
   - CSS
   - Base64

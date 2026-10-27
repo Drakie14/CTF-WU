@@ -3,7 +3,7 @@ title: perchance
 date: 2026-09-27
 ctf: NNS CTF
 category: web
-difficulty: Gold 2
+difficulty: Gold 3
 tags:
   - Client-side
   - XSS

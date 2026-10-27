@@ -3,7 +3,7 @@ title: Shape of Query
 date: 2026-10-01
 ctf: Pointer Overflow CTF 2026
 category: web
-difficulty: Silver 4
+difficulty: Bronze 2
 tags:
   - Broken Access Control
   - BFLA

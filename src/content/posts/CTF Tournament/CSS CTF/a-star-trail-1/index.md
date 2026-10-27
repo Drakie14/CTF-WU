@@ -4,7 +4,7 @@ date: 2026-09-30
 ctf: CSS CTF
 category: misc
 draft: true
-difficulty: Bronze 3
+difficulty: Bronze 4
 tags:
   - Graph
   - Shortest Path
