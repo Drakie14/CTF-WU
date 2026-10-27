@@ -3,7 +3,7 @@ title: Template Tide
 date: 2026-10-26
 ctf: RSTCON 2026 CTF
 category: web
-difficulty: Bronze 2
+difficulty: Bronze 4
 tags:
   - SSTI
   - Jinja2
