@@ -9,6 +9,7 @@ tags:
   - BFLA
   - GraphQL
   - Introspection
+  - Nested Query
 ---
 
 ## Đề bài
