@@ -2,6 +2,8 @@ import type { AstroIntegration } from 'astro';
 import { fileURLToPath } from 'node:url';
 import { sync } from '../../scripts/sync.mjs';
 import { dreamhackProxy } from '../lib/dreamhack';
+import { claudeSuggestTags } from '../lib/studio-claude-tags';
+import type { TagPromptInput } from '../lib/tag-prompt';
 
 /**
  * Chỉ khi `npm run dev`: POST /__studio/sync cho Studio gọi sau Publish để git pull về máy.
@@ -30,6 +32,20 @@ export default function studioSync(): AstroIntegration {
           void sync(root).then((result) => {
             response.setHeader('content-type', 'application/json');
             response.end(JSON.stringify(result));
+          });
+        });
+        // POST /__studio/claude-tags: chấm độ khó và tag bằng `claude -p` trên máy (gói Pro), cùng kiểu chặn như /__studio/sync.
+        server.middlewares.use('/__studio/claude-tags', (request, response) => {
+          const sameOrigin = request.headers['sec-fetch-site'] === 'same-origin' && request.headers['x-studio-sync'] === '1';
+          if (request.method !== 'POST' || !sameOrigin) { response.statusCode = 403; response.end(); return; }
+          let body = '';
+          request.on('data', (chunk) => { body += chunk; });
+          request.on('end', () => {
+            response.setHeader('content-type', 'application/json');
+            void Promise.resolve()
+              .then(() => claudeSuggestTags(JSON.parse(body) as TagPromptInput, root))
+              .then((result) => response.end(JSON.stringify(result)))
+              .catch((error: unknown) => { response.statusCode = 500; response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); });
           });
         });
       },

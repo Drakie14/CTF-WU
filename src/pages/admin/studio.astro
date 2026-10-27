@@ -127,6 +127,12 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
                 <button type="button" class="suggest-tags" data-auto-tags title="Gemini đọc cả bài rồi chấm độ khó và chọn tag; chưa có key thì chỉ có gợi ý tags offline.">Đánh giá độ khó và các tags phù hợp</button>
               </div>
               <p class="tag-note" data-tag-note hidden></p>
+              <label class="ai-provider">Model chấm
+                <select data-ai-provider>
+                  <option value="gemini">Gemini (free, cần key)</option>
+                  {import.meta.env.DEV && <option value="claude">Claude (gói Pro trên máy, chỉ npm run dev)</option>}
+                </select>
+              </label>
               <details class="ai-key" data-ai-key>
                 <summary>Gemini API key <em data-ai-key-state>chưa có</em></summary>
                 <input type="password" autocomplete="off" placeholder="AIza…" aria-label="Gemini API key" data-gemini-key />
@@ -1507,6 +1513,17 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         try { const key = geminiKeyInput.value.trim(); if (key) localStorage.setItem(geminiKeyStorage, key); else localStorage.removeItem(geminiKeyStorage); } catch { /* storage unavailable */ }
         showKeyState();
       });
+      const providerStorage = 'ctf-wu.studio.ai-provider';
+      const providerSelect = $<HTMLSelectElement>('[data-ai-provider]');
+      try { const saved = localStorage.getItem(providerStorage); if (saved && [...providerSelect.options].some((option) => option.value === saved)) providerSelect.value = saved; } catch { /* storage unavailable */ }
+      providerSelect.addEventListener('change', () => { try { localStorage.setItem(providerStorage, providerSelect.value); } catch { /* storage unavailable */ } });
+      /** Claude chạy qua middleware của dev server (`claude -p` dùng gói Pro đã đăng nhập trên máy). */
+      async function claudeSuggestTags(input: object): Promise<Awaited<ReturnType<typeof geminiSuggestTags>>> {
+        const reply = await fetch('/__studio/claude-tags', { method: 'POST', headers: { 'content-type': 'application/json', 'x-studio-sync': '1' }, body: JSON.stringify(input) });
+        const data = (await reply.json().catch(() => ({}))) as Awaited<ReturnType<typeof geminiSuggestTags>> & { error?: string };
+        if (!reply.ok) throw new Error(data.error ?? `Claude ${reply.status}`);
+        return data;
+      }
       const tagExamples: TagExample[] = (() => { try { return JSON.parse($('[data-tag-examples]').textContent ?? '[]') as TagExample[]; } catch { return []; } })();
       const tagInput = () => ({ title: title.value, body: editorSource(), category: category.value, ctf: ctf.value, difficulty: difficulty.value, current: currentTags() });
       const modelLabel = (model: string) => model.replace(/^gemini-/, 'Gemini ').replace(/-(flash|pro)/, (_, kind: string) => ` ${kind[0]!.toUpperCase()}${kind.slice(1)}`).replace(/-lite$/, '-Lite');
@@ -1538,7 +1555,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const chosen = input.difficulty;
         const dreamhackId = chosen ? undefined : dreamhackChallengeId(input.body);
         const official = dreamhackId ? dreamhackLookup(dreamhackId) : Promise.resolve(undefined);
-        if (!apiKey) {
+        const useClaude = providerSelect.value === 'claude';
+        if (!apiKey && !useClaude) {
           $<HTMLDetailsElement>('[data-ai-key]').open = true;
           const rated = await official;
           if (rated && currentPath() === postPath) difficulty.value = rated;
@@ -1546,9 +1564,10 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         }
         const postTitle = title.value.trim() || postPath.split('/').slice(-2, -1)[0] || postPath;
         tagJobs.add(postPath); refreshTagButtons();
-        setTagNote('Gemini đang đọc bài để chấm độ khó và chọn tags. Cứ làm việc khác (kể cả đánh giá bài khác), xong sẽ có thông báo giữa màn hình', 'info');
+        setTagNote(`${useClaude ? 'Claude' : 'Gemini'} đang đọc bài để chấm độ khó và chọn tags. Cứ làm việc khác (kể cả đánh giá bài khác), xong sẽ có thông báo giữa màn hình`, 'info');
         try {
-          const gemini = geminiSuggestTags({ ...input, apiKey, vocabulary: [...vocabulary.values()], examples: tagExamples });
+          const request = { ...input, vocabulary: [...vocabulary.values()], examples: tagExamples };
+          const gemini = useClaude ? claudeSuggestTags(request) : geminiSuggestTags({ ...request, apiKey });
           const [ai, rated] = await Promise.all([gemini, official]);
           const pick: [string | undefined, DifficultySource] = chosen ? [chosen, 'author'] : rated ? [rated, 'dreamhack'] : [ai.difficulty, 'gemini'];
           showTagToast({ tags: ai.tags, difficulty: pick[0], difficultySource: pick[0] ? pick[1] : undefined, difficultyReason: ai.difficultyReason, model: modelLabel(ai.model), summary: ai.summary, skipped: ai.skipped?.map((reason) => modelLabel(reason)), postPath, postTitle });
@@ -2347,6 +2366,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
   .suggest-tags { min-height:2.35rem; padding:.4rem .8rem; border:1px solid #b05be8; border-radius:.4rem; background:var(--accent-soft); color:#e2bbff; font:inherit; font-size:.7rem; font-weight:700; white-space:nowrap; cursor:pointer; } .suggest-tags:hover:not(:disabled) { background:var(--accent); color:#21152b; } .suggest-tags[data-busy] { cursor:progress; animation:tag-busy .8s ease-in-out infinite alternate; }
   @keyframes tag-busy { to { opacity:.5; } } @media (prefers-reduced-motion:reduce) { .suggest-tags[data-busy] { animation:none; opacity:.6; } }
   .tag-note { margin:-.4rem 0 0 5.2rem; color:var(--muted); font-size:.64rem; line-height:1.55; } .tag-note[data-kind='ok'] { color:#a6edbd; } .tag-note[data-kind='error'] { color:#f6c177; }
+.ai-provider { display:flex; align-items:center; gap:.5rem; color:var(--muted); font-size:.66rem; } .ai-provider select { padding:.3rem .45rem; border:1px solid var(--line); border-radius:.35rem; background:#1d1e21; color:var(--text); font:inherit; }
   .ai-key { padding-top:.75rem; border-top:1px solid var(--line); color:var(--muted); font-size:.66rem; } .ai-key summary { cursor:pointer; user-select:none; } .ai-key summary:hover { color:var(--text); } .ai-key em { margin-left:.3rem; color:var(--text); font-style:normal; } .ai-key[open] { display:grid; gap:.5rem; } .ai-key p { margin:0; line-height:1.55; } .ai-key a { color:#e2bbff; }
   .markdown-tools { display:flex; flex-wrap:nowrap; gap:.3rem; min-height:2.35rem; overflow-x:auto; overflow-y:hidden; padding:.25rem .55rem; border-bottom:1px solid var(--line); background:#292a2f; scrollbar-width:thin; } .markdown-tools button { flex:none; min-height:1.75rem; padding:.18rem .4rem; color:var(--muted); font-size:.6rem; }
   .editor-grid { min-width:0; min-height:0; overflow:hidden; flex:1; display:grid; grid-template-columns:minmax(0,1fr) .55rem minmax(0,1fr); } .source-pane,.preview-pane { min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; } .source-pane { position:relative; background:#1f2024; } .preview-pane { background:#25262a; } .resize-handle { position:relative; z-index:3; display:flex; align-items:center; justify-content:center; cursor:col-resize; background:var(--line); touch-action:none; } .resize-handle:hover { background:var(--accent); } body[data-resizing] { cursor:col-resize; user-select:none; } .pane-head { display:flex; flex:none; align-items:center; justify-content:space-between; gap:.6rem; padding:.6rem .85rem; border-bottom:1px solid var(--line); color:var(--muted); font-size:.62rem; letter-spacing:.07em; text-transform:uppercase; }.code-editor { min-height:0; flex:1; overflow:auto; } .code-editor .cm-editor { height:100%; font:.82rem/1.7 'JetBrains Mono Variable',ui-monospace,monospace; } .code-editor .cm-scroller { overflow:auto; } .code-editor .cm-gutters { border:0; background:#1d1e22; color:#6f727d; } .code-editor .cm-activeLineGutter,.code-editor .cm-activeLine { background:#ffffff08; }

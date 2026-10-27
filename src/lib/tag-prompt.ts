@@ -64,6 +64,7 @@ Rules:
 - When a tag means the same thing as one in the existing tag list, return the existing spelling exactly (e.g. return "SQLi" if the list has "SQLi", not "SQL Injection"). The number after each existing tag is how many write-ups use it; prefer established tags when they fit equally well.
 - Match the granularity of the author's tagged examples: one tag for the attack class, then the concrete mechanism (the sink, the filter that was bypassed, the library or primitive abused). Add a bypass tag (e.g. "Filter Bypass", "WAF Bypass") only when getting around a defense is a real step of the solution.
 - A word that only appears in the challenge statement, a failed attempt or an aside is not a tag; the tags must describe what actually led to the flag.
+- Write-ups often test and rule out wrong paths first (sections like "Loại các hướng sai", "hướng sai", "thử … nhưng không được", "không phải …"). An attack class that was tried and ruled out (e.g. "{{7*7}} is not evaluated -> not SSTI") must never be a tag or appear in the summary as part of the solution, even if it is discussed at length.
 - Tags are in English, Title Case or the conventional spelling (e.g. "JWT", "postMessage", "os.path.join"), at most 4 words.
 - The write-up is in Vietnamese with English technical terms; judge by what the solution does, not by how often a word appears.
 - Before answering, check each tag: would a reader searching for it want this write-up? Drop the ones that only appear in passing.
