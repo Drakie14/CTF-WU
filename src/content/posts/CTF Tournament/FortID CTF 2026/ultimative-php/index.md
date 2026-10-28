@@ -10,48 +10,28 @@ tags:
   - Path Traversal
 ---
 
-# Ultimative PHP — Write-up
+## Solution
 
-**Thể loại:** Web · **Kỹ thuật:** Type juggling / so sánh lỏng, unserialize, path traversal
+Trang yêu cầu 4 điều kiện, mỗi điều kiện khai thác một lỗi PHP riêng:
 
-## Tóm tắt
+1. Phải là `administrator`, nhưng tham số `access_level` bị chặn thẳng -> dùng `access.level` (PHP tự đổi dấu `.` thành `_` khi đặt tên biến từ query).
+2. Hai "recovery answer" phải khác nhau nhưng hash SHA-256 phải giống nhau -> dùng mảng.
+3. `code` có MD5 và SHA-256 (9 ký tự đầu) khác chuỗi nhưng `==` phải đúng -> tìm chuỗi dạng `0e…` (magic hash).
+4. Profile bị `unserialize` với class `LegacyTemplate` -> path traversal để đọc `/tmp/flag`.
 
-Trang yêu cầu 4 điều kiện, mỗi điều kiện khai thác một lỗi PHP:
+Qua điều kiện 1: code chặn chuỗi `access_level` trong query thô, nhưng lại đọc giá trị qua `$_GET['access_level']`. PHP chuyển `.` thành `_` khi parse query string thành superglobal, nên gửi `access.level=administrator` vừa không bị chặn ở bước lọc chuỗi, vừa được PHP đọc thành `$_GET['access_level']`.
 
-1. Phải là `administrator`, nhưng tham số `access_level` bị chặn → dùng `access.level` (PHP đổi dấu `.` thành `_`).
-2. Hai "recovery answer" phải khác nhau nhưng có hash SHA-256 giống nhau → dùng **mảng**.
-3. Mã `code` có MD5 và SHA-256 (9 ký tự đầu) khác chuỗi nhưng `==` đúng → tìm **chuỗi "0e…"**.
-4. Profile được `unserialize` với `LegacyTemplate` → **path traversal** để đọc `/tmp/flag`.
+Điều kiện 2, recovery answer dạng mảng: `get_debug_type` của hai giá trị phải giống nhau (cả hai là `array`), `$primary === $backup` phải sai (`primary[0]=a`, `backup[0]=b` khác nhau), nhưng khi nối chuỗi để hash thì `'legacy-recovery:v1:' . $array` luôn ra `"...:Array"` kèm warning `Array to string conversion` — hai mảng khác nhau nối ra cùng một chuỗi, nên hash SHA-256 trùng nhau.
 
-## Bước 1: Qua kiểm tra `access_level`
+Điều kiện 3, magic hash: `$material = 'ULTIMATIVE-PHP-2026:' . $code`, check là:
 
-Code chặn chuỗi `access_level` trong query thô, nhưng kiểm tra giá trị qua `$_GET['access_level']`. PHP chuyển `.` thành `_` khi đặt tên biến từ query, nên:
-
-```
-access.level=administrator
-```
-
-vừa không bị chặn, vừa được đọc là `$_GET['access_level']`.
-
-## Bước 2: Recovery answer dạng mảng
-
-- `get_debug_type` phải giống nhau: cả hai đều là `array`.
-- `$primary === $backup` phải sai: hai mảng có giá trị khác nhau (`primary[0]=a`, `backup[0]=b`).
-- Khi nối chuỗi, `'legacy-recovery:v1:' . $array` cho ra `"...:Array"` (kèm cảnh báo `Array to string conversion`), nên hai hash SHA-256 giống nhau.
-
-## Bước 3: Mã `code` loose-equal
-
-`$material = 'ULTIMATIVE-PHP-2026:' . $code`. Điều kiện:
-
-```php
+```php!
 $legacyDigest !== $modernDigest && $legacyDigest == $modernDigest
 ```
 
-Hai chuỗi 9 ký tự đầu của MD5 và SHA-256 phải là số hợp lệ (dạng `0e…`) và bằng nhau khi so sánh số. Khi cả hai là `0e<chữ số>` thì giá trị đều bằng 0 nên `==` đúng.
+9 ký tự đầu của MD5 và SHA-256 phải đều là chuỗi dạng `0e<số>` (PHP coi là số khi so sánh lỏng), và khi cả hai cùng là `0e...` thì giá trị số đều bằng 0 nên `==` đúng trong khi chuỗi gốc khác nhau. Brute force tìm `code`:
 
-Tìm bằng brute force (Python, cùng prefix), ví dụ:
-
-```python
+```python!
 import hashlib, re
 pat = re.compile(r"^\d+e\d+$")
 for i in range(10**8):
@@ -65,17 +45,13 @@ for i in range(10**8):
         break
 ```
 
-Kết quả: `code=59036305` (MD5 `0e3791209`, SHA-256 `0e9920675`).
+Ra `code=59036305` (MD5 `0e3791209`, SHA-256 `0e9920675`). Lưu ý tránh kết quả có số mũ lớn kiểu `8098e2347`, vì khi đó PHP coi hai số vô hạn cùng dấu là không bằng nhau và quay về so sánh chuỗi.
 
-Lưu ý: không dùng được kết quả có số mũ lớn (ví dụ `8098e2347`), vì PHP coi hai giá trị vô hạn cùng dấu là không bằng nhau và so sánh theo chuỗi.
+Điều kiện 4, profile và path traversal: `LegacyTemplate::__toString` đọc `__DIR__ . '/templates/' . $template`. Code chặn `../` bằng `if (strpos($this->template, '../'))` — nhưng `strpos` trả về `0` khi tìm thấy ở đầu chuỗi, và `0` là falsy trong PHP, nên nếu `../` nằm ngay đầu chuỗi thì điều kiện coi như không match, filter bị vượt qua ngay tại chỗ tưởng đã chặn. Đặt `template` bắt đầu bằng `../` lặp lại để đi lên đủ cấp từ `templates/` tới `/tmp/flag`.
 
-## Bước 4: Profile và path traversal
+Profile cần là object `MigratedProfile` có `displayName` là object `LegacyTemplate`. Khi `(string)$profile` được gọi, `__toString` của `LegacyTemplate` sẽ đọc file cho ta:
 
-`LegacyTemplate::__toString` đọc `__DIR__ . '/templates/' . $template`. Code chặn `../` bằng `if (strpos($this->template, '../'))`. Nếu `../` nằm ở **đầu** chuỗi thì `strpos` trả về `0`, là giá trị falsy, nên điều kiện không đúng và **không bị chặn**. Ta đặt `template` bắt đầu bằng `../` và đi lên 4 cấp (từ `templates/`) để tới `/tmp/flag`.
-
-Profile cần là `MigratedProfile` có `displayName` là object `LegacyTemplate`. Khi `(string)$profile` được gọi, `__toString` chuỗi sẽ đọc file:
-
-```python
+```python!
 import base64
 tpl = "../../../../tmp/flag"
 lt = f'O:14:"LegacyTemplate":1:{{s:8:"template";s:{len(tpl)}:"{tpl}";}}'
@@ -84,7 +60,7 @@ profile = base64.urlsafe_b64encode(ser.encode()).decode().rstrip("=")
 print(profile)
 ```
 
-## Payload cuối
+Gộp cả 4 bước lại:
 
 ```
 /?access.level=administrator&primary[0]=a&backup[0]=b&code=59036305&profile=<profile>
@@ -92,15 +68,4 @@ print(profile)
 
 Flag nằm trong thẻ `<p class="flag">`.
 
-## Kết quả
-
-Đã chạy payload trên instance và nhận được flag:
-
-`FortID{C0RP_M1GR4T10N_1S_WH3R3_D4T4_G03S_T0_D13_10e12d3ef0}`
-
-## Bài học
-
-- `==` với chuỗi trông như số là nguy hiểm. Dùng `===` hoặc `hash_equals`.
-- Hash MD5/SHA-256 bị cắt ngắn và so sánh lỏng dễ gặp "magic hash".
-- `unserialize` với dữ liệu người dùng: dùng `allowed_classes` là chưa đủ nếu các class được phép còn đọc file từ thuộc tính.
-- `strpos(...)` trả về `0` khi tìm thấy ở đầu chuỗi, nên kiểm tra kiểu `if (strpos(...))` là sai. Phải dùng `!== false`.
+-> Flag: `FortID{C0RP_M1GR4T10N_1S_WH3R3_D4T4_G03S_T0_D13_10e12d3ef0}`

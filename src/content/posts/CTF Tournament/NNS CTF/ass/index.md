@@ -51,25 +51,25 @@ Hai tên khác nhau ở mức Python string (qua được kiểm tra trùng tên
 
 Hai bước đăng ký làm thẳng bằng form trên trang.
 
-Bước 1 — Đăng ký ADMIN. Nhập tên `MASSA`, chọn profile `ADMIN`, bấm *Request certificate*. Kết quả chỉ có `certificate`, không có `private_key` (đề không trả key cho ADMIN, ta chỉ cần chiếm slot admin):
+Đăng ký ADMIN trước: nhập tên `MASSA`, chọn profile `ADMIN`, bấm *Request certificate*. Kết quả chỉ có `certificate`, không có `private_key` (đề không trả key cho ADMIN, nhưng ta chỉ cần chiếm slot admin, không cần key của nó):
 
 ![image](./02-form-admin.png)
 
-Bước 2 — Đăng ký CLIENT. Nhập tên `MAẞA` (`MA` + `ẞ` + `A`), chọn `CLIENT`, *Request certificate*. Lần này kết quả có `private_key` — mà subject của nó lại đụng độ cert ADMIN ở trên (vì `ẞ` fold thành `ss`):
+Rồi đăng ký CLIENT: nhập tên `MAẞA` (`MA` + `ẞ` + `A`), chọn `CLIENT`, *Request certificate*. Lần này kết quả có `private_key` — mà subject của nó lại đụng độ cert ADMIN ở trên (vì `ẞ` fold thành `ss`):
 
 ![image](./03-form-client.png)
 
-Ba bước xác thực còn lại làm ngay trong DevTools Console — không cần ký ở ngoài, vì WebCrypto có sẵn `Ed25519`.
+Ba bước xác thực còn lại làm ngay trong DevTools Console, không cần ký ở ngoài vì WebCrypto có sẵn `Ed25519`.
 
-Bước 3 — Xin nonce. `GET /auth/nonce` trả một chuỗi ngẫu nhiên (dùng một lần) mà ta phải ký:
+Xin nonce trước: `GET /auth/nonce` trả một chuỗi ngẫu nhiên (dùng một lần) mà ta phải ký:
 
 ![image](./05-step-nonce.png)
 
-Bước 4 — Ký nonce. Import `private_key` của CLIENT thành khoá `Ed25519` rồi ký chuỗi `nonce`, lấy chữ ký dạng base64. Toàn bộ chạy bằng `crypto.subtle.sign` ngay trong trình duyệt:
+Ký nonce: import `private_key` của CLIENT thành khoá `Ed25519` rồi ký chuỗi `nonce`, lấy chữ ký dạng base64. Toàn bộ chạy bằng `crypto.subtle.sign` ngay trong trình duyệt:
 
 ![image](./06-step-sign.png)
 
-Bước 5 — Nộp /admin. `POST /admin` với cert CLIENT + `nonce` + `signature`. Chữ ký hợp lệ (đúng khoá CLIENT), và khi server chuẩn hoá subject thì cert CLIENT (`MAẞA`) khớp cert ADMIN (`MASSA`) -> trả flag:
+Nộp `/admin`: `POST /admin` với cert CLIENT + `nonce` + `signature`. Chữ ký hợp lệ (đúng khoá CLIENT), và khi server chuẩn hoá subject thì cert CLIENT (`MAẞA`) khớp cert ADMIN (`MASSA`) -> trả flag:
 
 ![image](./07-step-admin.png)
 
