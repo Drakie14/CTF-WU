@@ -20,9 +20,9 @@ Blog CTF cá nhân của Hiếu (Astro). Bài viết nằm trong `src/content/po
 
 ## Văn phong (quan trọng)
 
-Bài mẫu chuẩn là [`XSS.md`](src/content/posts/PortSwigger/XSS.md), chính là văn phong của tác giả. Bài mới hoặc bài được chỉnh sửa phải bám theo:
+Văn phong chuẩn là của tác giả, thể hiện ở toàn bộ bài trong `src/content/posts`, trừ các bài AI viết đang chờ viết lại (xem [`TODO-slop.md`](TODO-slop.md)) và các bài draft của Studio. Tham khảo [`XSS.md`](src/content/posts/PortSwigger/XSS.md) và đọc thêm nhiều bài khác (Dreamhack, aochinh26, PortSwigger, OverTheWire...) chứ đừng chỉ bám một vài bài. Đặc trưng: câu ngắn, mỗi ý một dòng, hay dùng `->`, kể thử-sai thẳng, nhiều ảnh. Bài mới hoặc bài được chỉnh sửa phải bám theo:
 
-- **Ngôi xưng:** luôn dùng "ta" (không "mình", "tôi", "chúng ta"). VD: "ta thấy", "ta nhận thấy", "ta thử nhập".
+- **Ngôi xưng:** linh hoạt, "ta" khi suy luận chung, "tôi" khi nói hành động cá nhân ("Ở đây tôi sử dụng webhook"). Không "chúng ta"/"bạn". Đừng đổi "tôi" thành "ta" ở bài cũ.
 - **Đề bài:** giữ nguyên đề gốc tiếng Anh, không dịch, không sửa định dạng.
 - **Mở đầu Solution:** "Truy cập vào lab/challenge, ta thấy:" + ảnh. Với bài web có input phản chiếu: "Thử nhập payload `1`" để xem input bị chèn vào đâu, trích đoạn source cần lưu ý, rồi chỉ ra "input của user đã được chèn vào ở đoạn này". Bài không thuộc dạng này thì không gượng ép.
 - **Dẫn tới đáp án bằng mũi tên:** `-> Payload: ...` / `-> Flag: ...` / `-> URL: ...`.
