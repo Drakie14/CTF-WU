@@ -43,3 +43,6 @@ graphify-out/
 .claude/
 .agents/
 .codex/
+
+# Sổ theo dõi tiến độ sửa bài của tác giả: chỉ giữ trên máy, không đưa lên repo.
+TODO-slop.md
