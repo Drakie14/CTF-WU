@@ -116,6 +116,7 @@ import { CATEGORIES } from '../../lib/content/constants';
 
       const api = async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
         const res = await fetch(`https://api.github.com/repos/${repo.name}${path}`, {
+          cache: 'no-store', // ref GitHub cache 60s, đọc cũ -> 422 not a fast forward
           ...init,
           headers: {
             Accept: 'application/vnd.github+json',

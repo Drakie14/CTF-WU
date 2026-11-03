@@ -578,6 +578,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       }
       async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
         const response = await fetch(`https://api.github.com/repos/${repo.name}${path}`, {
+          cache: 'no-store', // GitHub trả max-age=60: đọc ref cũ -> commit sai parent -> 422 not a fast forward
           ...init,
           headers: {
             Accept: 'application/vnd.github+json', Authorization: `Bearer ${token()}`,
