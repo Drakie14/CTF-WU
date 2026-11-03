@@ -211,6 +211,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
             import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
       import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
       import { STUDIO_REPO, STUDIO_TOKEN_KEY, ctfFromFolder } from '../../lib/studio';
+      import { localPostsDirectory, probeLocalStudio } from '../../lib/studio-local-fs';
       import { slugify } from '../../lib/content/slug';
       import { buildVocabulary, canonicalTag, mergeAiTags, suggestTags, tagKey, type TagSuggestion, type TagTerm } from '../../lib/studio-tags';
       import { geminiSuggestTags } from '../../lib/studio-gemini-tags';
@@ -230,6 +231,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       import { oneDark } from '@codemirror/theme-one-dark';
       import katex from 'katex';
       import 'katex/dist/katex.min.css';
+      import mermaidUrl from 'mermaid/dist/mermaid.min.js?url';
 
       const $ = <T extends Element = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
       const title = $<HTMLInputElement>('[data-title]');
@@ -279,6 +281,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       let localPermission: PermissionState = 'prompt';
       let mermaidReady: Promise<MermaidApi> | undefined;
       let githubConnected = false;
+      /** Mở qua `npm run dev`: đọc/ghi git và thư mục posts trên máy qua dev server, không cần token hay chọn thư mục. */
+      let localMode = false;
       type SyncMode = 'off' | 'scroll' | 'follow';
       type SyncSide = 'editor' | 'preview';
       type PreviewBlock = { el: HTMLElement; line: number; end: number; top: number; bottom: number };
@@ -487,7 +491,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           return localStorage.getItem(STUDIO_TOKEN_KEY) ?? '';
         } catch { return ''; }
       }
-      const token = () => storedToken() || tokenInput.value.trim();
+      const token = () => (localMode ? 'local-git' : storedToken() || tokenInput.value.trim());
       const localHandleKey = 'posts-root';
       const localBaselineKey = (path: string) => `ctf-wu.studio.sync-baseline.${path}`;
       function localHandleDb(): Promise<IDBDatabase> {
@@ -526,7 +530,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
        * (kể cả khi quyền vẫn "granted"). Phát hiện thì bỏ handle cũ để người dùng chọn lại thư mục mới.
        */
       async function dropStaleLocalDirectory(): Promise<boolean> {
-        if (!localDirectory) return false;
+        if (!localDirectory || localMode) return false;
         try { await (localDirectory as ListableDirectory).entries().next(); return false; }
         catch (error) {
           if (!(error instanceof DOMException && error.name === 'NotFoundError')) return false;
@@ -573,11 +577,16 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       function updateLocalButton() {
         const button = document.querySelector<HTMLButtonElement>('[data-local-connect]');
         if (!button) return;
-        button.textContent = !localDirectory ? 'Local chưa kết nối' : localPermission === 'granted' ? `Local: ${localDirectory.name}` : 'Local: cấp lại quyền';
+        button.textContent = !localDirectory ? 'Local chưa kết nối' : localMode ? 'Local: dev server' : localPermission === 'granted' ? `Local: ${localDirectory.name}` : 'Local: cấp lại quyền';
         button.dataset.connected = String(Boolean(localDirectory && localPermission === 'granted'));
-        button.title = `Chọn thư mục ${localPostsPath} để đồng bộ bài local. Không chọn D:\\Security\\CTF.`;
+        button.title = localMode ? 'Studio chạy qua npm run dev: ghi thẳng vào src/content/posts trên máy.' : `Chọn thư mục ${localPostsPath} để đồng bộ bài local. Không chọn D:\\Security\\CTF.`;
       }
       async function restoreLocalDirectory() {
+        if (localMode) {
+          // Thắng handle cũ trong IndexedDB; shim không bao giờ được lưu vào đó.
+          localDirectory = localPostsDirectory() as unknown as LocalDirectoryHandle; localPermission = 'granted';
+          return updateLocalButton();
+        }
         try {
           localDirectory = await getLocalHandle();
           if (!localDirectory) return updateLocalButton();
@@ -596,17 +605,18 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       function updateConnection() {
         const pill = $('[data-connection]');
         pill.dataset.connected = String(githubConnected);
-        pill.title = githubConnected ? 'GitHub đã kết nối — bấm để sửa token' : 'GitHub chưa kết nối — bấm để nhập token';
-        pill.querySelector('span')!.textContent = githubConnected ? 'Đã kết nối' : 'GitHub';
+        pill.title = localMode ? 'Studio local: đọc git trên máy, Publish bằng git push, không cần token' : githubConnected ? 'GitHub đã kết nối — bấm để sửa token' : 'GitHub chưa kết nối — bấm để nhập token';
+        pill.querySelector('span')!.textContent = localMode ? 'Git local' : githubConnected ? 'Đã kết nối' : 'GitHub';
       }
       function setStatus(message: string, kind: 'info' | 'error' | 'ok' = 'info') {
         for (const target of [status, libraryStatus]) { target.textContent = message; target.dataset.kind = kind; }
       }
       async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-        const response = await fetch(`https://api.github.com/repos/${repo.name}${path}`, {
+        // Studio local: dev server giả lập cùng các endpoint này trên git của máy (src/integrations/studio-local.ts).
+        const response = await fetch(localMode ? `/__studio/git${path}` : `https://api.github.com/repos/${repo.name}${path}`, {
           cache: 'no-store', // GitHub trả max-age=60: đọc ref cũ -> commit sai parent -> 422 not a fast forward
           ...init,
-          headers: {
+          headers: localMode ? { 'x-studio-sync': '1', ...(init.body ? { 'Content-Type': 'application/json' } : {}) } : {
             Accept: 'application/vnd.github+json', Authorization: `Bearer ${token()}`,
             'X-GitHub-Api-Version': '2022-11-28', ...(init.body ? { 'Content-Type': 'application/json' } : {}),
           },
@@ -675,8 +685,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       }
       function loadConfig() {
         repo = { name: STUDIO_REPO.name, branch: STUDIO_REPO.branch };
-        $('[data-repo]').textContent = `${repo.name} / ${repo.branch}`;
-        $('[data-token-box]').hidden = Boolean(storedToken());
+        $('[data-repo]').textContent = `${repo.name} / ${repo.branch}${localMode ? ' · git trên máy' : ''}`;
+        $('[data-token-box]').hidden = localMode || Boolean(storedToken());
         updateConnection();
         void restoreLocalDirectory();
         if (token()) void loadTree();
@@ -856,7 +866,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         restoreDraft(); renderSidebar();
         showComposer();
         $('[data-metadata]').setAttribute('open', '');
-        title.focus();
+        // showComposer hẹn editor.focus() bằng setTimeout; hẹn sau nó để con trỏ nằm ở ô tiêu đề của bài mới.
+        setTimeout(() => title.focus(), 0);
       }
       const KEEP_FILE = '.gitkeep';
       const relPath = (path: string) => path.replace(`${postRoot}/`, '');
@@ -1920,9 +1931,14 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const nodes = preview.querySelectorAll('.mermaid');
         if (!nodes.length) return;
         try {
-          // The pre-bundled browser file has no published TypeScript declaration.
-          // @ts-expect-error Mermaid does not type this browser bundle.
-          mermaidReady ??= import('mermaid/dist/mermaid.min.js').then((module) => module.default as unknown as MermaidApi);
+          // mermaid.min.js là script cổ điển (gán globalThis.mermaid qua biến `var` toàn cục): import như ES module thì biến
+          // đó thành cục bộ và bundle ném TypeError, nên nạp bằng thẻ <script> cùng origin (CSP script-src 'self' vẫn cho).
+          mermaidReady ??= new Promise<MermaidApi>((resolve, reject) => {
+            const script = Object.assign(document.createElement('script'), { src: mermaidUrl });
+            script.onload = () => { const api = (globalThis as { mermaid?: MermaidApi }).mermaid; if (api) resolve(api); else reject(new Error('Không nạp được Mermaid.')); };
+            script.onerror = () => reject(new Error('Không nạp được Mermaid.'));
+            document.head.append(script);
+          });
           const mermaid = await mermaidReady;
           mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
           await mermaid.run({ nodes });
@@ -2128,6 +2144,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         }
       }
       async function connectLocalFolder() {
+        if (localMode) { setStatus('Studio đang chạy qua npm run dev: ghi thẳng vào src/content/posts trên máy, không cần chọn thư mục.', 'info'); return; }
         if (!localDirectory) { await chooseLocalFolder(); return; }
         try {
           const granted = await requestLocalPermission();
@@ -2206,7 +2223,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const collapsed = document.querySelector('.studio')!.toggleAttribute('data-sidebar-collapsed');
         localStorage.setItem('ctf-wu.studio-sidebar-collapsed', String(collapsed));
       });
-      $('[data-connection]').addEventListener('click', () => { $('[data-token-box]').hidden = !($('[data-token-box]').hidden); if (!$('[data-token-box]').hidden) tokenInput.focus(); });
+      $('[data-connection]').addEventListener('click', () => { if (localMode) return setStatus('Studio local dùng git trên máy (push bằng credential của git), không cần GitHub token.', 'info'); $('[data-token-box]').hidden = !($('[data-token-box]').hidden); if (!$('[data-token-box]').hidden) tokenInput.focus(); });
       [title, folder, date, ctf, category, difficulty, tags].forEach((input) => input.addEventListener('input', () => { void renderPreview(); scheduleDraft(); }));
       $('[data-resize]').addEventListener('pointerdown', (event) => {
         const handle = event.currentTarget as HTMLElement; const grid = document.querySelector<HTMLElement>('.editor-grid')!;
@@ -2360,7 +2377,14 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         queueSync('editor');
       }, { passive: true });
       if (localStorage.getItem('ctf-wu.studio-sidebar-collapsed') === 'true') document.querySelector('.studio')!.setAttribute('data-sidebar-collapsed', '');
-      loadConfig(); resetEditor();
+      // npm run dev: mỗi khi file trong src/content/posts đổi (Studio ghi nháp, git pull sau Publish), Astro gửi full-reload không có
+      // triggeredBy tới mọi trang -> Studio tải lại giữa chừng, mất bài đang soạn. Đổi path sang trang .html khác để Vite bỏ qua;
+      // reload do sửa code phía client (có triggeredBy) vẫn giữ.
+      import.meta.hot?.on('vite:beforeFullReload', (payload: { path?: string; triggeredBy?: string }) => {
+        if (!payload.triggeredBy && (payload.path === undefined || payload.path === '*')) payload.path = '/__studio-keep-open.html';
+      });
+      resetEditor();
+      void probeLocalStudio().then((local) => { localMode = local; loadConfig(); });
     </script>
   </body>
 </html>

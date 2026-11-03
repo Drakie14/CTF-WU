@@ -339,6 +339,18 @@ Cú pháp bên trong code block/inline code không bao giờ bị xử lý.
 qua API (không cần server). Repo/nhánh được khai báo trong `src/lib/studio.ts` (hiện là `Drakie14/CTF-WU`,
 nhánh `main`); `/admin/import/` dùng chung cấu hình này.
 
+**Studio local** (mở qua `npm run dev`, ví dụ bằng `Studio.bat`): Studio tự nhận dev server (pill `Git local`,
+nút `Local: dev server`) và không cần token hay chọn thư mục:
+
+- Các lệnh GitHub API của Studio đi qua `/__studio/git` (`src/integrations/studio-local.ts`), chạy trên git
+  của máy: đọc từ `origin/main` (fetch trước), tạo blob/tree/commit bằng plumbing (index tạm, không đụng
+  index đang dùng), Publish = `git push` (origin phải fast-forward, không bao giờ force), rồi `/__studio/sync`
+  pull về như cũ.
+- File nháp và ảnh ghi thẳng vào `src/content/posts` qua `/__studio/fs`, thay cho File System Access API.
+- Chỉ ghi được trong `src/content/posts`. Mọi endpoint `/__studio/*` chỉ nhận request từ chính trang Studio:
+  Host/Origin loopback (chặn DNS rebinding), `Sec-Fetch-Site: same-origin`, header `x-studio-sync`.
+- Trang deploy (Cloudflare) không có các endpoint này nên vẫn dùng GitHub API + token như dưới.
+
 - Duyệt folder theo cây (folder lồng nhau), breadcrumb ở đầu trang, sidebar liệt kê folder con và bài.
 - `+ Folder mới` / `+ Folder con`: tạo folder rỗng (giữ trên GitHub bằng file `.gitkeep`, loader bỏ qua).
 - Chọn một folder bằng ô vuông ở góc card rồi bấm `Đổi tên folder`: Studio chuyển toàn bộ file sang
