@@ -218,6 +218,13 @@ export function studioLocal(root: string, repo: Repo) {
       const data = await readJson<{ sha?: unknown; force?: unknown }>(request);
       if (typeof data.sha !== 'string' || !SHA.test(data.sha)) throw new HttpError(422, 'Thiếu sha');
       if (data.force) throw new HttpError(422, 'Studio local không force push');
+      // POST /git/commits nhận tree bất kỳ trong object DB: chặn ở đây để thứ được push chỉ đổi file trong posts.
+      if (!(await git(root, ['merge-base', '--is-ancestor', tracking, data.sha]).then(() => true, () => false))) {
+        throw new HttpError(422, 'Update is not a fast forward');
+      }
+      const changed = (await git(root, ['diff', '--no-renames', '--name-only', '-z', tracking, data.sha])).toString('utf8').split('\0').filter(Boolean);
+      const outside = changed.filter((file) => !file.startsWith(`${POSTS}/`));
+      if (outside.length) throw new HttpError(422, `Commit đổi file ngoài ${POSTS}: ${outside.slice(0, 5).join(', ')}`);
       try {
         await git(root, ['push', '--quiet', 'origin', `${data.sha}:refs/heads/${branch}`]);
       } catch (error) {

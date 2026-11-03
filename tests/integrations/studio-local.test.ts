@@ -127,6 +127,21 @@ describe('studio local: GitHub API trên git của máy', () => {
     }
   });
 
+  it('PATCH ref không push commit đổi file ngoài posts, kể cả khi tree dựng sẵn trong object DB', async () => {
+    const { origin, work } = setup();
+    const { api } = await start(work);
+    const parent = (await api<{ object: { sha: string } }>('/git/ref/heads/main')).data.object.sha;
+    writeFileSync(join(work, 'package.json'), '{"scripts":{"x":"evil"}}');
+    git(work, 'commit', '-qam', 'local');
+    const tree = git(work, 'rev-parse', 'HEAD^{tree}');
+    const commit = await api<{ sha: string }>('/git/commits', 'POST', { message: 'x', tree, parents: [parent] });
+    expect(commit.status).toBe(201);
+    const reply = await api<{ message: string }>('/git/refs/heads/main', 'PATCH', { sha: commit.data.sha });
+    expect(reply.status).toBe(422);
+    expect(reply.data.message).toContain('package.json');
+    expect(git(origin, 'rev-parse', 'main')).toBe(parent);
+  });
+
   it('chặn request không đến từ trang Studio (DNS rebinding, trang khác)', async () => {
     const { work } = setup();
     const { call, port } = await start(work);
