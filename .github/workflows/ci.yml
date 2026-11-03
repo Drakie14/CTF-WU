@@ -29,14 +29,25 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm run check
-      - run: npm test
-      - name: Build (fail khi có cảnh báo)
+      - run: npm run validate
+      - name: Dùng Chromium có sẵn, chỉ cài nếu thiếu
         run: |
-          set -o pipefail
-          npm run build 2>&1 | tee build.log
-          if grep -nF -e '[WARN]' -e '[markdown] ' build.log; then
-            echo '::error::Build có cảnh báo (frontmatter, ảnh, markdown...). Xem các dòng ở trên.'
-            exit 1
+          browser_path="$(node --input-type=module -e "import { chromium } from '@playwright/test'; console.log(chromium.executablePath())")"
+          if [ ! -x "$browser_path" ]; then
+            browser_path="$(command -v google-chrome || command -v chromium || true)"
           fi
+          if [ -z "$browser_path" ]; then
+            npx playwright install --with-deps chromium --no-shell
+            browser_path="$(node --input-type=module -e "import { chromium } from '@playwright/test'; console.log(chromium.executablePath())")"
+          fi
+          echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$browser_path" >> "$GITHUB_ENV"
+          echo "CHROME_PATH=$browser_path" >> "$GITHUB_ENV"
+      - run: npm run test:e2e
+      - run: npm run lighthouse
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: browser-reports
+          path: |
+            test-results/
+            .lighthouseci/reports/

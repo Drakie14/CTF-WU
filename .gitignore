@@ -46,3 +46,7 @@ graphify-out/
 
 # Sổ theo dõi tiến độ sửa bài của tác giả: chỉ giữ trên máy, không đưa lên repo.
 TODO-slop.md
+
+# Browser test artifacts
+test-results/
+playwright-report/

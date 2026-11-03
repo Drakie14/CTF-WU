@@ -1,4 +1,4 @@
-import { slugifyOrHash } from './slug';
+import { slugifyOrHash } from './slug.ts';
 
 /**
  * Tags hoàn toàn dynamic (mục 10 + 66.5-A): không có danh sách tag cố định.

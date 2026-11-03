@@ -1,3 +1,4 @@
+export { rehypeFixClobberedAnchors, rehypeLinksAndTables } from './shared';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Element, ElementContent, Nodes, Root, Text } from 'hast';
@@ -36,21 +37,6 @@ const t = (value: string): Text => ({ type: 'text', value });
 // (footnote GFM, id do người viết tự đặt).
 // ---------------------------------------------------------------------------
 
-export function rehypeFixClobberedAnchors() {
-  return (tree: Root) => {
-    const ids = new Set<string>();
-    visit(tree, 'element', (el: Element) => {
-      if (typeof el.properties.id === 'string') ids.add(el.properties.id);
-    });
-    visit(tree, 'element', (el: Element) => {
-      const href = el.properties.href;
-      if (el.tagName !== 'a' || typeof href !== 'string' || !href.startsWith('#')) return;
-      const target = decodeURIComponent(href.slice(1));
-      if (!ids.has(target) && ids.has(`user-content-${target}`)) el.properties.href = `#user-content-${target}`;
-    });
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Code block: Shiki + nhãn ngôn ngữ + nút Copy + chế độ wrap (```lang!)
 // Chạy SAU sanitize nên output của Shiki (inline style màu) không bị lọc.
@@ -79,6 +65,11 @@ export function rehypeCodeBlocks() {
     for (const { pre, parent, index } of jobs) {
       const code = pre.children.find((c): c is Element => c.type === 'element' && c.tagName === 'code')!;
       const text = hastText(code).replace(/\n$/, '');
+      if (code.properties.dataLang === 'mermaid') {
+        parent.children[index] = h('pre', { className: ['mermaid'], dataPagefindIgnore: 'all' }, [t(text)]);
+        continue;
+      }
+
       let lang = typeof code.properties.dataLang === 'string' ? code.properties.dataLang : '';
       let label = typeof code.properties.dataLabel === 'string' ? code.properties.dataLabel : '';
       const wrap = code.properties.dataWrap === 'true';
@@ -222,23 +213,6 @@ function hastContains(root: Element, target: Element): boolean {
 // ---------------------------------------------------------------------------
 // Link ngoài: rel="noopener noreferrer"; bảng: bọc để cuộn ngang.
 // ---------------------------------------------------------------------------
-
-export function rehypeLinksAndTables() {
-  return (tree: Root) => {
-    visit(tree, 'element', (el: Element, index, parent) => {
-      // Nội dung spoiler (thường là flag) không được đưa vào chỉ mục tìm kiếm.
-      if (el.tagName === 'details' && classList(el).includes('spoiler')) el.properties.dataPagefindIgnore = 'all';
-      if (el.tagName === 'a' && typeof el.properties.href === 'string' && /^(https?:)?\/\//i.test(el.properties.href)) {
-        el.properties.rel = ['noopener', 'noreferrer'];
-      }
-      if (el.tagName === 'table' && parent && index !== undefined) {
-        parent.children[index] = h('div', { className: ['table-wrap'] }, [el]);
-        return SKIP;
-      }
-      return undefined;
-    });
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Summary tự động: paragraph cấp cao nhất đầu tiên có chữ. KHÔNG lấy nội dung

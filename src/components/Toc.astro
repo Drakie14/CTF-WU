@@ -6,7 +6,7 @@ interface Props {
 }
 
 // TOC tự tạo từ heading cấp 1–3 (#, ##, ###); `[TOC]` trong Markdown đã bị xóa.
-// Thu gọn thành các thanh ngang mờ ở góc phải; hover / focus / chạm vào thì mở danh sách tiêu đề (cuộn được).
+// Thu gọn thành nút ở góc phải; bấm hoặc dùng bàn phím để mở mục lục (cuộn được).
 // Thụt lề theo cấp tương đối: heading nông nhất của bài luôn là cấp 0 (bài chỉ có ##/### không bị thụt thừa).
 const headings = Astro.props.headings.filter((h) => h.depth >= 1 && h.depth <= 3);
 const minDepth = Math.min(...headings.map((h) => h.depth));
@@ -120,8 +120,6 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
       transform 0.15s,
       visibility 0s linear 0.15s;
   }
-  .toc:hover .toc-pop,
-  .toc:focus-within .toc-pop,
   .toc[data-open] .toc-pop {
     opacity: 1;
     visibility: visible;
@@ -227,16 +225,6 @@ const items = headings.map((h) => ({ ...h, level: h.depth - minDepth }));
       max-height: min(55svh, 22rem);
       pointer-events: auto;
     }
-    .toc:hover .toc-pop {
-      opacity: 0;
-      visibility: hidden;
-      transform: translateY(-4px);
-      transition:
-        opacity 0.15s,
-        transform 0.15s,
-        visibility 0s linear 0.15s;
-    }
-    .toc:focus-within .toc-pop,
     .toc[data-open] .toc-pop {
       opacity: 1;
       visibility: visible;

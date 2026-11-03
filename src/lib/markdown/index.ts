@@ -1,26 +1,11 @@
 import type { RehypePlugins, RemarkPlugins, RemarkRehype } from '@astrojs/markdown-remark';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
-import remarkBreaks from 'remark-breaks';
-import remarkGemoji from 'remark-gemoji';
+import { coreRemarkPlugins, coreRehypePlugins } from './core';
 import {
   rehypeAttachments,
   rehypeCodeBlocks,
   rehypeExtractSummary,
-  rehypeFixClobberedAnchors,
   rehypeImagesPipeline,
-  rehypeLinksAndTables,
 } from './rehype-plugins';
-import {
-  remarkCodeMeta,
-  remarkDedupeTitle,
-  remarkGithubAlerts,
-  remarkImageSize,
-  remarkMark,
-  remarkRemoveToc,
-} from './remark-hackmd';
-import { sanitizeSchema } from './sanitize-schema';
-
 export { preprocessHackmd } from './preprocess';
 
 /**
@@ -44,26 +29,14 @@ export const markdownOptions: {
   gfm: true,
   // HackMD không đổi dấu nháy thông minh → tắt để giữ nguyên nội dung.
   smartypants: false,
-  remarkPlugins: [
-    remarkCodeMeta,
-    remarkRemoveToc,
-    remarkDedupeTitle,
-    remarkGithubAlerts,
-      remarkMark,
-    remarkGemoji,
-    remarkImageSize,
-    remarkBreaks,
-  ],
+  remarkPlugins: coreRemarkPlugins as RemarkPlugins,
   rehypePlugins: [
-    rehypeRaw,
-    [rehypeSanitize, sanitizeSchema],
-    rehypeFixClobberedAnchors,
+    ...coreRehypePlugins,
     rehypeExtractSummary,
     rehypeCodeBlocks,
     rehypeAttachments,
     rehypeImagesPipeline,
-    rehypeLinksAndTables,
-  ],
+  ] as RehypePlugins,
   remarkRehype: {
     // Sanitize tự thêm tiền tố `user-content-` → tránh bị thêm hai lần cho footnote.
     clobberPrefix: '',

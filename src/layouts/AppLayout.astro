@@ -6,7 +6,7 @@ import { getSiteContent, type Post } from '../lib/posts';
 
 interface Props extends BaseProps {
   /**
-   * home/filter: desktop hiện danh sách + panel trống; mobile chỉ hiện danh sách.
+   * home: mobile hiện giới thiệu và bài mới trước cây thư mục; filter chỉ hiện danh sách.
    * post/page: mobile chỉ hiện panel (full-screen) với nút Back.
    */
   view: 'home' | 'filter' | 'post' | 'page';
@@ -31,7 +31,7 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
 <BaseLayout {...seo}>
   <div class="shell" data-view={view}>
     <div class="shell-side" transition:persist={persistKey} data-persist-key={persistKey}>
-      <Sidebar tree={tree}stats={{ posts: posts.length, ctfs: ctfs.terms.length }} currentSlug={currentSlug} filter={filter} />
+      <Sidebar tree={tree} stats={{ posts: posts.length, ctfs: ctfs.terms.length }} currentSlug={currentSlug} filter={filter} />
     </div>
     <main id="main" class="panel" tabindex="-1" data-panel data-rbar transition:animate={panelTransition}>
       {view === 'post' && <div class="read-progress" aria-hidden="true" />}
@@ -162,9 +162,21 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
       overflow: visible;
       border-radius: 1.25rem 1.25rem 0 0;
     }
-    .shell[data-view='home'] .panel,
     .shell[data-view='filter'] .panel {
       display: none;
+    }
+    .shell[data-view='home'] {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .shell[data-view='home'] .panel {
+      order: -1;
+      min-height: 0;
+      border-radius: var(--radius-panel);
+    }
+    .shell[data-view='home'] .shell-side {
+      flex: none;
     }
     .shell[data-view='post'] .shell-side,
     .shell[data-view='page'] .shell-side {

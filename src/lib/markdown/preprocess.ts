@@ -96,20 +96,23 @@ interface OpenContainer {
   markerLength: number;
 }
 
-export function preprocessHackmd(markdown: string, warn: PreprocessWarn = () => {}): string {
+export function preprocessHackmd(markdown: string, warn: PreprocessWarn = () => {}, sourceMap?: number[]): string {
   const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
   const lines = markdown.split(/\r?\n/);
   const out: string[] = [];
+  let sourceLine = 0;
+  const push = (...values: string[]) => { out.push(...values); for (const value of values) for (const _line of value.split(/\r?\n/)) { void _line; sourceMap?.push(sourceLine); } };
   const stack: OpenContainer[] = [];
   let fence: string | null = null;
 
   const close = (c: OpenContainer) => {
-    out.push('', c.type === 'spoiler' ? '</details>' : '</div>', '');
+    push('', c.type === 'spoiler' ? '</details>' : '</div>', '');
   };
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
+    sourceLine = index;
     if (fence) {
-      out.push(line);
+      push(line);
       const m = FENCE_RE.exec(line);
       if (m && m[1]![0] === fence[0] && m[1]!.length >= fence.length && line.trim() === m[1]) fence = null;
       continue;
@@ -118,7 +121,7 @@ export function preprocessHackmd(markdown: string, warn: PreprocessWarn = () => 
     // CommonMark: info string của fence dùng backtick không được chứa backtick (```a``` là inline code).
     if (fm && !(fm[1]![0] === '`' && line.slice(line.indexOf(fm[1]!) + fm[1]!.length).includes('`'))) {
       fence = fm[1]!;
-      out.push(line);
+      push(line);
       continue;
     }
 
@@ -128,12 +131,12 @@ export function preprocessHackmd(markdown: string, warn: PreprocessWarn = () => 
       if (type === 'spoiler') {
         const title = open[3] || 'Spoiler';
         stack.push({ type, markerLength: open[1]!.length });
-        out.push('', `<details class="spoiler"><summary>${escapeHtml(title)}</summary>`, '');
+        push('', `<details class="spoiler"><summary>${escapeHtml(title)}</summary>`, '');
         continue;
       }
       if (CALLOUT_TYPES.has(type)) {
         stack.push({ type, markerLength: open[1]!.length });
-        out.push('', `<div class="callout callout-${type}">`, '');
+        push('', `<div class="callout callout-${type}">`, '');
         continue;
       }
     }
@@ -143,7 +146,7 @@ export function preprocessHackmd(markdown: string, warn: PreprocessWarn = () => 
       continue;
     }
 
-    out.push(outsideInlineCode(line, (part) => convertImageSizes(convertDirectives(part, warn))));
+    push(outsideInlineCode(line, (part) => convertImageSizes(convertDirectives(part, warn))));
   }
 
   // Container chưa đóng ở cuối file → tự đóng (HackMD cũng coi như kết thúc).

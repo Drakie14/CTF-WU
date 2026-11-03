@@ -25,6 +25,9 @@
 /og.png
   Cache-Control: public, max-age=86400, must-revalidate
 
+/og/*
+  Cache-Control: public, max-age=86400, must-revalidate
+
 # File đính kèm của bài viết: luôn tải xuống, không bao giờ render/chạy trên domain của site.
 /attachments/*
   ! Content-Security-Policy

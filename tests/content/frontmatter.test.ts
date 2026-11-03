@@ -150,3 +150,8 @@ describe('getPathInfo', () => {
     });
   });
 });
+
+it('suy ra cùng tên CTF với Studio khi có thư mục gom giải',()=>{
+ expect(getPathInfo('/posts','/posts/CTF Tournament/CSS CTF/absurd/index.md').folderCtf).toBe('CSS CTF');
+ expect(getPathInfo('/posts','/posts/Dreamhack/Extra/Bronze/a/index.md').folderCtf).toBe('Dreamhack');
+});

@@ -80,6 +80,7 @@ function render(): void {
 }
 
 function show(on: boolean): void {
+  if (on && !document.documentElement.classList.contains('reze-cursor-on')) promote();
   document.documentElement.classList.toggle('reze-cursor-on', on);
 }
 
@@ -111,6 +112,7 @@ document.addEventListener('astro:before-swap', () => {
 });
 // Sau khi chuyển trang, phần tử dưới chuột đã đổi → chọn lại hình (link/text/thường).
 document.addEventListener('astro:page-load', () => {
+  if (!mousePointer.matches || x < 0 || y < 0) return;
   promote();
   kind = kindOf(document.elementFromPoint(x, y));
   render();

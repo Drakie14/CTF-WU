@@ -1,5 +1,6 @@
 ---
 import { getImage } from 'astro:assets';
+import 'katex/dist/katex.min.css';
 import { render } from 'astro:content';
 import ArticleHeader from '../../components/ArticleHeader.astro';
 import PostRow from '../../components/PostRow.astro';
@@ -34,7 +35,7 @@ const cover = post.data.cover
   : undefined;
 const ogImage = cover
   ? { src: cover.src, width: Number(cover.attributes.width), height: Number(cover.attributes.height), alt: post.data.title }
-  : undefined;
+  : { src: `/og/${post.id}.png`, width: 1200, height: 630, alt: post.data.title };
 ---
 
 <AppLayout

@@ -42,6 +42,11 @@ export function remarkCodeMeta() {
   return (tree: Root, file: VFile) => {
     visit(tree, 'code', (node: Code) => {
       const info = [node.lang, node.meta].filter(Boolean).join(' ');
+      if (/^mermaid!?$/i.test(node.lang ?? '')) {
+        node.lang = 'mermaid'; node.meta = null;
+        node.data = { ...node.data, hProperties: { className: ['language-mermaid'], dataLang: 'mermaid' } };
+        return;
+      }
       const resolved = resolveLanguage(info, node.value);
       if (!resolved.known) {
         markdownWarn(file, `unknown code language "${resolved.original}", rendered as plaintext`);
@@ -197,7 +202,7 @@ export function remarkImageSize() {
       const props: Record<string, number> = {};
       if (m[1]) props.width = Number(m[1]);
       if (m[2]) props.height = Number(m[2]);
-      const prev = (node.data as { hProperties?: Record<string, unknown> } | undefined)?.hProperties;
+      const prev = node.data?.hProperties;
       node.data = { ...node.data, hProperties: { ...prev, ...props } };
     });
   };

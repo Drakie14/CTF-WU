@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { slugifyOrHash } from './slug';
+import { slugifyOrHash } from './slug.ts';
+import { ctfFromFolder } from '../studio.ts';
 
 /**
  * Suy ra thông tin từ đường dẫn file bài viết. Dùng `node:path` để chạy đúng
@@ -10,7 +11,7 @@ import { slugifyOrHash } from './slug';
  *   posts/<slug>/index.md           → slug = <slug>, không có CTF
  *   posts/<ctf>/<slug>/index.md     → slug = <slug>, CTF = <ctf>
  *   posts/<ctf>/<slug>.md           → slug = <slug>, CTF = <ctf>
- * Với cấu trúc lồng sâu hơn, CTF là thư mục cấp đầu tiên dưới `posts/`.
+ * Với cấu trúc lồng sâu hơn, dùng cùng quy tắc Studio: bỏ lớp gom giải như `CTF Tournament/`.
  */
 export interface PathInfo {
   /** Tên file/thư mục gốc (chưa slug hóa) — dùng làm title tạm. */
@@ -46,7 +47,7 @@ export function getPathInfo(postsRoot: string, filePath: string): PathInfo {
   return {
     baseName,
     slug: slugifyOrHash(baseName, 'post'),
-    folderCtf: dirSegments[0] ?? '',
+    folderCtf: ctfFromFolder(dirSegments.join('/')),
     relPath: segments.join('/'),
   };
 }

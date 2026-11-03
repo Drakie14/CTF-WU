@@ -19,6 +19,7 @@ let cache: Promise<SiteContent> | undefined;
 
 /** Tính toàn bộ dữ liệu dùng chung một lần mỗi build. */
 export function getSiteContent(): Promise<SiteContent> {
+  if (import.meta.env.DEV) cache = undefined;
   cache ??= (async () => {
     const posts = (await getCollection('posts')).sort(
       (a, b) => b.data.date.getTime() - a.data.date.getTime() || a.id.localeCompare(b.id),

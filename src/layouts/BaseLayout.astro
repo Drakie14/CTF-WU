@@ -3,6 +3,8 @@ import { ClientRouter } from 'astro:transitions';
 import Background from '../components/Background.astro';
 import { SITE } from '../config/site';
 import '../styles/global.css';
+import lexendLatin from '@fontsource-variable/lexend/files/lexend-latin-wght-normal.woff2?url';
+import lexendVietnamese from '@fontsource-variable/lexend/files/lexend-vietnamese-wght-normal.woff2?url';
 
 export interface Props {
   title: string;
@@ -29,6 +31,8 @@ const canonicalUrl = canonical === false ? undefined : new URL(canonical ?? Astr
 <html lang={SITE.lang}>
   <head>
     <meta charset="utf-8" />
+    <link rel="preload" href={lexendLatin} as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="preload" href={lexendVietnamese} as="font" type="font/woff2" crossorigin="anonymous" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
@@ -71,4 +75,5 @@ const canonicalUrl = canonical === false ? undefined : new URL(canonical ?? Astr
   import '../scripts/transition-click';
   import '../scripts/persist-animations';
   import '../scripts/prefetch';
+  import '../scripts/diagrams';
 </script>

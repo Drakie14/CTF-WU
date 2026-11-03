@@ -28,7 +28,7 @@ export const sanitizeSchema: SanitizeSchema = {
     div: [...(base.attributes?.div ?? []), ['className', ...CALLOUT_CLASSES]],
     p: [...(base.attributes?.p ?? []), ['className', 'callout-title']],
     details: [...(base.attributes?.details ?? []), ['className', 'spoiler']],
-    code: [...(base.attributes?.code ?? []), 'dataLang', 'dataLabel', 'dataWrap'],
+    code: [...(base.attributes?.code ?? []), ['className', /^language-./, 'math-inline', 'math-display'], 'dataLang', 'dataLabel', 'dataWrap'],
     img: [...(base.attributes?.img ?? []), 'width', 'height'],
   },
   // `open` của <details> bị bỏ để spoiler luôn mặc định đóng.

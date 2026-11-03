@@ -1,7 +1,7 @@
 import { parse as parseYaml } from 'yaml';
-import { CATEGORIES, toCategory, toDifficulty, type Category, type Difficulty } from './constants';
-import { parseSiteDate } from './dates';
-import { normalizeTagInput } from './tags';
+import { CATEGORIES, toCategory, toDifficulty, type Category, type Difficulty } from './constants.ts';
+import { parseSiteDate } from './dates.ts';
+import { normalizeTagInput } from './tags.ts';
 
 /**
  * Pipeline frontmatter (mục 13):

@@ -34,11 +34,14 @@ const categories = [
       <div>
         <h1>{SITE.author}</h1>
         <p>{SITE.description}</p>
+        <a class="learn-link" href="/learn/">Đọc theo lộ trình →</a>
       </div>
     </header>
 
-    {posts.length > 0 && <WebRank rank={rank} />}
-    {posts.length > 0 && <Activity {...activity} categories={categories} />}
+    <div class="desktop-stats">
+      {posts.length > 0 && <WebRank rank={rank} />}
+      {posts.length > 0 && <Activity {...activity} categories={categories} />}
+    </div>
 
     {
       latest.length > 0 && (
@@ -61,6 +64,11 @@ const categories = [
     width: min(100%, 42rem);
     margin: 0 auto;
     padding: 8vh 1.5rem 3rem;
+  }
+  .learn-link { display:inline-block; margin-top:.65rem; color:var(--accent); font-size:.85rem; text-underline-offset:.3em; }
+  .desktop-stats {
+    display: grid;
+    gap: 1.25rem;
   }
   .hero {
     display: flex;
@@ -119,9 +127,20 @@ const categories = [
       transform: translateX(4px);
     }
   }
-  @media (max-width: 640px) {
+  @media (max-width: 1023.98px) {
     .home {
-      padding: 1.5rem 1rem 3rem;
+      box-sizing: border-box;
+      padding: 1.5rem 1rem;
+      gap: 1rem;
+    }
+    .desktop-stats {
+      display: none;
+    }
+    .latest :global(li:nth-child(n + 4)) {
+      display: none;
+    }
+    .hero p {
+      font-size: 0.85rem;
     }
   }
 </style>

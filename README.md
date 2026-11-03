@@ -2,12 +2,12 @@
 
 Blog lưu trữ CTF write-up cá nhân: **static site** (Astro) deploy miễn phí trên **Cloudflare Pages**
 từ một **GitHub public repository**. Viết bài trên HackMD → tải file `.md` → thả vào repo → website
-tự build lại. Không database, không server, không serverless function, chi phí 0đ.
+tự build lại. Nội dung được build tĩnh; Pages Function `/api/dreamhack/<id>` phục vụ Studio lấy tier Dreamhack. Studio local có endpoint chỉ chạy khi `npm run dev` để đọc/ghi posts và đồng bộ Git.
 
 - Bố cục chia đôi: danh sách bài dạng **cung tròn** bên trái, nội dung bên phải; View Transitions.
 - Tương thích HackMD: callout, spoiler, `==mark==`, `[TOC]`, emoji, kích thước ảnh, code block
   `lang!`… (xem [HackMD syntax](#hackmd-syntax)).
-- Frontmatter **không bắt buộc**; tag/CTF hoàn toàn dynamic; ảnh remote được tải về lúc build.
+- Loader có fallback khi thiếu frontmatter; bản publish phải qua build strict. Tag/CTF hoàn toàn dynamic; ảnh remote được tải về lúc build.
 - Mục lục tự tạo từ heading `#`, `##`, `###` (thu gọn ở góc phải bài).
 - Tìm kiếm Pagefind, sitemap, RSS feed `/rss.xml` (không có link trên giao diện), `/admin` (Write-up Studio)
   không cần server.
@@ -99,7 +99,7 @@ Có thể dùng [`/admin/studio/`](#admin-write-up-studio) thay cho bước 2–
 challenge trong một file)? Dùng [`/admin/import/`](#import-một-file-md-nhiều-bài) để tự tách thành
 từng bài riêng, phân loại theo heading `#`.
 
-### Frontmatter mẫu (tất cả đều không bắt buộc)
+### Frontmatter mẫu
 
 ```yaml
 ---
@@ -111,18 +111,18 @@ tags: [tag1, tag2]
 ---
 ```
 
-Field khác được hỗ trợ: `difficulty` (`easy|medium|hard|insane`), `points` (số nguyên),
+Field khác được hỗ trợ: `difficulty` (thang Dreamhack: `Sprout`, `Bronze/Silver/Gold/Platinum/Diamond/Master 4..1`), `points` (số nguyên),
 `summary` (hoặc `description` như HackMD), `cover: ./cover.png`, `draft: true` (giữ bài trong repo nhưng ẩn khỏi website).
 
 | Trường hợp | Kết quả |
 | --- | --- |
-| **Quên frontmatter** | Build **vẫn thành công** (có warning). Bài vào nhóm **“Chưa phân loại”** đầu danh sách. |
+| **Quên frontmatter** | Loader dùng fallback và báo warning; `npm run build` sẽ fail để tránh deploy nhầm. Bài vào nhóm **“Chưa phân loại”** đầu danh sách. |
 | Thiếu `title` | Dùng tên file/thư mục làm title (không lấy heading `# ...`). |
 | Thiếu `date` | Ngày commit đầu tiên của file (Git), nếu không có thì ngày sửa file. |
 | Thiếu `ctf` | Suy ra từ thư mục CTF cha, nếu không có thì để trống. |
 | Thiếu `summary` | Lấy đoạn văn đầu tiên (không bao giờ lấy nội dung spoiler/callout). |
-| Field sai / key lạ | Warning ghi rõ file, field, giá trị, default được dùng; build tiếp tục. |
-| Hai bài trùng slug | **Build fail** (lỗi duy nhất làm dừng build). |
+| Field sai / key lạ | Loader dùng fallback; `npm run build` fail khi có warning. |
+| Hai bài trùng slug | **Build fail**. |
 
 - `category` hợp lệ: `web, pwn, crypto, rev, forensics, misc, osint, mobile, cloud` (không phân biệt hoa thường).
 - Mọi ngày được hiểu theo giờ Việt Nam (**Asia/Ho_Chi_Minh**): `date: 2026-09-25` luôn hiển thị 25/09/2026.
@@ -320,7 +320,7 @@ File `.md` tải từ HackMD hiển thị đúng mà không phải sửa tay.
 | Raw HTML an toàn (`<details>`, `<summary>`, `<mark>`, `<kbd>`, `<sub>`, `<sup>`, `<img>`…) | Giữ lại sau khi sanitize |
 | Metadata HackMD trong frontmatter (`lang`, `breaks`, `robots`, `GA`, `disqus`, `type`, `slideOptions`, `author`…) | Bỏ qua im lặng (`tags`, `title`, `description` của HackMD vẫn được dùng) |
 
-### Bị bỏ qua / chuyển đổi (luôn có warning, không fail build)
+### Bị bỏ qua / chuyển đổi (luôn có warning, loader báo warning; build strict sẽ fail)
 
 | Cú pháp | Xử lý |
 | --- | --- |
@@ -413,7 +413,7 @@ frontmatter `title`, `ctf`, `category` (và `date`, `tags` nếu file gốc có)
 
 ### Authentication
 
-Studio chỉ dùng **GitHub Personal Access Token**: tạo token fine-grained trên GitHub (*Settings →
+Studio bản deploy dùng **GitHub Personal Access Token**; Studio local dùng credential Git trên máy và không cần PAT. Để dùng bản deploy, tạo token fine-grained trên GitHub (*Settings →
 Developer settings → Personal access tokens → Fine-grained tokens*), **Repository access** chỉ chọn repo
 blog, **Permissions → Contents: Read and write**, đặt thời hạn ngắn. Dán token ở Studio (hoặc ở hộp thoại
 khi bấm `Admin` trên sidebar); token lưu trong `localStorage` của trình duyệt, gửi thẳng tới
@@ -455,29 +455,22 @@ Shiki khởi tạo WebAssembly và tô màu code trong Preview. Test: `tests/adm
 - **Fixtures**: `npm run build:fixtures` để thử danh sách cong và hiệu năng build với 200 bài.
 - **Knip**: `npx knip` tìm dependency/file/export không dùng (cấu hình ở `knip.json`).
 
+## Quy trình kiểm tra và tính năng đọc bài
+
+- `npm run content:check`: kiểm metadata, CTF theo thư mục và difficulty theo `src/lib/content/constants.ts`. Ngày/CTF thiếu nhưng suy ra được chỉ in INFO. Không đánh giá văn phong, placeholder flag hoặc phần viết sau flag.
+- `npm run build`: build strict, fail khi Astro/Markdown có warning, sau đó Pagefind và verify output. Cùng một lệnh dùng trên local, CI và Cloudflare.
+- `npm run validate`: metadata, lint, type-check, unit test và build; đặt làm build command của Cloudflare nếu muốn chạy đầy đủ mọi bước trước deploy.
+- `npm run test:e2e`: chạy trên bản `dist/`, phục vụ kèm `_headers`. Test dùng GitHub API giả lập, không publish thật và không gọi endpoint ghi file local.
+- Browser Chromium dùng cache của Playwright. Nếu đã có binary khác, đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới file Chrome đó. Chỉ cài browser bằng `npx playwright install chromium --no-shell` khi máy chưa có.
+- `npm run lighthouse`: đo bản build với các ngưỡng trong `lighthouserc.json`; đặt `CHROME_PATH` nếu cần dùng Chromium có sẵn. CI chạy cả E2E và Lighthouse.
+- Trang chủ mobile hiện giới thiệu tác giả và 3 bài mới nhất phía trên cây thư mục; rank/activity giữ ở desktop.
+- `/learn/`: lộ trình theo tag và độ khó, không thay đổi URL bài hiện tại. Những bài thiếu tier nằm cuối chặng.
+- `/og/<slug>.png`: ảnh chia sẻ riêng theo title/CTF/category. Cover do tác giả cung cấp vẫn được ưu tiên.
+
+Studio bảo toàn YAML gốc (field ngoài editor và comment), có ô summary tùy chọn. Khi sửa bài cũ chỉ sửa metadata trong phạm vi tác giả yêu cầu; không tự viết lại body hoặc thay flag. Ngôi xưng và cấu trúc bài linh hoạt theo `AGENTS.md`.
+
+Preview và public dùng chung `src/lib/markdown/core.ts`: HackMD, GFM, math qua KaTeX, sanitize HTML và link ngoài. Mermaid render lazy với `securityLevel: strict`. YouTube được biểu diễn bằng link thường ở cả hai nơi. Ảnh/attachment ở public được tối ưu và copy lúc build; preview dùng URL local/blob tương ứng.
+
 ## Version
 
-Version thực tế đang dùng (khóa trong `package-lock.json`, không tự ý nâng):
-
-| Package | Version |
-| --- | --- |
-| Node.js | 24 (`.nvmrc`), yêu cầu ≥ 22.22.3 |
-| astro | 7.3.5 |
-| @astrojs/markdown-remark | 7.3.1 |
-| @astrojs/rss | 4.0.19 |
-| @astrojs/sitemap | 3.7.4 |
-| shiki | 4.4.3 |
-| sharp | 0.35.4 |
-| pagefind | 1.5.2 |
-| tailwindcss / @tailwindcss/vite | 4.3.3 |
-| typescript | 6.0.3 |
-| vitest | 5.0.2 |
-| eslint / typescript-eslint / eslint-plugin-astro | 10.11.0 / 8.70.1 / 3.2.1 |
-| @astrojs/check | 0.9.10 |
-| @lhci/cli | 0.15.1 |
-| rehype-raw / rehype-sanitize | 7.0.0 / 6.0.0 |
-| remark-breaks / remark-gemoji | 4.0.0 / 8.0.0 |
-| unified / unist-util-visit / vfile / yaml | 11.0.5 / 5.1.0 / 6.0.3 / 2.9.1 |
-| @fontsource-variable/jetbrains-mono / lexend | 5.3.0 / 5.3.0 |
-
-Font được self-host qua Fontsource (có subset tiếng Việt, `font-display: swap`), không dùng Google Fonts.
+Phiên bản dependency được khóa trong `package.json` và `package-lock.json`; dùng `npm ci` để tái lập. Node theo `.nvmrc` và `engines` trong `package.json`.

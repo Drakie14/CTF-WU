@@ -50,9 +50,13 @@ function internalTarget(fromFile, url) {
   return abs;
 }
 
+// Output bất biến trong một lượt verify; mỗi asset/sidebar link xuất hiện ở rất nhiều trang.
+const targetCache = new Map();
 function targetExists(abs) {
-  if (existsSync(abs) && statSync(abs).isFile()) return true;
-  return existsSync(path.join(abs, 'index.html')) || existsSync(`${abs}.html`);
+  if (targetCache.has(abs)) return targetCache.get(abs);
+  const found = (existsSync(abs) && statSync(abs).isFile()) || existsSync(path.join(abs, 'index.html')) || existsSync(`${abs}.html`);
+  targetCache.set(abs, found);
+  return found;
 }
 
 for (const file of files) {

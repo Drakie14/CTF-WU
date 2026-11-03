@@ -70,7 +70,7 @@ function setupToc(panel: HTMLElement): void {
   setupTocPopup(panel);
 }
 
-/** TOC thu gọn: hover/focus mở bằng CSS; chạm (không có hover) thì bật/tắt `data-open`. */
+/** Mở TOC bằng nút để popup không tự bung khi con trỏ đi ngang nút Copy. */
 function setupTocPopup(panel: HTMLElement): void {
   const toc = panel.querySelector<HTMLElement>('[data-toc]');
   const toggle = toc?.querySelector<HTMLButtonElement>('[data-toc-toggle]');
@@ -101,7 +101,7 @@ function setupTocPopup(panel: HTMLElement): void {
   toc.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     setOpen(false);
-    (document.activeElement as HTMLElement | null)?.blur();
+    toggle.focus();
   });
 }
 
