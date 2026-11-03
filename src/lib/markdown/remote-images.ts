@@ -4,10 +4,12 @@ import path from 'node:path';
 
 /**
  * Tải ảnh remote (hackmd.io/_uploads, imgur...) LÚC BUILD vào cache local
- * (`.cache/remote-images/`, đã gitignore). Sau đó ảnh được xử lý như ảnh local
+ * `remote-images/` (tên file = sha256 của URL). Sau đó ảnh được xử lý như ảnh local
  * bằng `astro:assets` → AVIF/WebP, có width/height, không fetch từ browser.
  *
- * Build sau dùng lại file trong cache, không tải lại.
+ * Build sau dùng lại file trong cache, không tải lại. Thư mục này được commit:
+ * build trên Cloudflare/CI không phải tải lại từ HackMD (HackMD lỗi hay xoá ảnh
+ * thì deploy vẫn chạy). Bài mới có ảnh remote: build local tải về đây, commit kèm bài.
  */
 
 const EXT_BY_TYPE: Record<string, string> = {
@@ -25,7 +27,7 @@ const MAX_BYTES = 25 * 1024 * 1024;
 const TIMEOUT_MS = 20_000;
 
 function remoteImageCacheDir(): string {
-  return path.resolve(process.env.REMOTE_IMAGE_CACHE_DIR ?? path.join(process.cwd(), '.cache', 'remote-images'));
+  return path.resolve(process.env.REMOTE_IMAGE_CACHE_DIR ?? path.join(process.cwd(), 'remote-images'));
 }
 
 export function isRemoteUrl(src: string): boolean {

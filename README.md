@@ -133,8 +133,9 @@ Field khác được hỗ trợ: `difficulty` (`easy|medium|hard|insane`), `poin
 - **Ảnh local** để cạnh file `.md`: `![](./flag.png)`. Được tối ưu sang WebP có `srcset`, width/height.
 - **Ảnh remote** (`https://hackmd.io/_uploads/...`, imgur…): được **tải về lúc build**, tối ưu như ảnh
   local; HTML production không còn URL remote. Bạn không phải tự tải hay quản lý thư mục ảnh.
-  Ảnh tải về được cache trong `.cache/` (đã gitignore). Tải lỗi → warning ghi rõ bài + URL, hiển thị
-  alt text, build không fail.
+  Ảnh tải về được cache trong `remote-images/` (tên file = sha256 của URL) và **được commit**, nên build
+  trên Cloudflare/CI không tải lại từ HackMD. Bài mới có ảnh remote: build local một lần rồi commit file
+  mới trong `remote-images/`. Tải lỗi → warning `[markdown]` ghi rõ bài + URL, hiển thị alt text, build không fail.
 - **File đính kèm** (`[solve.py](./solve.py)`, `chall.zip`…) để cạnh bài → được chép vào
   `/attachments/...` và luôn tải xuống (không bao giờ chạy trên domain của site).
 

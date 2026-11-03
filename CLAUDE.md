@@ -40,7 +40,7 @@ Văn phong chuẩn là của tác giả, thể hiện ở toàn bộ bài trong 
 ## Cú pháp markdown (HackMD)
 
 - Code block có dấu `!` để tự xuống dòng: ` ```html! `, ` ```javascript! `, ` ```bash! `, ` ```python! `.
-- Ảnh: `![image](url)`. Ảnh remote (hackmd.io, imgur) được tải về lúc build.
+- Ảnh: `![image](url)`. Ảnh remote (hackmd.io, imgur) được tải về `remote-images/` lúc build; thư mục này được commit để build không phụ thuộc HackMD, bài mới có ảnh remote thì build local rồi commit kèm file mới trong đó.
 - Callout: `:::info`, `:::success`, `:::warning`, `:::danger` ... `:::`. Blockquote `>` cho giải thích sâu; `<center>...</center>` để vẽ luồng suy luận.
 
 ## Nội dung & flag
