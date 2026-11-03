@@ -259,6 +259,8 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       let repo = { name: '', branch: 'main' };
       let openFile: RepoFile | undefined;
       let assets: Asset[] = [];
+      /** Ảnh đã ghi xuống thư mục nháp local rồi bị bấm ×: Publish xoá luôn file, không thì thành untracked mồ côi. */
+      let droppedAssets: Asset[] = [];
       let renderVersion = 0;
       let localDirectory: LocalDirectoryHandle | undefined;
       let editor!: EditorView;
@@ -662,7 +664,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         void renderPreview();
       }
       function resetEditor() {
-        openFile = undefined; localDraftPath = undefined; localDraftOwned = false; writtenAssets.clear();
+        openFile = undefined; localDraftPath = undefined; localDraftOwned = false; writtenAssets.clear(); droppedAssets = [];
         staleButton.hidden = true;
         assets.forEach((asset) => URL.revokeObjectURL(asset.url)); assets = [];
         title.value = ''; date.value = new Date().toISOString().slice(0, 10); ctf.value = ctfFromFolder(folder.value);
@@ -1487,7 +1489,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           face.innerHTML = `${isImageAsset(asset) ? `<img src="${asset.url}" alt="" loading="lazy" draggable="false" />` : `<b class="asset-ext">${escapeHtml(asset.name.split('.').pop()?.slice(0, 5) ?? 'file')}</b>`}<span>${escapeHtml(shortName(asset.name))}</span><em class="asset-badge"></em>`;
           const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'asset-remove'; remove.textContent = '×'; remove.setAttribute('aria-label', `Bỏ ${asset.name}`);
           remove.addEventListener('click', () => {
-            URL.revokeObjectURL(asset.url); assets = assets.filter((entry) => entry !== asset); renderAssets(); void renderPreview(); scheduleDraft();
+            URL.revokeObjectURL(asset.url); assets = assets.filter((entry) => entry !== asset); if (writtenAssets.has(asset)) droppedAssets.push(asset); renderAssets(); void renderPreview(); scheduleDraft();
           });
           const use = (alt: boolean) => { if (alt && item.dataset.used === 'true') jumpToAsset(asset); else insertOwnLine(assetMarkdown(asset)); };
           face.addEventListener('click', (event) => use(event.altKey));
@@ -2043,14 +2045,14 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       /** Ảnh dán rồi xoá khỏi bài: bỏ khỏi kho tệp và xoá file local để không publish và không thành untracked. File đã có trên GitHub thì giữ, vì xoá local sẽ thành thay đổi git. */
       async function pruneUnusedAssets() {
         const used = usedAssetNames(); const directory = articleDirectory();
-        const unused = assets.filter((asset) => !used.has(asset.name) && !remoteBlobs.some((item) => item.path === `${directory}/${asset.name}`));
+        const unused = [...assets, ...droppedAssets].filter((asset) => !used.has(asset.name) && !remoteBlobs.some((item) => item.path === `${directory}/${asset.name}`));
         if (!unused.length) return;
         const target = localDirectory ? await localEntry(directory).catch(() => undefined) : undefined;
         for (const asset of unused) {
           URL.revokeObjectURL(asset.url);
           if (target) await target.removeEntry(asset.name).catch(() => undefined);
         }
-        assets = assets.filter((asset) => !unused.includes(asset)); renderAssets();
+        assets = assets.filter((asset) => !unused.includes(asset)); droppedAssets = []; renderAssets();
       }
       async function publish() {
         if (!token()) { $('[data-token-box]').hidden = false; return setStatus('Nhập GitHub token trước khi publish.', 'error'); }
