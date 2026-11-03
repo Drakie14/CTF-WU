@@ -95,6 +95,9 @@ const ogImage = cover
   }
   /* Bài chiếm trọn panel; TOC nổi ở góc phải (xem Toc.astro), không còn cột riêng. */
   .article {
+    box-sizing: border-box;
+    max-width: 80rem;
+    margin-inline: auto;
     padding: 2.25rem clamp(1.25rem, 3vw, 2.75rem) 4rem;
   }
   .article-grid {
@@ -103,6 +106,12 @@ const ogImage = cover
   /* Chừa chỗ cho thanh mục lục thu gọn để không đè lên chữ. */
   .article-grid:has(> :global(.toc)) > .prose {
     padding-right: 3rem;
+  }
+  /* Giữ dòng văn vừa đọc khi mở rộng panel; ảnh, code và bảng dùng toàn bộ bề ngang. */
+  .prose > :global(:is(p:not(:has(img, picture)), h1, h2, h3, h4, h5, h6, ul, ol, blockquote, hr)) {
+    box-sizing: border-box;
+    max-width: 65ch;
+    margin-inline: auto;
   }
   @media (max-width: 640px) {
     .article {

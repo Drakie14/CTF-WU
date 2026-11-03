@@ -38,10 +38,13 @@ const categories = [
       </div>
     </header>
 
-    <div class="desktop-stats">
-      {posts.length > 0 && <WebRank rank={rank} />}
-      {posts.length > 0 && <Activity {...activity} categories={categories} />}
-    </div>
+    <form class="home-search" action="/search/" method="get" role="search" aria-label="Tìm write-up">
+      <label for="home-q">Tìm write-up</label>
+      <div class="home-search-field">
+        <input id="home-q" name="q" type="search" placeholder="Tiêu đề, nội dung hoặc kỹ thuật…" data-home-search-input />
+        <button type="submit">Tìm</button>
+      </div>
+    </form>
 
     {
       latest.length > 0 && (
@@ -53,6 +56,11 @@ const categories = [
         </section>
       )
     }
+
+    <div class="desktop-stats">
+      {posts.length > 0 && <WebRank rank={rank} />}
+      {posts.length > 0 && <Activity {...activity} categories={categories} />}
+    </div>
   </div>
 </AppLayout>
 
@@ -61,14 +69,56 @@ const categories = [
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
-    width: min(100%, 42rem);
+    box-sizing: border-box;
+    width: min(100%, 48rem);
     margin: 0 auto;
-    padding: 8vh 1.5rem 3rem;
+    padding: clamp(2rem, 5vh, 3rem) 1.5rem 3rem;
   }
   .learn-link { display:inline-block; margin-top:.65rem; color:var(--accent); font-size:.85rem; text-underline-offset:.3em; }
   .desktop-stats {
     display: grid;
     gap: 1.25rem;
+    margin-top: 0.5rem;
+  }
+  .home-search {
+    display: none;
+  }
+  .home-search label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-soft);
+  }
+  .home-search-field {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .home-search input {
+    min-width: 0;
+    flex: 1;
+    padding: 0.7rem 0.75rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.6rem;
+    background: var(--panel-2);
+    color: var(--text);
+    font: inherit;
+    font-size: 1rem;
+  }
+  .home-search input::placeholder {
+    color: var(--muted);
+  }
+  .home-search button {
+    padding: 0.7rem 1rem;
+    border: 0;
+    border-radius: 0.6rem;
+    background: var(--accent);
+    color: #1a0b14;
+    font: inherit;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .home-search button:active {
+    transform: scale(0.98);
   }
   .hero {
     display: flex;
@@ -81,7 +131,6 @@ const categories = [
     width: 2.6rem;
     height: 2.6rem;
     color: var(--accent);
-    filter: drop-shadow(0 0 10px rgb(244 114 182 / 0.5));
   }
   .hero h1 {
     margin: 0;
@@ -99,12 +148,9 @@ const categories = [
   }
   .latest h2 {
     margin: 0.4rem 0 0.6rem;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 1rem;
     font-weight: 600;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--muted);
+    color: var(--text-soft);
   }
   .latest ul {
     list-style: none;
@@ -112,12 +158,6 @@ const categories = [
     padding: 0;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .home > :global(*) {
-      animation: rise 0.7s var(--ease-out) backwards;
-    }
-    .home > :global(:nth-child(2)) { animation-delay: 0.08s; }
-    .home > :global(:nth-child(3)) { animation-delay: 0.16s; }
-    .home > :global(:nth-child(4)) { animation-delay: 0.24s; }
     .latest :global(.row) {
       transition:
         background-color 0.15s,
@@ -135,6 +175,9 @@ const categories = [
     }
     .desktop-stats {
       display: none;
+    }
+    .home-search {
+      display: block;
     }
     .latest :global(li:nth-child(n + 4)) {
       display: none;

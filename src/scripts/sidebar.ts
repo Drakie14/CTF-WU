@@ -177,7 +177,7 @@ function setupCurveFallback(list: HTMLElement): void {
     });
     rows.forEach((row, i) => {
       row.style.transform = `translate3d(${(curve * ks[i]).toFixed(1)}px,0,0)`;
-      row.style.opacity = (0.35 + 0.65 * ks[i]).toFixed(3);
+      row.style.opacity = (0.85 + 0.15 * ks[i]).toFixed(3);
     });
   };
   const schedule = () => {

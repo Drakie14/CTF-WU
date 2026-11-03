@@ -59,6 +59,7 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
   </div>
 
   <div class="sb-tools">
+    <span class="sb-browse-label">Tất cả bài viết</span>
     <form class="sb-search" action="/search/" method="get" role="search" data-search-form>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"></path></svg>
       <label class="sr-only" for="sb-q">Tìm write-up</label>
@@ -133,6 +134,10 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
   .brand-short {
     display: none;
   }
+  @media (min-width: 1024px) and (max-width: 1399.98px) {
+    .brand-full { display: none; }
+    .brand-short { display: inline; }
+  }
   @media (max-width: 479.98px) {
     .sb-header {
       align-items: flex-start;
@@ -200,9 +205,9 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
     gap: 0.25rem;
   }
   .sb-nav a {
-    padding: 0.45rem 0.7rem;
-    font-size: 0.72rem;
-    letter-spacing: 0.16em;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     text-decoration: none;
     color: var(--text-soft);
@@ -255,6 +260,19 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
     display: flex;
     gap: 0.5rem;
     margin: 0.9rem 0 0.6rem;
+  }
+  .sb-browse-label {
+    display: none;
+  }
+  @media (max-width: 1023.98px) {
+    :global(.shell[data-view='home']) .sb-search { display: none; }
+    :global(.shell[data-view='home']) .sb-browse-label {
+      display: block;
+      margin-right: auto;
+      align-self: center;
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+    }
   }
   .sb-search {
     flex: 1;
@@ -391,7 +409,7 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
     color: var(--accent);
     font-size: 0.78rem;
     font-weight: 700;
-    letter-spacing: 0.24em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     /* Nền đặc: dòng cuộn bên dưới không lộ chữ qua header đang dính. */
     background: #1b1226;
@@ -402,14 +420,14 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
   }
   /* Thư mục con (Class / C1, Extra / Bronze …): không dính, nhỏ hơn, thụt theo cấp. */
   :global(.group-sub) {
-    margin-left: 0.9rem;
+    margin-left: 0.6rem;
     border-left: 1px dotted rgb(244 114 182 / 0.3);
   }
   :global(.group-sub > .group-head) {
     position: static;
     padding: 0.55rem 0.5rem 0.4rem 0.75rem;
     font-size: 0.72rem;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.06em;
     color: var(--text-soft);
     background: transparent;
     box-shadow: none;
@@ -533,10 +551,9 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
     flex: 1;
   }
   .row-title {
-    font-weight: 700;
+    font-weight: 600;
     font-size: 0.92rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    letter-spacing: 0.025em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -608,6 +625,25 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
     color: var(--muted);
     white-space: nowrap;
   }
+  /* Sidebar hẹp: metadata xuống dưới để tên bài có đủ chiều ngang. */
+  .sidebar .row {
+    display: grid;
+    grid-template-columns: 0.62rem minmax(0, 1fr);
+    gap: 0.3rem 0.7rem;
+    padding: 0.7rem 1.25rem 0.7rem 0.85rem;
+  }
+  .sidebar .row-main { grid-column: 2; grid-row: 1; }
+  .sidebar .diamond { grid-column: 1; grid-row: 1 / span 2; }
+  .sidebar .row-side { grid-column: 2; grid-row: 2; align-items: flex-start; text-align: left; }
+  .sidebar .row-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+    line-height: 1.5;
+  }
+  .sidebar .pill ~ .pill ~ .pill { display: none; }
+  .sidebar .row-meta { font-size: 0.67rem; }
   /* Màu độ khó (dòng bài, Web rank); cùng bảng màu với badge trong ArticleHeader. */
   .diff-sprout { color: #86efac; }
   .diff-bronze { color: #d6a274; }
@@ -645,7 +681,7 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
       -webkit-box-orient: vertical;
       white-space: normal;
       font-size: 0.85rem;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.025em;
     }
     .row-meta {
       font-size: 0.65rem;
@@ -660,7 +696,7 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
 
   /* ---- Danh sách cong (mục 37–39) ----
      Dòng ở giữa vùng nhìn thấy dịch phải nhiều nhất và rõ nhất; càng xa tâm càng
-     lệch trái và mờ dần. Chỉ animate transform + opacity → không layout shift. */
+     lệch trái. Giữ opacity tối thiểu 0.85 để chữ ở mép vẫn dễ đọc. */
   @supports (animation-timeline: view()) {
     @media (prefers-reduced-motion: no-preference) {
       .sb-list .row {
@@ -676,15 +712,15 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
   @keyframes row-curve {
     0% {
       transform: translateX(0);
-      opacity: 0.35;
+      opacity: 0.85;
     }
     10% {
       transform: translateX(calc(var(--curve) * 0.6));
-      opacity: 0.6;
+      opacity: 0.9;
     }
     25% {
       transform: translateX(calc(var(--curve) * 0.87));
-      opacity: 0.87;
+      opacity: 0.96;
     }
     50% {
       transform: translateX(var(--curve));
@@ -692,15 +728,15 @@ const isOpen = (key: string) => Boolean(filter) || openKeys.has(key);
     }
     75% {
       transform: translateX(calc(var(--curve) * 0.87));
-      opacity: 0.87;
+      opacity: 0.96;
     }
     90% {
       transform: translateX(calc(var(--curve) * 0.6));
-      opacity: 0.6;
+      opacity: 0.9;
     }
     100% {
       transform: translateX(0);
-      opacity: 0.35;
+      opacity: 0.85;
     }
   }
   /* Fallback JS (requestAnimationFrame) ghi trực tiếp transform/opacity. */

@@ -10,8 +10,8 @@ export const TRACKS = [
     title: 'XSS',
     description: 'Từ input phản chiếu tới filter bypass và policy của browser.',
     stages: [
-      { title: 'Context và cách input đi vào trang', tags: ['Reflected XSS', 'Stored XSS', 'DOM XSS'] },
-      { title: 'Filter và HTML parser', tags: ['XSS', 'Filter Bypass', 'CSP Bypass'] },
+      { title: 'Context và cách input đi vào trang', prerequisite: 'HTML, JavaScript cơ bản và cách đọc source của trang.', tags: ['Reflected XSS', 'Stored XSS', 'DOM XSS'] },
+      { title: 'Filter và HTML parser', prerequisite: 'Cách xác định context của input và một payload XSS hoạt động ra sao.', tags: ['XSS', 'Filter Bypass', 'CSP Bypass'] },
     ],
   },
   {
@@ -21,9 +21,10 @@ export const TRACKS = [
     stages: [
       {
         title: 'Query và cách dữ liệu được ghép',
+        prerequisite: 'Cấu trúc HTTP request và câu truy vấn cơ bản.',
         tags: ['SQL Injection', 'SQLi', 'NoSQL Injection', 'GraphQL'],
       },
-      { title: 'Template và command', tags: ['SSTI', 'Command Injection', 'RCE'] },
+      { title: 'Template và command', prerequisite: 'Cách dữ liệu từ request đi vào code phía server, cùng cú pháp shell cơ bản.', tags: ['SSTI', 'Command Injection', 'RCE'] },
     ],
   },
   {
@@ -31,8 +32,8 @@ export const TRACKS = [
     title: 'Access control',
     description: 'Đọc cách ứng dụng nhận diện user và kiểm tra quyền truy cập.',
     stages: [
-      { title: 'Session, cookie và request', tags: ['Cookie', 'JWT', 'CSRF', 'Authentication Bypass'] },
-      { title: 'Object và file', tags: ['IDOR', 'Path Traversal', 'File Upload', 'SSRF'] },
+      { title: 'Session, cookie và request', prerequisite: 'HTTP header, cookie và luồng đăng nhập của một ứng dụng web.', tags: ['Cookie', 'JWT', 'CSRF', 'Authentication Bypass'] },
+      { title: 'Object và file', prerequisite: 'Sự khác nhau giữa xác thực và phân quyền, cùng cách sửa một request.', tags: ['IDOR', 'Path Traversal', 'File Upload', 'SSRF'] },
     ],
   },
 ] as const;

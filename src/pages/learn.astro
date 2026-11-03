@@ -9,9 +9,67 @@ const { posts } = await getSiteContent();
   <article class="learning">
     <header><h1>Lộ trình học</h1><p>Chọn một kỹ thuật và đi từ các bài dễ tới những tình huống phức tạp hơn. Mỗi chặng gom các write-up theo tag; bài chưa có độ khó nằm cuối chặng.</p></header>
     <nav aria-label="Chọn lộ trình">{TRACKS.map(track=><a href={`#${track.id}`}>{track.title}</a>)}</nav>
-    {TRACKS.map(track=><section id={track.id}><h2>{track.title}</h2><p>{track.description}</p>{learningStages(track,posts).map(stage=><section class="stage"><h3>{stage.title}</h3>{stage.posts.length?<ul>{stage.posts.map(post=><PostRow post={post}/>)}</ul>:<p class="empty">Chặng này sẽ được bổ sung khi có write-up phù hợp.</p>}</section>)}</section>)}
+    {TRACKS.map(track => (
+      <section id={track.id} class="track" aria-labelledby={`${track.id}-title`}>
+        <h2 id={`${track.id}-title`}>{track.title}</h2>
+        <p>{track.description}</p>
+        <ol class="stages" aria-label={`Các chặng ${track.title}`}>
+          {learningStages(track, posts).map(stage => (
+            <li class="stage">
+              <h3>{stage.title}</h3>
+              <p class="prerequisite">Trước khi đọc: {stage.prerequisite}</p>
+              {stage.posts.length ? (
+                <ul>{stage.posts.map(post => <PostRow post={post} />)}</ul>
+              ) : (
+                <p class="empty">Chặng này sẽ được bổ sung khi có write-up phù hợp.</p>
+              )}
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
   </article>
 </AppLayout>
 <style>
-.learning{max-width:48rem;margin:auto;padding:2.5rem clamp(1rem,3vw,2.75rem) 4rem}.learning h1{font-size:2rem;margin:0 0 1rem}.learning p{color:var(--text-soft);line-height:1.8}.learning nav{display:flex;flex-wrap:wrap;gap:1.25rem;padding:1rem 0}.learning nav a{color:var(--accent);text-underline-offset:.3em}.learning>section{margin-top:3rem;scroll-margin-top:4rem}.learning h2{font-size:1.5rem}.learning h3{font-size:1rem;color:var(--text-soft);font-weight:500}.stage{margin-top:1.5rem}.stage ul{list-style:none;margin:0;padding:0}.empty{font-size:.9rem}
+  .learning {
+    max-width: 52rem;
+    margin: auto;
+    padding: 2.5rem clamp(1rem, 3vw, 2.75rem) 4rem;
+  }
+  .learning h1 { font-size: 2rem; margin: 0 0 1rem; }
+  .learning p { color: var(--text-soft); line-height: 1.8; }
+  .learning header p { max-width: 65ch; }
+  .learning nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; padding: 0.5rem 0; }
+  .learning nav a { padding-block: 0.5rem; color: var(--accent); text-underline-offset: 0.3em; }
+  .track { margin-top: 2.5rem; scroll-margin-top: 4rem; }
+  .learning h2 { font-size: 1.5rem; margin-bottom: 0.3rem; }
+  .track > p { margin-top: 0; }
+  .stages {
+    list-style: none;
+    border-left: 1px solid var(--panel-border);
+    margin: 1.75rem 0 0 0.4rem;
+    padding: 0 0 0 1.5rem;
+  }
+  .stage { position: relative; padding-bottom: 2rem; }
+  .stage:last-child { padding-bottom: 0; }
+  .stage::before {
+    content: '';
+    position: absolute;
+    left: -1.78rem;
+    top: 0.45rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    transform: rotate(45deg);
+    border: 1px solid var(--accent);
+    background: var(--panel);
+  }
+  .learning h3 { font-size: 1.05rem; color: var(--text); font-weight: 600; margin: 0; }
+  .learning .prerequisite { font-size: 0.85rem; margin: 0.4rem 0 0.9rem; }
+  .stage ul { list-style: none; margin: 0; padding: 0; }
+  .empty { font-size: 0.9rem; }
+  @media (max-width: 767.98px) {
+    .learning { padding: 1.5rem 1rem 3rem; }
+    .stages { padding-left: 1rem; }
+    .stage::before { left: -1.28rem; }
+  }
 </style>

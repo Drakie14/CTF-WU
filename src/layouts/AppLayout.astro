@@ -68,7 +68,7 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
 <style>
   .shell {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-columns: clamp(22rem, 30vw, 28rem) minmax(0, 1fr);
     gap: 1.75rem;
     height: 100dvh;
     padding: 1.5rem 1.75rem 0 2rem;
