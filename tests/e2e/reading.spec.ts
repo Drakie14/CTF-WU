@@ -74,6 +74,15 @@ test('bản đồ nhiều điểm mở cửa sổ chọn bài bằng hover, touc
     const focusBefore = await page.evaluate(() => document.activeElement?.id);
     await first.hover();
     await expect(firstPanel).toBeVisible();
+    await expect.poll(() => page.evaluate(() => {
+      const cursor = document.querySelector<HTMLElement>('.reze-cursor')!;
+      const old = cursor.style.pointerEvents;
+      cursor.style.pointerEvents = 'auto';
+      const rect = cursor.getBoundingClientRect();
+      const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      cursor.style.pointerEvents = old;
+      return topmost?.closest('.reze-cursor') === cursor;
+    })).toBe(true);
     expect(await page.evaluate(() => document.activeElement?.id)).toBe(focusBefore);
     await expect.poll(() => second.evaluate(button => {
       const r = button.getBoundingClientRect();

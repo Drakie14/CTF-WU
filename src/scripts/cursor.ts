@@ -47,8 +47,8 @@ function root(): HTMLElement | null {
 }
 
 /**
- * `<dialog>.showModal()` đưa dialog lên top layer, đè lên mọi z-index → con trỏ vẽ bằng HTML bị che.
- * Cho `.reze-cursor` vào top layer (popover) và đưa lên trên cùng lại mỗi khi có dialog mở.
+ * Dialog và popover dùng top layer nên z-index không thể đưa con trỏ lên trên chúng.
+ * Đưa `.reze-cursor` lên cuối top layer mỗi khi một dialog/popover khác mở.
  */
 function promote(): void {
   const el = document.querySelector<HTMLElement>('.reze-cursor');
@@ -60,9 +60,11 @@ function promote(): void {
     // Trình duyệt không hỗ trợ popover: con trỏ vẫn hiện bình thường trừ khi bị dialog đè.
   }
 }
-new MutationObserver((records) => {
-  if (records.some((r) => r.target instanceof HTMLDialogElement && (r.target as HTMLDialogElement).open)) promote();
-}).observe(document.documentElement, { attributes: true, attributeFilter: ['open'], subtree: true });
+document.addEventListener('toggle', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement) || target.classList.contains('reze-cursor')) return;
+  if (target.matches(':popover-open') || (target instanceof HTMLDialogElement && target.open)) promote();
+}, true);
 
 function kindOf(target: EventTarget | null): Kind {
   if (!(target instanceof Element)) return 'normal';
