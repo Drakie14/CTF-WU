@@ -4,32 +4,96 @@ import PostRow from '../components/PostRow.astro';
 import { getSiteContent } from '../lib/posts';
 import { TRACKS, learningStages } from '../lib/learning';
 const { posts } = await getSiteContent();
+const routes = TRACKS.map(track => {
+  const stages = learningStages(track, posts);
+  const x = (i: number) => i % 2 ? 450 : 120;
+  const y = (i: number) => 64 + i * 160;
+  const point = (i: number) => `${x(i)} ${y(i)}`;
+  const path = `M ${point(0)}` + stages.slice(1).map((_, i) => {
+    const next = i + 1;
+    return ` C ${x(i)} ${y(i) + 110}, ${x(next)} ${y(next) - 110}, ${point(next)}`;
+  }).join('');
+  return { ...track, stages, path, height: stages.length * 160 };
+});
 ---
 <AppLayout view="page" title="Lộ trình học" description="Đọc write-up theo kỹ thuật: XSS, injection và access control.">
   <article class="learning">
-    <header><h1>Lộ trình học</h1><p>Chọn một kỹ thuật và đi từ các bài dễ tới những tình huống phức tạp hơn. Mỗi chặng gom các write-up theo tag; bài chưa có độ khó nằm cuối chặng.</p></header>
+    <header><h1>Lộ trình học</h1><p>Chọn kỹ thuật, mở từng điểm dừng trên đường và đọc các bài từ cơ bản tới nâng cao.</p></header>
     <nav aria-label="Chọn lộ trình">{TRACKS.map(track=><a href={`#${track.id}`}>{track.title}</a>)}</nav>
-    {TRACKS.map(track => (
+    {routes.map(track => (
       <section id={track.id} class="track" aria-labelledby={`${track.id}-title`}>
         <h2 id={`${track.id}-title`}>{track.title}</h2>
         <p>{track.description}</p>
-        <ol class="stages" aria-label={`Các chặng ${track.title}`}>
-          {learningStages(track, posts).map(stage => (
-            <li class="stage">
-              <h3>{stage.title}</h3>
-              <p class="prerequisite">Trước khi đọc: {stage.prerequisite}</p>
-              {stage.posts.length ? (
-                <ul>{stage.posts.map(post => <PostRow post={post} />)}</ul>
-              ) : (
-                <p class="empty">Chặng này sẽ được bổ sung khi có write-up phù hợp.</p>
-              )}
-            </li>
-          ))}
-        </ol>
+        <div class="road-map" style={`--road-height:${track.height}px`}>
+          <svg class="road-drawing" viewBox={`0 0 600 ${track.height}`} preserveAspectRatio="none" aria-hidden="true">
+            <path class="road-edge" d={track.path} />
+            <path class="road-surface" d={track.path} />
+            <path class="road-lane" d={track.path} />
+          </svg>
+          <ol class="stages" aria-label={`Các chặng ${track.title}`}>
+            {track.stages.map((stage, i) => (
+              <li class="stage">
+                <details id={`${track.id}-stage-${i + 1}`} name={`road-${track.id}`} data-learning-stop data-track={track.id}>
+                  <summary class:list={['road-stop', { 'stop-right': i % 2 === 1 }]} style={`left:${i % 2 ? 75 : 20}%;top:${64 + i * 160}px`} aria-controls={`${track.id}-panel-${i + 1}`}>
+                    <span class="stop-number" aria-hidden="true">{i + 1}</span>
+                    <span class="stop-label">
+                      <span class="stop-title">{stage.title}</span>
+                      <span class="stop-hint">{stage.posts.length} bài <span aria-hidden="true">·</span> <span class="stop-action"></span></span>
+                    </span>
+                  </summary>
+                  <section class="stage-panel" id={`${track.id}-panel-${i + 1}`} aria-labelledby={`${track.id}-heading-${i + 1}`}>
+                    <h3 id={`${track.id}-heading-${i + 1}`}>{stage.title}</h3>
+                    <p class="prerequisite">Trước khi đọc: {stage.prerequisite}</p>
+                    {stage.posts.length ? (
+                      <ul>{stage.posts.map(post => <PostRow post={post} />)}</ul>
+                    ) : (
+                      <p class="empty">Chặng này sẽ được bổ sung khi có write-up phù hợp.</p>
+                    )}
+                  </section>
+                </details>
+              </li>
+            ))}
+          </ol>
+        </div>
       </section>
     ))}
   </article>
 </AppLayout>
+
+<script>
+  function restoreStage() {
+    const stage = document.getElementById(location.hash.slice(1));
+    if (stage instanceof HTMLDetailsElement && stage.hasAttribute('data-learning-stop')) stage.open = true;
+  }
+  document.addEventListener('toggle', (event) => {
+    const stage = event.target;
+    if (!(stage instanceof HTMLDetailsElement) || !stage.hasAttribute('data-learning-stop')) return;
+    if (stage.open) {
+      history.replaceState(history.state, '', `#${stage.id}`);
+      requestAnimationFrame(() => {
+        if (stage.open && stage.isConnected) {
+          stage.querySelector('.stage-panel')?.scrollIntoView({
+            block: 'nearest',
+            behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+          });
+        }
+      });
+    } else if (location.hash === `#${stage.id}`) {
+      history.replaceState(history.state, '', `#${stage.dataset.track}`);
+    }
+  }, true);
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element) || !event.target.closest('.stage-panel a.row')) return;
+    try {
+      sessionStorage.setItem('from-list-url', location.pathname + location.search + location.hash);
+    } catch {
+      // Nút Back giữ đường dẫn mặc định nếu storage bị chặn.
+    }
+  });
+  restoreStage();
+  document.addEventListener('astro:page-load', restoreStage);
+  window.addEventListener('hashchange', restoreStage);
+</script>
 <style>
   .learning {
     max-width: 52rem;
@@ -44,32 +108,57 @@ const { posts } = await getSiteContent();
   .track { margin-top: 2.5rem; scroll-margin-top: 4rem; }
   .learning h2 { font-size: 1.5rem; margin-bottom: 0.3rem; }
   .track > p { margin-top: 0; }
+  .road-map { position: relative; margin-top: 1rem; }
+  .road-drawing { position: absolute; inset: 0 0 auto; width: 100%; height: var(--road-height); pointer-events: none; }
+  .road-drawing path { fill: none; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+  .road-edge { stroke: var(--panel-border); stroke-width: 38px; }
+  .road-surface { stroke: var(--panel-2); stroke-width: 32px; }
+  .road-lane { stroke: var(--accent); stroke-width: 2px; stroke-dasharray: 7 11; }
   .stages {
     list-style: none;
-    border-left: 1px solid var(--panel-border);
-    margin: 1.75rem 0 0 0.4rem;
-    padding: 0 0 0 1.5rem;
+    margin: 0;
+    padding: var(--road-height) 0 0;
   }
-  .stage { position: relative; padding-bottom: 2rem; }
-  .stage:last-child { padding-bottom: 0; }
-  .stage::before {
-    content: '';
+  .road-stop {
     position: absolute;
-    left: -1.78rem;
-    top: 0.45rem;
-    width: 0.5rem;
-    height: 0.5rem;
-    transform: rotate(45deg);
-    border: 1px solid var(--accent);
-    background: var(--panel);
+    transform: translate(-50%, -50%);
+    width: 3rem;
+    height: 3rem;
+    list-style: none;
+    border-radius: 50%;
   }
+  .road-stop::-webkit-details-marker { display: none; }
+  .stop-number {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-weight: 700;
+  }
+  .stop-label { position: absolute; left: 3.75rem; top: 50%; transform: translateY(-50%); width: min(14rem, 44vw); box-sizing: border-box; padding: 0.45rem 0.6rem; border-radius: 0.6rem; background: var(--panel); }
+  .stop-right .stop-label { left: auto; right: 3.75rem; text-align: right; }
+  .stop-title { display: block; font-size: 0.95rem; font-weight: 600; line-height: 1.5; }
+  .stop-hint { display: block; margin-top: 0.3rem; color: var(--muted); font-size: 0.8rem; }
+  .stop-action::after { content: 'Xem bài'; color: var(--accent); }
+  details[open] > .road-stop .stop-number { background: var(--accent); color: #1a0b14; }
+  details[open] > .road-stop .stop-action::after { content: 'Thu gọn'; }
+  .road-stop:hover .stop-number { border-width: 4px; }
+  .stage-panel { padding: 1.25rem; border: 1px solid var(--panel-border); border-radius: 0.6rem; background: var(--panel-2); scroll-margin-block: 4.5rem 1rem; }
   .learning h3 { font-size: 1.05rem; color: var(--text); font-weight: 600; margin: 0; }
   .learning .prerequisite { font-size: 0.85rem; margin: 0.4rem 0 0.9rem; }
   .stage ul { list-style: none; margin: 0; padding: 0; }
   .empty { font-size: 0.9rem; }
   @media (max-width: 767.98px) {
     .learning { padding: 1.5rem 1rem 3rem; }
-    .stages { padding-left: 1rem; }
-    .stage::before { left: -1.28rem; }
+    .stop-label { width: min(12rem, 46vw); }
+    .stop-title { font-size: 0.85rem; }
+    .stop-hint { font-size: 0.75rem; }
+    .stage-panel { padding: 1rem 0.75rem; }
   }
 </style>

@@ -58,14 +58,38 @@ test('trang chủ giữ giới thiệu và bài mới trên mobile, cây thư m�
   await expect(page.locator('[data-list-results] a.row').first()).toBeVisible();
 });
 
-test('lộ trình có kiến thức cần biết và điều hướng tới bài viết', async ({ page }) => {
-  await page.goto('/learn/');
+test('nút lộ trình mở con đường, chọn chặng rồi đọc bài và quay lại', async ({ page }, info) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Lộ trình học', exact: true }).click();
+  await expect(page).toHaveURL(/\/learn\/$/);
+  const xss = page.locator('#xss');
+  const first = xss.locator('[data-learning-stop]').first();
+  const second = xss.locator('[data-learning-stop]').nth(1);
+  await expect(first.locator('.stage-panel')).toBeHidden();
+  await expect(second.locator('.stage-panel')).toBeHidden();
+  await first.locator('summary').focus();
+  await page.keyboard.press('Space');
+  await expect(first).toHaveAttribute('open', '');
+  await expect(first.locator('.prerequisite')).toBeVisible();
+  await expect(page).toHaveURL(/#xss-stage-1$/);
+  await second.locator('summary').click();
+  await expect(first.locator('.stage-panel')).toBeHidden();
+  await expect(second.locator('.stage-panel')).toBeVisible();
+  await second.locator('a.row').first().click();
+  await expect(page.locator('[data-article-body]')).toBeVisible();
+  if (info.project.name === 'mobile') await page.locator('[data-back]').click();
+  else await page.goBack();
+  await expect(page).toHaveURL(/\/learn\/#xss-stage-2$/);
+  await expect(page.locator('#xss-stage-2 .stage-panel')).toBeVisible();
+  await page.locator('#xss-stage-2 summary').click();
+  await expect(page.locator('#xss-stage-2 .stage-panel')).toBeHidden();
   await page.getByRole('navigation', { name: 'Chọn lộ trình' }).getByRole('link', { name: 'Injection', exact: true }).click();
   await expect(page).toHaveURL(/#injection$/);
   const track = page.locator('#injection');
   await expect(track.locator('.stage')).toHaveCount(2);
-  await expect(track.locator('.prerequisite').first()).toContainText('HTTP request');
-  await track.locator('a.row').first().click();
+  const stageWithPosts = track.locator('[data-learning-stop]').filter({ has: page.locator('a.row') }).first();
+  await stageWithPosts.locator('summary').click();
+  await stageWithPosts.locator('a.row').first().click();
   await expect(page.locator('[data-article-body]')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

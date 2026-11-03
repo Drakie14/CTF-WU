@@ -465,7 +465,7 @@ Shiki khởi tạo WebAssembly và tô màu code trong Preview. Test: `tests/adm
 - `npm run lighthouse`: đo bản build với các ngưỡng trong `lighthouserc.json`; đặt `CHROME_PATH` nếu cần dùng Chromium có sẵn. CI chạy cả E2E và Lighthouse.
 - Trang chủ desktop đặt bài mới trước rank/activity. Mobile có ô tìm kiếm ngay dưới giới thiệu, rồi tới 3 bài mới và cây thư mục; form tìm kiếm dẫn tới `/search/` và vẫn dùng được khi tắt JavaScript.
 - Sidebar desktop giới hạn chiều rộng, metadata nằm dưới tên bài và hiện tối đa 2 tag. Khung đọc rộng hơn cho ảnh/code, đoạn văn giới hạn ở 65ch.
-- `/learn/`: các chặng nối theo thứ tự, có kiến thức nên biết trước khi đọc; bài được nhóm theo tag và độ khó. Những bài thiếu tier nằm cuối chặng, URL bài hiện tại được giữ nguyên.
+- Nút `Lộ trình học` trên trang chủ có biểu tượng con đường. `/learn/` hiển thị đường đi với các điểm dừng; bấm một chặng để mở danh sách bài và kiến thức cần biết. Bài được nhóm theo tag, sắp theo độ khó; bài thiếu tier nằm cuối chặng. URL ghi nhớ chặng đang mở để quay lại sau khi đọc bài; mở/đóng chặng vẫn dùng được khi tắt JavaScript.
 - `/og/<slug>.png`: ảnh chia sẻ riêng theo title/CTF/category. Cover do tác giả cung cấp vẫn được ưu tiên.
 
 Studio bảo toàn YAML gốc (field ngoài editor và comment), có ô summary tùy chọn. Khi sửa bài cũ chỉ sửa metadata trong phạm vi tác giả yêu cầu; không tự viết lại body hoặc thay flag. Ngôi xưng và cấu trúc bài linh hoạt theo `AGENTS.md`.
