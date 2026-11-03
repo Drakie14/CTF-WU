@@ -1,0 +1,42 @@
+# Kiểm tra mỗi lần push/PR: lint, type check, test, build. Build có cảnh báo (frontmatter sai, ảnh hỏng,
+# markdown lạ...) cũng tính là lỗi, vì những lỗi đó không làm `astro build` fail mà chỉ in ra log.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run check
+      - run: npm test
+      - name: Build (fail khi có cảnh báo)
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
+          if grep -nF -e '[WARN]' -e '[markdown] ' build.log; then
+            echo '::error::Build có cảnh báo (frontmatter, ảnh, markdown...). Xem các dòng ở trên.'
+            exit 1
+          fi
