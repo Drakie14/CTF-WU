@@ -51,12 +51,12 @@ Payload trên sử dụng `URL encoding`, `UNICODE escape` kết hợp với cá
 
 Note:
 
--
+1. 
 :::warning
 Trong payload, `javascript:` nằm trong thuộc tính `src` của `<iframe>`, nên trình duyệt xử lý nó như URL của frame
 Còn `<img>` chỉ tải và giải mã dữ liệu ảnh; nó không tạo một trang JavaScript để thực thi. Vì vậy `javascript:` trong `img` `src` không chạy script.
 :::
-- 
+2. 
 :::warning
 `<scri%0At>locati\u006fn.href='/memo=memo?'%2bdocu\u006dent.cookie</scri%0At>` có được không?
 -> Không chạy được. `%0A` sẽ thành xuống dòng, nhưng trong tên thẻ HTML xuống dòng kết thúc tên thẻ: `<scri%0At>` được hiểu gần như thẻ `<scri>` có thuộc tính `t`, chứ không phải `<script>`. Trình duyệt chỉ bỏ xuống dòng trong `URL scheme` như `javascript:`, không nối lại tên thẻ HTML.
