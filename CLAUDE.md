@@ -58,7 +58,7 @@ Văn phong chuẩn là của tác giả, thể hiện ở toàn bộ bài trong 
 
 ## Phạm vi
 
-Chỉ làm trong `/mnt/d/Hiếu/blog` và `/mnt/d/Hiếu/CTF`. Không truy cập phần khác của `/mnt/d/Hiếu`.
+Chỉ làm trong `/mnt/d/Projects/Blog` và `/mnt/d/Security/CTF`. Không truy cập thư mục khác trên `/mnt/d`.
 
 ## graphify
 

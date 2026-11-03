@@ -31,7 +31,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         </div>
         <div class="top-actions">
           <a href="/admin/import/">Import cả giải</a>
-          <button type="button" class="local-root" data-local-connect title="Chọn thư mục D:\Hiếu\Blog\src\content\posts để đồng bộ bài local">Local chưa kết nối</button>
+          <button type="button" class="local-root" data-local-connect title="Chọn thư mục D:\Projects\Blog\src\content\posts để đồng bộ bài local">Local chưa kết nối</button>
           <button type="button" class="publish" data-publish>Publish</button>
         </div>
       </header>
@@ -398,7 +398,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         $('[data-save-state]').textContent = 'Nháp lưu trong trình duyệt';
       }
       function queueLocalSave() {
-        localWrite = localWrite.then(saveLocalDraft).catch((error) => setStatus(errorMessage(error), 'error'));
+        localWrite = localWrite.then(saveLocalDraft).catch(async (error) => { if (!await dropStaleLocalDirectory()) setStatus(errorMessage(error), 'error'); });
       }
       async function localEntry(path: string): Promise<FileSystemDirectoryHandle | undefined> {
         let target: FileSystemDirectoryHandle = localDirectory!;
@@ -518,6 +518,29 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         db.close();
         return handle as LocalDirectoryHandle | undefined;
       }
+      const localPostsPath = 'D:\\Projects\\Blog\\src\\content\\posts';
+      /**
+       * Handle lưu trong IndexedDB trỏ cứng vào đường dẫn lúc chọn; dời/đổi tên thư mục thì mọi thao tác ném NotFoundError
+       * (kể cả khi quyền vẫn "granted"). Phát hiện thì bỏ handle cũ để người dùng chọn lại thư mục mới.
+       */
+      async function dropStaleLocalDirectory(): Promise<boolean> {
+        if (!localDirectory) return false;
+        try { await (localDirectory as ListableDirectory).entries().next(); return false; }
+        catch (error) {
+          if (!(error instanceof DOMException && error.name === 'NotFoundError')) return false;
+        }
+        localDirectory = undefined; localPermission = 'prompt';
+        const db = await localHandleDb();
+        await new Promise<void>((resolve) => {
+          const transaction = db.transaction('handles', 'readwrite');
+          transaction.objectStore('handles').delete(localHandleKey);
+          transaction.oncomplete = () => resolve(); transaction.onerror = () => resolve();
+        });
+        db.close();
+        updateLocalButton();
+        setStatus(`Thư mục posts đã kết nối trước đó không còn (đã bị dời?). Bấm "Local chưa kết nối" và chọn lại ${localPostsPath}.`, 'error');
+        return true;
+      }
       /** Ảnh dán vào nháp chỉ nằm trong RAM; cất File vào IndexedDB cùng khoá với nháp localStorage để tắt máy mở lại vẫn còn. */
       async function draftAssetsStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
         const db = await localHandleDb();
@@ -550,13 +573,14 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         if (!button) return;
         button.textContent = !localDirectory ? 'Local chưa kết nối' : localPermission === 'granted' ? `Local: ${localDirectory.name}` : 'Local: cấp lại quyền';
         button.dataset.connected = String(Boolean(localDirectory && localPermission === 'granted'));
-        button.title = 'Chọn thư mục D:\\Hiếu\\Blog\\src\\content\\posts để đồng bộ bài local. Không chọn D:\\Hiếu\\CTF.';
+        button.title = `Chọn thư mục ${localPostsPath} để đồng bộ bài local. Không chọn D:\\Security\\CTF.`;
       }
       async function restoreLocalDirectory() {
         try {
           localDirectory = await getLocalHandle();
           if (!localDirectory) return updateLocalButton();
           localPermission = await localDirectory.queryPermission({ mode: 'readwrite' });
+          if (localPermission === 'granted') await dropStaleLocalDirectory();
           updateLocalButton();
         } catch { updateLocalButton(); }
       }
@@ -565,7 +589,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         localPermission = await localDirectory.queryPermission({ mode: 'readwrite' });
         if (localPermission !== 'granted') localPermission = await localDirectory.requestPermission({ mode: 'readwrite' });
         updateLocalButton();
-        return localPermission === 'granted';
+        return localPermission === 'granted' && !await dropStaleLocalDirectory();
       }
       function updateConnection() {
         const pill = $('[data-connection]');
@@ -802,7 +826,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
       const isLocalOnly = (file: RepoFile) => localOnly.some((entry) => entry.path === file.path);
       async function newWriteup() {
         const folderName = currentFolder() || folder.value || 'Dreamhack';
-        const ready = localDirectory ? await requestLocalPermission().catch(() => false) : await chooseLocalFolder();
+        const ready = (localDirectory && await requestLocalPermission().catch(() => false)) || (!localDirectory && await chooseLocalFolder());
         await settleDraft();
         startNewInFolder(folderName);
         setStatus(ready
@@ -2081,9 +2105,10 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
         const picker = (window as DirectoryPickerWindow).showDirectoryPicker;
         if (!picker) { setStatus('Trình duyệt này không hỗ trợ đồng bộ folder local. Dùng Chrome hoặc Edge desktop.', 'error'); return false; }
         try {
+          await dropStaleLocalDirectory();
           const selectedDirectory = await picker.call(window, { id: 'ctf-wu-blog-posts', mode: 'readwrite', ...(localDirectory ? { startIn: localDirectory } : {}) });
           if (selectedDirectory.name.toLowerCase() !== 'posts') {
-            setStatus('Hãy chọn đúng thư mục D:\\Hiếu\\Blog\\src\\content\\posts. Thư mục D:\\Hiếu\\CTF chỉ chứa source và file bài tập.', 'error');
+            setStatus(`Hãy chọn đúng thư mục ${localPostsPath}. Thư mục D:\\Security\\CTF chỉ chứa source và file bài tập.`, 'error');
             return false;
           }
           localDirectory = selectedDirectory;
@@ -2092,17 +2117,21 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           await saveLocalHandle(selectedDirectory);
           updateLocalButton();
           setStatus('Đã kết nối thư mục posts. Bài local sẽ được đối chiếu với GitHub khi mở và sau khi Publish.', 'ok');
-          void scanLocalDrafts();
+          void scanLocalDrafts(); if (!openFile) saveDraft();
           return true;
         }
-        catch { return false; }
+        catch (error) {
+          if (!(error instanceof DOMException && error.name === 'AbortError')) setStatus(`Không mở được hộp chọn thư mục (${errorMessage(error)}). Bấm nút "Local" để chọn lại.`, 'error');
+          return false;
+        }
       }
       async function connectLocalFolder() {
         if (!localDirectory) { await chooseLocalFolder(); return; }
         try {
-          localPermission = await localDirectory.requestPermission({ mode: 'readwrite' });
-          updateLocalButton(); void scanLocalDrafts();
-          setStatus(localPermission === 'granted' ? 'Đã kết nối lại thư mục posts local.' : 'Chưa được cấp quyền đọc và ghi thư mục posts.', localPermission === 'granted' ? 'ok' : 'error');
+          const granted = await requestLocalPermission();
+          if (!localDirectory) { await chooseLocalFolder(); return; }
+          void scanLocalDrafts(); if (granted && !openFile) saveDraft();
+          setStatus(granted ? 'Đã kết nối lại thư mục posts local.' : 'Chưa được cấp quyền đọc và ghi thư mục posts.', granted ? 'ok' : 'error');
         } catch { await chooseLocalFolder(); }
       }
       async function syncLocal({ quiet = false }: { quiet?: boolean } = {}) {
