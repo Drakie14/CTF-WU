@@ -67,3 +67,23 @@ describe('duplicate slug (14)', () => {
     expect(dup).toThrow(/"x"[\s\S]*one\.md[\s\S]*two\/index\.md/);
   });
 });
+
+describe('postsSignature', () => {
+  it('đổi khi thêm thư mục bài mới, giữ nguyên khi không có gì thay đổi', async () => {
+    const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { postsSignature } = await import('../../src/lib/content/loader');
+    const base = await mkdtemp(join(tmpdir(), 'posts-sig-'));
+    try {
+      await writeFile(join(base, 'a.md'), '# a');
+      const before = await postsSignature([base]);
+      expect(await postsSignature([base])).toBe(before);
+      await mkdir(join(base, 'CTF', 'keyring'), { recursive: true });
+      await writeFile(join(base, 'CTF', 'keyring', 'index.md'), '# keyring');
+      expect(await postsSignature([base])).not.toBe(before);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+});

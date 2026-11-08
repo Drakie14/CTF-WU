@@ -64,6 +64,17 @@ export function assertUniqueSlugs(items: Array<{ slug: string; file: string }>):
   }
 }
 
+/** Dấu vân tay của cây bài viết (đường dẫn + mtime + size của mọi file .md); đổi khi thêm/xoá/sửa bài. */
+export async function postsSignature(bases: string[]): Promise<string> {
+  const files = (await Promise.all(bases.map(listMarkdownFiles))).flat();
+  const stats = await Promise.all(
+    files.map(({ absPath }) => fs.stat(absPath).then((s) => `${absPath}:${s.mtimeMs}:${s.size}`, () => absPath)),
+  );
+  return stats.join('\n');
+}
+
+let pollTimer: ReturnType<typeof setInterval> | undefined;
+
 export function postsLoader(options: PostsLoaderOptions): Loader {
   return {
     name: 'ctf-posts-loader',
@@ -72,14 +83,33 @@ export function postsLoader(options: PostsLoaderOptions): Loader {
       if (!ctx.watcher) return;
       const root = fileURLToPath(ctx.config.root);
       const dirs = [options.base, ...(options.extraBases ?? [])].map((b) => path.resolve(root, b));
+      let last = await postsSignature(dirs);
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const onEvent = (changed: string) => {
-        if (!dirs.some((d) => !path.relative(d, changed).startsWith('..'))) return;
+      const reload = () => {
         clearTimeout(timer);
         timer = setTimeout(() => {
-          loadAll(ctx, options).catch((err: unknown) => ctx.logger.error(String(err)));
+          postsSignature(dirs)
+            .then((sig) => {
+              last = sig;
+              return loadAll(ctx, options);
+            })
+            .catch((err: unknown) => ctx.logger.error(String(err)));
         }, 100);
       };
+      const onEvent = (changed: string) => {
+        if (dirs.some((d) => !path.relative(d, changed).startsWith('..'))) reload();
+      };
+      // Watcher trên /mnt/d (WSL DrvFs) có thể chết sau sleep/resume và bỏ lỡ thư mục mới do git pull tạo ra
+      // (Studio publish → /__studio/sync hoặc service blog-sync), nên quét lại định kỳ làm lưới an toàn.
+      clearInterval(pollTimer);
+      pollTimer = setInterval(() => {
+        postsSignature(dirs)
+          .then((sig) => {
+            if (sig !== last) reload();
+          })
+          .catch(() => {});
+      }, 3000);
+      pollTimer.unref();
       for (const d of dirs) ctx.watcher.add(d);
       ctx.watcher.on('add', onEvent);
       ctx.watcher.on('change', onEvent);
