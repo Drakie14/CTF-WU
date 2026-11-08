@@ -50,7 +50,7 @@ const sum = categories.reduce((n, c) => n + c.count, 0);
     <div class="a-map">
       <div class="heatmap" style={`--cols:${columns.length}`} role="group" aria-label={`${total} bài viết trong 6 tháng qua`}>
         {months.map((m) => <span class="h-month" style={`grid-column:${m.x + 2}`}>{m.label}</span>)}
-        {['T2', 'T4', 'T6'].map((label, i) => <span class="h-day" style={`grid-row:${i * 2 + 2}`}>{label}</span>)}
+        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((label, i) => <span class="h-day" style={`grid-row:${i + 2}`}>{label}</span>)}
         {
           columns.map((days, x) =>
             days.map((d, y) =>
