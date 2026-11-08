@@ -110,7 +110,7 @@ const ogImage = cover
   /* Giữ dòng văn vừa đọc khi mở rộng panel; ảnh, code và bảng dùng toàn bộ bề ngang. */
   .prose > :global(:is(p:not(:has(img, picture)), h1, h2, h3, h4, h5, h6, ul, ol, blockquote, hr)) {
     box-sizing: border-box;
-    max-width: 65ch;
+    max-width: var(--prose-measure, 65ch);
     margin-inline: auto;
   }
   @media (max-width: 640px) {

@@ -270,7 +270,15 @@ html.reze-cursor-on .reze-cursor {
 /* ==========================================================================
    Nội dung bài viết (sans-serif, mục 43)
    ========================================================================== */
+/* Độ rộng dòng tính một lần theo cỡ chữ của .prose rồi kế thừa dạng px, để heading (chữ to hơn)
+   và đoạn văn cùng một lề trái khi căn giữa. Trình duyệt không hỗ trợ @property thì về 65ch như cũ. */
+@property --prose-measure {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
 .prose {
+  --prose-measure: 65ch;
   font-family: var(--font-sans);
   /* Phóng to chữ theo bề rộng màn hình để nội dung lấp đầy panel khi zoom out. */
   font-size: clamp(1rem, 0.6rem + 0.7vw, 1.5rem);
@@ -293,18 +301,21 @@ html.reze-cursor-on .reze-cursor {
   letter-spacing: -0.01em;
   scroll-margin-top: 1.5rem;
 }
+/* Heading trong bài luôn nhỏ hơn tiêu đề bài; nhiều bài dùng `# Đề bài` nên h1 cũng là heading mục. */
 .prose h1 {
-  font-size: 1.75em;
+  font-size: 1.5em;
   margin-top: 2em;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--panel-border);
 }
 .prose h2 {
-  font-size: 1.4em;
+  font-size: 1.3em;
   margin-top: 2.4em;
   padding-bottom: 0.35em;
   border-bottom: 1px solid var(--panel-border);
 }
 .prose h3 {
-  font-size: 1.15em;
+  font-size: 1.12em;
   margin-top: 1.6em;
 }
 .prose h4,
