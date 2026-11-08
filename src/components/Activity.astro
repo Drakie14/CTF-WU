@@ -22,88 +22,127 @@ const sum = categories.reduce((n, c) => n + c.count, 0);
 ---
 
 <section class="activity" aria-labelledby="activity-h">
-  <div class="a-head">
-    <h2 id="activity-h">Hoạt động</h2>
-    <p>{total} bài trong 6 tháng · chuỗi dài nhất {longest} ngày</p>
-  </div>
-  <div class="heatmap" style={`--cols:${columns.length}`} role="group" aria-label={`${total} bài viết trong 6 tháng qua`}>
-    {months.map((m) => <span class="h-month" style={`grid-column:${m.x + 2}`}>{m.label}</span>)}
-    {['T2', 'T4', 'T6'].map((label, i) => <span class="h-day" style={`grid-row:${i * 2 + 2}`}>{label}</span>)}
-    {
-      columns.map((days, x) =>
-        days.map((d, y) =>
-          d.items.length ? (
-            // Ô có bài: hover/tap (focus) hiện ngay danh sách bài; nửa phải neo tooltip sang trái để không tràn panel.
-            <div class:list={['cell', `lv${level(d.items.length)}`, { flip: x >= columns.length / 2 }]} style={`grid-area:${y + 2}/${x + 2}`} tabindex="0">
-              <div class="tip" role="tooltip">
-                <b>{display(d.iso)} · {d.items.length} bài</b>
-                <ul>{d.items.map((p) => <li><a href={p.href}>{p.title}</a></li>)}</ul>
-              </div>
-            </div>
-          ) : (
-            <span class="cell lv0" style={`grid-area:${y + 2}/${x + 2}`} title={display(d.iso)}></span>
-          ),
-        ),
-      )
-    }
-  </div>
-  <div class="legend" aria-hidden="true">
-    Ít <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i> Nhiều
-  </div>
-
-  <div class="cats">
-    <div class="cats-bar" role="img" aria-label={categories.map((c) => `${c.label} ${c.count}`).join(', ')}>
-      {categories.map((c) => <span style={`flex:${c.count};--c:${c.color}`} title={`${c.label}: ${c.count}`}></span>)}
+  <div class="a-body">
+    <div class="a-side">
+      <h2 id="activity-h">Hoạt động</h2>
+      <dl class="a-stats">
+        <div><dt>bài viết<br />trong 6 tháng</dt><dd>{total}</dd></div>
+        <div><dt>ngày liên tiếp<br />dài nhất</dt><dd>{longest}</dd></div>
+      </dl>
+      <div class="cats">
+        <div class="cats-bar" role="img" aria-label={categories.map((c) => `${c.label} ${c.count}`).join(', ')}>
+          {categories.map((c) => <span style={`flex:${c.count};--c:${c.color}`} title={`${c.label}: ${c.count}`}></span>)}
+        </div>
+        <ul class="cats-legend">
+          {
+            categories.map((c) => (
+              <li style={`--c:${c.color}`}>
+                {c.href ? <a href={c.href}>{c.label}</a> : <span>{c.label}</span>}
+                <b>{c.count}</b>
+                <small>{Math.round((c.count / sum) * 100)}%</small>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
     </div>
-    <ul class="cats-legend">
-      {
-        categories.map((c) => (
-          <li style={`--c:${c.color}`}>
-            {c.href ? <a href={c.href}>{c.label}</a> : <span>{c.label}</span>}
-            <b>{c.count}</b>
-            <small>{Math.round((c.count / sum) * 100)}%</small>
-          </li>
-        ))
-      }
-    </ul>
+
+    <div class="a-map">
+      <div class="heatmap" style={`--cols:${columns.length}`} role="group" aria-label={`${total} bài viết trong 6 tháng qua`}>
+        {months.map((m) => <span class="h-month" style={`grid-column:${m.x + 2}`}>{m.label}</span>)}
+        {['T2', 'T4', 'T6'].map((label, i) => <span class="h-day" style={`grid-row:${i * 2 + 2}`}>{label}</span>)}
+        {
+          columns.map((days, x) =>
+            days.map((d, y) =>
+              d.items.length ? (
+                // Ô có bài: hover/tap (focus) hiện ngay danh sách bài; nửa phải neo tooltip sang trái để không tràn panel.
+                <div class:list={['cell', `lv${level(d.items.length)}`, { flip: x >= columns.length / 2 }]} style={`grid-area:${y + 2}/${x + 2}`} tabindex="0">
+                  <div class="tip" role="tooltip">
+                    <b>{display(d.iso)} · {d.items.length} bài</b>
+                    <ul>{d.items.map((p) => <li><a href={p.href}>{p.title}</a></li>)}</ul>
+                  </div>
+                </div>
+              ) : (
+                <span class="cell lv0" style={`grid-area:${y + 2}/${x + 2}`} title={display(d.iso)}></span>
+              ),
+            ),
+          )
+        }
+      </div>
+      <div class="legend" aria-hidden="true">
+        Ít <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i> Nhiều
+      </div>
+    </div>
   </div>
 </section>
 
 <style>
   .activity {
-    padding: 1.3rem 1.5rem 1.4rem;
-    border: 1px solid var(--panel-border);
-    border-radius: 0.75rem;
-    background: var(--panel-2);
+    position: relative;
+    isolation: isolate;
+    container-type: inline-size;
+    padding: 1.25rem 1.4rem 1.2rem;
     text-align: left;
   }
-  .a-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.3rem 1rem;
-    margin-bottom: 0.9rem;
+  /* Nền + viền vát góc như WebRank; đặt ở ::before để clip-path không cắt tooltip của heatmap. */
+  .activity::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border: 1px solid var(--panel-border);
+    background: var(--panel-2);
+    clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
   }
-  .a-head h2 {
+  .a-body {
+    display: grid;
+    grid-template-columns: minmax(8.5rem, 10.5rem) minmax(0, 1fr);
+    gap: 1.25rem 2rem;
+  }
+  .a-side {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .a-side h2 {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: var(--muted);
   }
-  .a-head p {
+  .a-stats {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0.8rem 0 0;
+  }
+  /* Số lớn bên trái, nhãn bên phải (dd đứng sau dt trong DOM nên đảo hàng). */
+  .a-stats div {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .a-stats dd {
+    min-width: 2ch;
     margin: 0;
-    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text);
+  }
+  .a-stats dt {
+    font-size: 0.7rem;
+    line-height: 1.3;
     color: var(--text-soft);
   }
   .heatmap {
     display: grid;
     grid-template-columns: 1.4rem repeat(var(--cols), minmax(0, 1fr));
-    grid-template-rows: auto;
-    gap: clamp(2px, 0.5vw, 4px);
+    gap: 3px;
   }
   .h-month,
   .h-day {
@@ -115,7 +154,7 @@ const sum = categories.reduce((n, c) => n + c.count, 0);
   }
   .h-month {
     grid-row: 1;
-    padding-bottom: 0.2rem;
+    padding-bottom: 0.3rem;
   }
   .h-day {
     grid-column: 1;
@@ -124,7 +163,7 @@ const sum = categories.reduce((n, c) => n + c.count, 0);
   .cell {
     position: relative;
     aspect-ratio: 1;
-    border-radius: 22%;
+    border-radius: 3px;
   }
   div.cell {
     cursor: pointer;
@@ -201,68 +240,67 @@ const sum = categories.reduce((n, c) => n + c.count, 0);
     color: var(--accent);
   }
   .lv0 {
-    background: rgb(255 255 255 / 0.05);
+    background: rgb(255 255 255 / 0.045);
   }
   .lv1 {
-    background: rgb(244 114 182 / 0.35);
+    background: color-mix(in srgb, var(--accent) 32%, transparent);
   }
   .lv2 {
-    background: rgb(244 114 182 / 0.65);
+    background: color-mix(in srgb, var(--accent) 62%, transparent);
   }
   .lv3 {
     background: var(--accent);
-  }
-  div.lv3 {
-    box-shadow: 0 0 6px rgb(244 114 182 / 0.7);
   }
   .legend {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.25rem;
-    margin-top: 0.5rem;
+    gap: 3px;
+    margin-top: 0.6rem;
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     color: var(--muted);
   }
   .legend i {
-    width: 0.65rem;
-    height: 0.65rem;
+    width: 0.6rem;
+    height: 0.6rem;
     border-radius: 2px;
   }
+  .legend i:first-of-type {
+    margin-left: 0.3rem;
+  }
+  .legend i:last-of-type {
+    margin-right: 0.3rem;
+  }
   .cats {
-    margin-top: 1.2rem;
-    padding-top: 1.1rem;
-    border-top: 1px solid var(--panel-border);
+    margin-top: auto;
+    padding-top: 1rem;
   }
   .cats-bar {
     display: flex;
-    gap: 3px;
-    height: 0.55rem;
-    border-radius: 999px;
-    overflow: hidden;
+    gap: 2px;
+    height: 4px;
   }
   .cats-bar span {
     background: var(--c);
   }
   .cats-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem 1.1rem;
-    margin: 0.75rem 0 0;
+    display: grid;
+    gap: 0.3rem;
+    margin: 0.6rem 0 0;
     padding: 0;
     list-style: none;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
   .cats-legend li {
     display: flex;
     align-items: baseline;
-    gap: 0.35rem;
+    gap: 0.4rem;
   }
   .cats-legend li::before {
     content: '';
-    width: 0.55rem;
-    height: 0.55rem;
+    width: 0.45rem;
+    height: 0.45rem;
     align-self: center;
     background: var(--c);
     transform: rotate(45deg);
@@ -276,12 +314,36 @@ const sum = categories.reduce((n, c) => n + c.count, 0);
     color: var(--c);
   }
   .cats-legend b {
+    margin-left: auto;
     font-family: var(--font-mono);
+    font-weight: 600;
     color: var(--c);
   }
   .cats-legend small {
+    min-width: 2.2rem;
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: 0.66rem;
+    text-align: right;
     color: var(--muted);
+  }
+  /* Panel hẹp (sidebar mở rộng ở màn 1024px): xếp chồng, số liệu thành một hàng. */
+  @container (max-width: 34rem) {
+    .a-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .a-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .cats-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem 1.25rem;
+    }
+    .cats-legend b {
+      margin-left: 0;
+    }
+    .cats-legend small {
+      min-width: 0;
+    }
   }
 </style>
