@@ -13,7 +13,7 @@ tags:
 
 ## Đề bài 
 listen....when you find the answer it will glisten.....
-File: [12345678.wav](https://github.com/Drakie14/Challenges/blob/CSAW'-26-QUALS/12345678.wav)
+File: [12345678.wav](https://github.com/Drakie14/Challenges/blob/main/CSAW'-26-QUALS/12345678.wav)
 ## Solution 
 Ta sử dụng `Audacity` để mở file
 ![image](https://hackmd.io/_uploads/rklVV0J9Mg.png)
