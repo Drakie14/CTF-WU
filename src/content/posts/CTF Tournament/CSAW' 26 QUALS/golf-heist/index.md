@@ -18,7 +18,7 @@ Avispa Country Club is where old money like Woozie and Ryder think their vault i
 
 Word is, there's a Golden Putter in that vault. One of one. All you have to do is find the right numbers, speak the right words, and let the caddy do the rest - the caddy always does.
 https://golf-heist.ctf.csaw.io/
-File: [golf-heist.zip](https://github.com/Drakie14/Challenges/blob/CSAW'-26-QUALS/golf-heist.zip)
+File: [golf-heist.zip](https://github.com/Drakie14/Challenges/main/blob/CSAW'-26-QUALS/golf-heist.zip)
 ## Solution
 Truy cập trang, ta thấy giao diện "Avispa Country Club":
 
