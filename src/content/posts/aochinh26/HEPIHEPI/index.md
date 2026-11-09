@@ -17,6 +17,7 @@ tags:
 # Đề bài
 Challenge cho sẵn source code một web fansite chạy Node.js + Express. Mục tiêu là đọc được `/flag.txt`, mà file này chỉ `root` đọc được nên ta phải gọi binary setuid `readflag` để lấy nội dung, tức là cần đạt được RCE.
 
+File: [HEPIHEPI](https://github.com/Drakie14/Challenges/blob/main/aochinh26/ez_web.zip)
 # Solution
 Truy cập vào challenge, ta thấy một trang fansite của nhóm nhạc HepiHepi:
 
