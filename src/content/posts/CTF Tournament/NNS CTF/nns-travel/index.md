@@ -14,7 +14,7 @@ NNS Air has launched a brand new travel agency: NNS Air Travel Agency. Now you j
 
 The flag is located at `/flag.txt`.
 
-File: [web_nns-travel.tar.gz](https://github.com/Drakie14/Challenges/main/blob/NNS-CTF/web_nns-travel.tar.gz)
+File: [web_nns-travel.tar.gz](https://github.com/Drakie14/Challenges/blob/main/NNS-CTF/web_nns-travel.tar.gz)
 
 ## Solution
 Truy cập trang, ta thấy giao diện của "NNS Air Travel Agency":
