@@ -14,7 +14,7 @@ tags:
 ## Đề bài 
 Everything should be self-serve in 2026
 
-File: [web_ass.tar.gz](https://github.com/Drakie14/Challenges/main/blob/NNS-CTF/web_ass.tar.gz)
+File: [web_ass.tar.gz](https://github.com/Drakie14/Challenges/blob/main/NNS-CTF/web_ass.tar.gz)
 ## Solution
 Truy cập trang, ta thấy một CA "Administration Self-Service" cho tự đăng ký certificate (chọn profile `CLIENT`/`ADMIN`):
 
