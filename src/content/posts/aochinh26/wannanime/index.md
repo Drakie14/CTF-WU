@@ -14,7 +14,7 @@ tags:
 ---
 
 # Đề bài
-File: [wannanime](https://github.com/Drakie14/Challenges/blob/aochinh26/wannanime.zip)
+File: [wannanime](https://github.com/Drakie14/Challenges/blob/main/aochinh26/wannanime.zip)
 
 # Solution
 Truy cập trang web, ta thấy giao diện sau:
