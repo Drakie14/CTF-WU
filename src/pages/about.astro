@@ -26,13 +26,13 @@ const socials = [
 
 const profiles = [
   { title: 'Dreamhack', sub: 'Wargame profile', href: 'https://dreamhack.io/users/104151', color: '#7dd3fc', icon: 'M12 2 22 12 12 22 2 12Zm0 5-5 5 5 5 5-5Z' },
-  { title: 'UIT-AncungbaTuyet', sub: 'Team trên CTFtime', href: 'https://ctftime.org/team/450980', color: 'var(--accent)', icon: 'M5 2h2v20H5Zm3 1h11l-2.5 4.5L19 12H8Z' },
 ];
 
-const friends: Array<{ host?: string; category: keyof typeof CATEGORY_META }> = [
-  { host: 'lunathewanderer.github.io', category: 'forensics' },
-  { host: 'lunuyennhi-dev.github.io', category: 'crypto' },
-  { category: 'pwn' },
+const members: Array<{ name: string; href: string; cover: string; category: keyof typeof CATEGORY_META }> = [
+  { name: SITE.author, href: '/', cover: '/og.png', category: 'web' },
+  { name: 'lunathewanderer', href: 'https://lunathewanderer.github.io/', cover: '/images/team/luna.webp', category: 'forensics' },
+  { name: 'lunuyennhi', href: 'https://lunuyennhi-dev.github.io/', cover: '/images/team/lun.webp', category: 'crypto' },
+  { name: 'thuhan01', href: 'https://thuhan01.github.io/', cover: '/images/team/han.webp', category: 'pwn' },
 ];
 ---
 
@@ -96,7 +96,7 @@ const friends: Array<{ host?: string; category: keyof typeof CATEGORY_META }> = 
     </div>
     <section class="links" aria-labelledby="profiles-h">
       <h2 id="profiles-h" class="label">Hồ sơ CTF</h2>
-      <ul class="cards two">
+      <ul class="cards">
         {
           profiles.map((p) => (
             <li>
@@ -113,34 +113,25 @@ const friends: Array<{ host?: string; category: keyof typeof CATEGORY_META }> = 
         }
       </ul>
     </section>
-    <section class="links" aria-labelledby="friends-h">
-      <h2 id="friends-h" class="label">Blog của bạn bè</h2>
-      <ul class="cards stack">
+    <section class="links team" aria-labelledby="team-h">
+      <a class="team-cover" href="https://ctftime.org/team/450980" target="_blank" rel="noopener noreferrer">
+        <h2 id="team-h">UIT-AncungbaTuyet <span aria-hidden="true">↗</span></h2>
+        <img src="/images/team/uit-ancungbatuyet.webp" alt="Ảnh team UIT-AncungbaTuyet" width="960" height="960" loading="lazy" decoding="async" />
+      </a>
+      <h3 id="friends-h" class="sr-only">Members</h3>
+      <ul class="members" aria-labelledby="friends-h">
         {
-          friends.map((f) => {
-            const meta = CATEGORY_META[f.category];
-            const body = (
-              <>
-                <span class="badge">{meta.label}</span>
-                <span class="c-body">
-                  <strong>{f.host ? f.host.replace('.github.io', '') : meta.label}</strong>
-                  <small>{f.host ?? 'Chưa có blog'}</small>
+          members.map((member) => (
+            <li>
+              <a class="member" href={member.href} target={member.href === '/' ? undefined : '_blank'} rel={member.href === '/' ? undefined : 'noopener noreferrer'}>
+                <span class="member-info">
+                  <span class="member-category">{CATEGORY_META[member.category].label}</span>
+                  <strong>{member.name}</strong>
                 </span>
-              </>
-            );
-            return (
-              <li>
-                {f.host ? (
-                  <a class="card" href={`https://${f.host}/`} target="_blank" rel="noopener noreferrer" style={`--c:${meta.color}`}>
-                    {body}
-                    <span class="arrow" aria-hidden="true">↗</span>
-                  </a>
-                ) : (
-                  <div class="card pending" style={`--c:${meta.color}`}>{body}</div>
-                )}
-              </li>
-            );
-          })
+                <img src={member.cover} alt={`Ảnh bìa blog ${member.name}`} width={member.category === 'web' ? 1200 : 800} height={member.category === 'web' ? 630 : 450} loading="lazy" decoding="async" />
+              </a>
+            </li>
+          ))
         }
       </ul>
     </section>
@@ -309,21 +300,6 @@ const friends: Array<{ host?: string; category: keyof typeof CATEGORY_META }> = 
     padding: 0;
     list-style: none;
   }
-  .cards.two {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .stack .card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.55rem;
-  }
-  .two .c-body strong {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .stack .c-body {
-    width: 100%;
-  }
   .card {
     --c: var(--accent);
     position: relative;
@@ -372,17 +348,6 @@ const friends: Array<{ host?: string; category: keyof typeof CATEGORY_META }> = 
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .badge {
-    flex: none;
-    padding: 0.15rem 0.55rem;
-    border-radius: 0.4rem;
-    background: color-mix(in srgb, var(--c) 16%, transparent);
-    color: var(--c);
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
   .arrow {
     position: absolute;
     top: 0.6rem;
@@ -394,10 +359,6 @@ const friends: Array<{ host?: string; category: keyof typeof CATEGORY_META }> = 
   a.card:focus-visible .arrow {
     color: var(--c);
   }
-  .pending {
-    border-style: dashed;
-    opacity: 0.6;
-  }
   @media (prefers-reduced-motion: no-preference) {
     a.card {
       transition: border-color 0.15s, box-shadow 0.15s, transform 0.2s var(--ease-out);
@@ -407,10 +368,54 @@ const friends: Array<{ host?: string; category: keyof typeof CATEGORY_META }> = 
       transform: translateY(-2px);
     }
   }
-  @media (max-width: 520px) {
-    .cards.two {
-      grid-template-columns: 1fr;
-    }
+  .team {
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.75rem;
+    background: var(--panel-2);
+  }
+  .team-cover { display: block; text-decoration: none; }
+  .team-cover h2 {
+    margin: 0;
+    padding: 1.1rem 1.25rem;
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    font-weight: 600;
+  }
+  .team-cover h2 span { color: var(--muted); font-size: 0.85em; }
+  .team-cover img {
+    display: block;
+    width: 100%;
+    height: 18rem;
+    object-fit: contain;
+    background: #fdfdfd;
+  }
+  .members {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--panel-border);
+  }
+  .members li { min-width: 0; }
+  .members li + li { border-left: 1px solid var(--panel-border); }
+  .member { display: flex; flex-direction: column; height: 100%; text-decoration: none; }
+  .member-info { display: grid; gap: 0.4rem; padding: 1rem 0.65rem; text-align: center; }
+  .member-category { color: var(--accent); font-size: 0.85rem; font-weight: 500; }
+  .member-info strong { color: var(--text-soft); font-size: 0.65rem; font-weight: 400; overflow-wrap: anywhere; }
+  .member img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; margin-top: auto; }
+  .team-cover:hover h2, .member:hover .member-info strong { color: var(--accent); }
+  .team-cover:focus-visible, .member:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .member img { transition: opacity 0.2s; }
+    .member:hover img { opacity: 0.85; }
+    .member:active img { opacity: 0.7; }
+  }
+  @media (max-width: 767px) {
+    .members { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .members li:nth-child(3) { border-left: 0; }
+    .members li:nth-child(n + 3) { border-top: 1px solid var(--panel-border); }
+    .team-cover img { height: 16rem; }
   }
   .cats {
     display: flex;
