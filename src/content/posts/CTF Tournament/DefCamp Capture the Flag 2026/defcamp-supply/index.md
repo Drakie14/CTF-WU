@@ -16,7 +16,7 @@ Web store for security laboratory equipment. The challenge instance is provided 
 
 A backend component relevant to custom profile verification is included. The rest of the application logic runs on the remote service.
 
-[Defcamp-supply.zip](https://github.com/Drakie14/Challenges/blob/DefCamp-Capture-the-Flag-2026/Defcamp-supply.zip)
+[Defcamp-supply.zip](https://github.com/Drakie14/Challenges/main/blob/DefCamp-Capture-the-Flag-2026/Defcamp-supply.zip)
 
 Flag Format: `CTF{sha256}`
 
