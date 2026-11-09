@@ -14,7 +14,7 @@ tags:
 ## Đề bài
 I run a phpBB forum, but it's a bit outdated. Maybe there's a well-known vulnerability that can be exploited?
 
-File: [web_php-is-my-passion.tar.gz](https://github.com/Drakie14/Challenges/blob/NNS-CTF/web_php-is-my-passion.tar.gz)
+File: [web_php-is-my-passion.tar.gz](https://github.com/Drakie14/Challenges/blob/main/NNS-CTF/web_php-is-my-passion.tar.gz)
 ## Solution
 Truy cập forum, ta thấy một board phpBB bình thường:
 
