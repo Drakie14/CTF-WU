@@ -13,7 +13,7 @@ tags:
 ---
 
 # Đề bài
-File: [wannanime_rewind.zip](https://github.com/Drakie14/Challenges/blob/aochinh26/wannanime_rewind.zip)
+File: [wannanime_rewind.zip](https://github.com/Drakie14/Challenges/blob/main/aochinh26/wannanime_rewind.zip)
 # Solution 
 ## Hình thành hướng đi từ session cookie
 Đến với bài này thì source code bên `app.py` đã có thay đổi so với bài [wannanime](https://drakie14-ctf-wu.pages.dev/posts/wannanime/). Tuy vậy áp dụng hoàn toàn payload cũ vẫn tìm được flag.
