@@ -41,7 +41,7 @@ Sau khi tìm ra 3 phần của flag thì ta thấy ở mỗi phần đều có `
 
 Ta thử `amplify` file gốc và nhận thấy từ 25s->35s có người nói gì đó nhưng với pitch rất cao 
 
-Ta giảm pitch của đoạn đó xuống thu được file [12345678bit](https://github.com/Drakie14/Challenges/main/blob/CSAW'-26-QUALS/12345678bit.wav) và nghe ra `2_f1nd`
+Ta giảm pitch của đoạn đó xuống thu được file [12345678bit](https://github.com/Drakie14/Challenges/blob/main/CSAW'-26-QUALS/12345678bit.wav) và nghe ra `2_f1nd`
 
 Vậy là đã tìm được phần kết thúc, giờ ta phải ghép lại thành câu có nghĩa 
 
