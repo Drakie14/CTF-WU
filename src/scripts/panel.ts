@@ -97,7 +97,7 @@ function setupTocPopup(panel: HTMLElement): void {
   });
   document.addEventListener('click', (e) => {
     if (toc.hasAttribute('data-open') && !toc.contains(e.target as Node)) setOpen(false);
-  });
+  }, { signal: tocAbort!.signal });
   toc.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     setOpen(false);

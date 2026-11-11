@@ -78,3 +78,21 @@ test('copy code, mục lục và bàn phím trên bài dài', async ({ page, con
   await link.click();
   await expect.poll(() => new URL(page.url()).hash).toBe(href);
 });
+
+test('đổi bài gỡ listener của mục lục cũ', async ({ page }) => {
+  await page.goto('/posts/xss/');
+  await page.evaluate(() => {
+    (window as Window & { previousToc?: HTMLElement }).previousToc = document.querySelector<HTMLElement>('[data-toc]')!;
+  });
+  const link = page.locator('.pn a').first();
+  const target = await link.getAttribute('href');
+  await link.click();
+  await expect(page).toHaveURL(new RegExp(`${target}$`));
+  const result = await page.evaluate(() => {
+    const previous = (window as Window & { previousToc?: HTMLElement }).previousToc!;
+    previous.setAttribute('data-open', '');
+    document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return { detached: !previous.isConnected, changed: !previous.hasAttribute('data-open') };
+  });
+  expect(result).toEqual({ detached: true, changed: false });
+});
