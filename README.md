@@ -351,6 +351,13 @@ nút `Local: dev server`) và không cần token hay chọn thư mục:
   Host/Origin loopback (chặn DNS rebinding), `Sec-Fetch-Site: same-origin`, header `x-studio-sync`.
 - Trang deploy (Cloudflare) không có các endpoint này nên vẫn dùng GitHub API + token như dưới.
 
+Trên Windows, chạy `scripts/install-studio-shortcut.ps1` một lần để tạo/cập nhật shortcut **CTF-WU Studio**.
+Shortcut mở cửa sổ log mà không hiện console PowerShell, rồi tự mở trang Studio trên trình duyệt
+khi localhost sẵn sàng (hoặc mở ngay nếu server đã chạy). Bấm X chỉ ẩn log xuống khay hệ thống
+(cạnh đồng hồ, có thể nằm trong dấu `^`), dev server vẫn chạy. Bấm icon để mở lại log;
+chuột phải chọn **Exit Studio (stop server)** để tắt cả server và trình xem log.
+Log được lưu tại `.cache/studio/server.log`; `Studio.bat` vẫn dùng được để khởi chạy.
+
 - Duyệt folder theo cây (folder lồng nhau), breadcrumb ở đầu trang, sidebar liệt kê folder con và bài.
 - `+ Folder mới` / `+ Folder con`: tạo folder rỗng (giữ trên GitHub bằng file `.gitkeep`, loader bỏ qua).
 - Chọn một folder bằng ô vuông ở góc card rồi bấm `Đổi tên folder`: Studio chuyển toàn bộ file sang
