@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderStudioMarkdown } from '../../src/lib/studio-renderer';
+import { renderStudioMarkdown, studioAssetNames } from '../../src/lib/studio-renderer';
 import { renderMd } from '../markdown/render';
 const examples = [
   [':::info\nMột **ý** với `code`\n:::', 'callout-info'],
@@ -9,6 +9,29 @@ const examples = [
   ['$x^2$\n\n$$\n\\frac{a}{b}\n$$', 'class="katex"'],
   ['{%youtube dQw4w9WgXcQ %}', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
 ] as const;
+it('resolves encoded and bare relative asset URLs without treating fragments as files', async () => {
+  const assets = new Map([['ảnh chụp #1.png', 'blob:image'], ['file.zip', 'blob:file']]);
+  const html = await renderStudioMarkdown('![image](./%E1%BA%A3nh%20ch%E1%BB%A5p%20%231.png)\n\n[file](file.zip)\n\n[section](#heading)', '', (name) => assets.get(name));
+  expect(html).toContain('src="blob:image"');
+  expect(html).toContain('href="blob:file"');
+  expect(html).toContain('href="#heading"');
+});
+
+it('nhận đúng file đang dùng và cover để không xoá nhầm lúc publish', () => {
+  const source = '![image](<./ảnh chụp.png>)\n\n[file][download]\n\n[download]: file%20name.zip\n\n<img src="./raw.png">\n\n`![code](./unused.png)`\n\n```md\n![code](./also-unused.png)\n```';
+  expect([...studioAssetNames(source, './cover image #1.png')]).toEqual(['ảnh chụp.png', 'file name.zip', 'raw.png', 'cover image #1.png']);
+});
+
+it('resolves local images and attachments after sanitization without rewriting code', async () => {
+  const source = '![image](./image.png)\n\n[file](./file.zip)\n\n`![image](./image.png)`\n\n<img src="blob:untrusted" onerror="alert(1)">';
+  const html = await renderStudioMarkdown(source, '', (name) => `blob:trusted-${name}`);
+  expect(html).toContain('src="blob:trusted-image.png"');
+  expect(html).toContain('href="blob:trusted-file.zip"');
+  expect(html).toContain('<code>![image](./image.png)</code>');
+  expect(html).not.toContain('blob:untrusted');
+  expect(html).not.toContain('onerror');
+  expect(await renderStudioMarkdown('![image](./missing.png)', '', () => undefined)).toContain('src="./missing.png"');
+});
 describe('cú pháp chung giữa Studio và public', () => {
   it.each(examples)('%s', async (source, expected) => {
     expect(await renderStudioMarkdown(source)).toContain(expected);

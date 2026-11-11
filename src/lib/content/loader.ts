@@ -89,9 +89,10 @@ export function postsLoader(options: PostsLoaderOptions): Loader {
         clearTimeout(timer);
         timer = setTimeout(() => {
           postsSignature(dirs)
-            .then((sig) => {
+            .then(async (sig) => {
+              // Chỉ xác nhận sau khi nạp thành công; lỗi đọc file tạm thời phải được poll thử lại.
+              await loadAll(ctx, options);
               last = sig;
-              return loadAll(ctx, options);
             })
             .catch((err: unknown) => ctx.logger.error(String(err)));
         }, 100);

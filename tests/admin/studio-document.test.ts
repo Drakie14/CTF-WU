@@ -9,6 +9,19 @@ const fields = {
   tags: 'XSS, DOM',
 };
 describe('Studio mở và lưu tài liệu', () => {
+  it('không nhầm đường kẻ ngang trong body là phần kết frontmatter rỗng', () => {
+    const source = '---\n---\n\nTrước\n\n---\n\nSau';
+    const output = composeDocument(source, fields, readDocument(source).body);
+    expect(readDocument(output).fields.title).toBe(fields.title);
+    expect(readDocument(output).body.trim()).toBe('Trước\n\n---\n\nSau');
+  });
+
+  it.each(['03/11/2026', '2026-11-02T20:30:00Z'])('giữ date gốc %s nếu tác giả không đổi ngày', (date) => {
+    const source = `---\ndate: ${date}\n---\n`;
+    expect(readDocument(composeDocument(source, fields, 'body')).fields.date).toBe(date);
+    expect(readDocument(composeDocument(source, { ...fields, date: '2026-11-04' }, 'body')).fields.date).toBe('2026-11-04');
+  });
+
   it('sửa body và metadata editor nhưng giữ cover, summary, points, field lạ và comment', () => {
     const source =
       '---\n# ghi chú tác giả\ntitle: Cũ\nsummary: Tóm tắt đã viết\ndescription: Mô tả gốc\ncover: ./cover.png\npoints: 0\nauthor: Hieu\ndraft: true\n---\n\nbody cũ';

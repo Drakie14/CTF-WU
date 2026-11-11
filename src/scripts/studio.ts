@@ -46,13 +46,14 @@ import { languages } from '@codemirror/language-data';
 import { oneDark } from '@codemirror/theme-one-dark';
 import 'katex/dist/katex.min.css';
 import { renderDiagrams } from './diagrams';
-import { renderStudioMarkdown } from '../lib/studio-renderer';
+import { renderStudioMarkdown, studioAssetNames } from '../lib/studio-renderer';
 import { publishArticle } from '../lib/studio-publish';
 import { checkMetadata } from '../lib/content/quality';
 import { composeDocument, readDocument } from '../lib/studio-document';
-import { formatIsoDate } from '../lib/content/dates';
+import { formatIsoDate, parseSiteDate } from '../lib/content/dates';
 
 const $ = <T extends Element = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
+const studio = $('.studio');
 const summary = $<HTMLTextAreaElement>('[data-summary]');
 const title = $<HTMLInputElement>('[data-title]');
 const folder = $<HTMLInputElement>('[data-folder]');
@@ -102,7 +103,9 @@ let editor!: EditorView;
 let repoFiles: RepoFile[] = [];
 let repoTree: Array<{ path: string; sha: string; type: string }> = [];
 let remoteBlobs: Array<{ path: string; sha: string; type: string }> = [];
-type PendingFolders = { entries: TreeEntry[]; messages: string[] };
+let remoteHead = '';
+let savingPending = false;
+type PendingFolders = { entries: TreeEntry[]; messages: string[]; base?: string };
 const pendingKey = 'ctf-wu.studio.pending-folders';
 function readPending(): PendingFolders {
   try {
@@ -427,7 +430,10 @@ function applyDraft(draft: Draft) {
  * Khôi phục nháp trong trình duyệt. Nháp của bài đã có trên GitHub mà viết trên bản cũ hơn (bài đã được sửa
  * ở nơi khác sau đó) thì không tự đè: cất sang khoá `.stale`, hiện nút "Mở nháp cũ" để tự chọn.
  */
-function restoreDraft(): boolean | 'stale' {
+async function restoreDraft(): Promise<boolean | 'stale'> {
+  // Không autosave bản vừa populate trong lúc còn chờ đọc nháp và ảnh từ IndexedDB.
+  clearTimeout(draftTimer);
+  draftTimer = undefined;
   staleButton.hidden = true;
   try {
     const value = localStorage.getItem(draftKey());
@@ -440,7 +446,7 @@ function restoreDraft(): boolean | 'stale' {
       const key = draftKey();
       localStorage.setItem(`${key}.stale`, value);
       localStorage.removeItem(key);
-      void getDraftAssets(key)
+      await getDraftAssets(key)
         .then(async (assets) => {
           await putDraftAssets(`${key}.stale`, assets);
           await putDraftAssets(key, []);
@@ -449,28 +455,27 @@ function restoreDraft(): boolean | 'stale' {
       staleButton.hidden = false;
       return 'stale';
     }
+    await restoreDraftAssets(draftKey());
     applyDraft(draft);
-    void restoreDraftAssets(draftKey());
     $('[data-save-state]').textContent = 'Đã khôi phục nháp cục bộ';
     return true;
   } catch {
     return false;
   }
 }
-staleButton.addEventListener('click', () => {
+staleButton.addEventListener('click', async () => {
+  if (studio.inert) return;
+  studio.inert = true;
   try {
     const value = localStorage.getItem(`${draftKey()}.stale`);
     if (!value) {
       staleButton.hidden = true;
       return;
     }
-    applyDraft(JSON.parse(value) as Draft);
     const staleKey = `${draftKey()}.stale`;
-    void restoreDraftAssets(staleKey)
-      .then(() => putDraftAssets(staleKey, []))
-      .catch(() => {
-        /* storage unavailable */
-      });
+    await restoreDraftAssets(staleKey);
+    applyDraft(JSON.parse(value) as Draft);
+    await putDraftAssets(staleKey, []).catch(() => { /* storage unavailable */ });
     localStorage.removeItem(staleKey);
     staleButton.hidden = true;
     scheduleDraft();
@@ -481,6 +486,8 @@ staleButton.addEventListener('click', () => {
     );
   } catch {
     /* storage unavailable */
+  } finally {
+    studio.inert = false;
   }
 });
 function removeDraft() {
@@ -608,6 +615,7 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     localMode ? `/__studio/git${path}` : `https://api.github.com/repos/${repo.name}${path}`,
     {
       cache: 'no-store', // GitHub trả max-age=60: đọc ref cũ -> commit sai parent -> 422 not a fast forward
+      signal: AbortSignal.timeout(60_000),
       ...init,
       headers: localMode
         ? { 'x-studio-sync': '1', ...(init.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -670,7 +678,8 @@ function populate(source: string) {
   const post = parsePost(source);
   summary.value = typeof post.fields.summary === 'string' ? post.fields.summary : '';
   title.value = typeof post.fields.title === 'string' ? post.fields.title : '';
-  date.value = typeof post.fields.date === 'string' ? post.fields.date.slice(0, 10) : '';
+  const parsedDate = parseSiteDate(post.fields.date);
+  date.value = parsedDate ? formatIsoDate(parsedDate) : '';
   ctf.value = typeof post.fields.ctf === 'string' ? post.fields.ctf : ctfFromFolder(folder.value);
   category.value = typeof post.fields.category === 'string' ? post.fields.category : '';
   difficulty.value = typeof post.fields.difficulty === 'string' ? post.fields.difficulty : '';
@@ -705,12 +714,13 @@ function resetEditor() {
   renderAssets();
   void renderPreview();
 }
-function loadConfig() {
+async function loadConfig() {
   repo = { name: STUDIO_REPO.name, branch: STUDIO_REPO.branch };
   $('[data-repo]').textContent = `${repo.name} / ${repo.branch}${localMode ? ' · git trên máy' : ''}`;
   $('[data-token-box]').hidden = localMode || Boolean(storedToken());
   updateConnection();
-  void restoreLocalDirectory();
+  await restoreLocalDirectory();
+  void scanLocalDrafts();
   if (token()) void loadTree();
 }
 async function loadTree() {
@@ -727,6 +737,7 @@ async function loadTree() {
       `/git/trees/${ref.object.sha}?recursive=1`,
     );
     remoteBlobs = data.tree.filter((item) => item.type === 'blob');
+    remoteHead = ref.object.sha;
     githubConnected = true;
     $('[data-token-box]').hidden = true;
     updateConnection();
@@ -734,7 +745,7 @@ async function loadTree() {
     void loadHiddenStates();
     void scanLocalDrafts();
   } catch (error) {
-    tree.innerHTML = '';
+    refreshFolderView();
     const message = error instanceof Error ? error.message : String(error);
     if (/GitHub (401|403):/.test(message)) {
       githubConnected = false;
@@ -825,8 +836,10 @@ async function reconcileLocalArticle(
   };
 }
 async function openPost(file: RepoFile) {
-  await settleDraft();
+  if (studio.inert) return;
+  studio.inert = true;
   try {
+    await settleDraft();
     setStatus('Đang mở write-up…');
     const content = await api<{ content: string; sha: string }>(
       `/contents/${file.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repo.branch)}`,
@@ -858,7 +871,7 @@ async function openPost(file: RepoFile) {
     const reconciled = await reconcileLocalArticle(file.path, remoteSource);
     $('[data-save-state]').textContent = 'Đã mở bài';
     populate(reconciled.source);
-    const restored = restoreDraft();
+    const restored = await restoreDraft();
     if (restored === 'stale')
       setStatus(
         'Bài trên GitHub đã đổi. Đang giữ bản mới; bấm Mở nháp cũ nếu muốn lấy lại nội dung nháp.',
@@ -871,17 +884,20 @@ async function openPost(file: RepoFile) {
     showComposer();
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), 'error');
+  } finally {
+    studio.inert = false;
   }
 }
 async function openLocalPost(file: RepoFile) {
-  await settleDraft();
+  if (studio.inert) return;
+  studio.inert = true;
   try {
+    await settleDraft();
     const source = await readLocalArticle(file.path);
     if (source === undefined)
       return setStatus('Không đọc được file local. Kiểm tra quyền thư mục posts.', 'error');
     resetEditor();
     folder.value = folderOf(file) || 'uncategorized';
-    populate(source);
     localDraftPath = file.path;
     const directory = await localEntry(parentOf(file.path));
     if (directory) {
@@ -894,7 +910,7 @@ async function openLocalPost(file: RepoFile) {
       }
     }
     renderAssets();
-    void renderPreview();
+    populate(source);
     $('[data-file-label]').textContent = relPath(file.path);
     $('[data-save-state]').textContent = 'File local · chưa publish';
     setStatus('Đang mở bản local chưa publish. Bấm Publish để đưa lên GitHub.', 'info');
@@ -903,11 +919,12 @@ async function openLocalPost(file: RepoFile) {
     showComposer();
   } catch (error) {
     setStatus(errorMessage(error), 'error');
+  } finally {
+    studio.inert = false;
   }
 }
 async function scanLocalDrafts() {
   if (
-    !githubConnected ||
     !localDirectory ||
     (await localDirectory.queryPermission({ mode: 'readwrite' })) !== 'granted'
   )
@@ -923,7 +940,8 @@ async function scanLocalDrafts() {
   };
   try {
     await walk(localDirectory, postRoot);
-  } catch {
+  } catch (error) {
+    setStatus(`Không đọc được danh sách bài local: ${errorMessage(error)}`, 'error');
     return;
   }
   localOnly = found.sort((a, b) => a.path.localeCompare(b.path));
@@ -931,18 +949,24 @@ async function scanLocalDrafts() {
 }
 const isLocalOnly = (file: RepoFile) => localOnly.some((entry) => entry.path === file.path);
 async function newWriteup() {
-  const folderName = currentFolder() || folder.value || 'Dreamhack';
-  const ready =
-    (localDirectory && (await requestLocalPermission().catch(() => false))) ||
-    (!localDirectory && (await chooseLocalFolder()));
-  await settleDraft();
-  startNewInFolder(folderName);
-  setStatus(
-    ready
-      ? 'Nhập tiêu đề để tạo file trong thư mục posts local. Bài chỉ lên GitHub khi bấm Publish.'
-      : 'Chưa kết nối thư mục posts local, nháp chỉ được lưu trong trình duyệt.',
-    ready ? 'info' : 'error',
-  );
+  if (studio.inert) return;
+  studio.inert = true;
+  try {
+    const folderName = currentFolder() || folder.value || 'Dreamhack';
+    const ready =
+      (localDirectory && (await requestLocalPermission().catch(() => false))) ||
+      (!localDirectory && (await chooseLocalFolder()));
+    await settleDraft();
+    await startNewInFolder(folderName);
+    setStatus(
+      ready
+        ? 'Nhập tiêu đề để tạo file trong thư mục posts local. Bài chỉ lên GitHub khi bấm Publish.'
+        : 'Chưa kết nối thư mục posts local, nháp chỉ được lưu trong trình duyệt.',
+      ready ? 'info' : 'error',
+    );
+  } finally {
+    studio.inert = false;
+  }
 }
 function showComposer() {
   $('[data-sidebar-new]').removeAttribute('hidden');
@@ -958,12 +982,12 @@ function showLibrary() {
   $('[data-composer]').setAttribute('hidden', '');
   $('[data-library-home]').removeAttribute('hidden');
 }
-function startNewInFolder(folderName = 'Dreamhack') {
+async function startNewInFolder(folderName = 'Dreamhack') {
   resetEditor();
   folder.value = folderName;
   ctf.value = ctfFromFolder(folderName);
   activeFolder = folderName;
-  restoreDraft();
+  await restoreDraft();
   renderSidebar();
   showComposer();
   $('[data-metadata]').setAttribute('open', '');
@@ -1512,7 +1536,7 @@ function makeFolderCard(path: string) {
 }
 function renderSidebar() {
   const tree = $('[data-tree]');
-  if (!githubConnected) return;
+  if (!githubConnected && !localOnly.length) return;
   const here = currentFolder();
   const opened = currentPath();
   // Ancestors of the active folder always stay expanded so the current branch is visible.
@@ -1671,6 +1695,9 @@ function renderFolderHome(files: RepoFile[] = repoFiles) {
 
 type TreeEntry = { path: string; mode: '100644'; type: 'blob'; sha?: string | null; content?: string };
 function refreshFolderView() {
+  // Quét local chạy cả khi GitHub chưa trả lời; khi có tree thì bỏ các bài đã publish khỏi danh sách nháp.
+  const remote = new Set(remoteBlobs.map((item) => item.path));
+  localOnly = localOnly.filter((file) => !remote.has(file.path));
   repoTree = [...remoteBlobs];
   for (const entry of pending.entries) {
     repoTree = repoTree.filter((item) => item.path !== entry.path);
@@ -1693,11 +1720,12 @@ function stageEntries(entries: TreeEntry[], message: string) {
     if (entry.sha === null && !remote.has(entry.path)) staged.delete(entry.path);
     else staged.set(entry.path, entry);
   }
-  pending = { entries: [...staged.values()], messages: [...pending.messages, message] };
+  pending = { entries: [...staged.values()], messages: [...pending.messages, message], base: pending.messages.length ? pending.base : remoteHead };
   writePending();
   refreshFolderView();
 }
 async function savePending() {
+  if (savingPending) return false;
   if (!pending.messages.length) return true;
   if (!token()) {
     setStatus('Cần kết nối GitHub để lưu thay đổi.', 'error');
@@ -1708,9 +1736,12 @@ async function savePending() {
     count === 1
       ? pending.messages[0]
       : [`content: cập nhật ${count} thay đổi folder`, ...pending.messages].join('\n');
+  savingPending = true;
+  const wasInert = studio.inert;
+  studio.inert = true;
   try {
     setStatus(`Đang lưu ${count} thay đổi folder…`);
-    await commitEntries(pending.entries, message);
+    await commitEntries(pending.entries, message, pending.base);
     pending = { entries: [], messages: [] };
     writePending();
     setStatus(`Đã lưu ${count} thay đổi folder lên GitHub.`, 'ok');
@@ -1719,6 +1750,9 @@ async function savePending() {
   } catch (error) {
     setStatus(errorMessage(error), 'error');
     return false;
+  } finally {
+    savingPending = false;
+    studio.inert = wasInert;
   }
 }
 function discardPending() {
@@ -1729,8 +1763,10 @@ function discardPending() {
   setStatus('Đã bỏ các thay đổi folder chưa lưu.', 'info');
   refreshFolderView();
 }
-async function commitEntries(entries: TreeEntry[], message: string) {
+async function commitEntries(entries: TreeEntry[], message: string, expectedHead?: string) {
+  if (!expectedHead) throw new Error('Danh sách chờ cũ thiếu bản gốc để đối chiếu. Hủy danh sách chờ và chuẩn bị lại thay đổi trước khi Save.');
   const ref = await api<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(repo.branch)}`);
+  if (ref.object.sha !== expectedHead) throw new Error('GitHub đã đổi từ lúc chuẩn bị thay đổi folder. Giữ danh sách chờ để rà soát; tải lại thư viện và chuẩn bị lại thay đổi trước khi Save.');
   const parent = await api<{ tree: { sha: string } }>(`/git/commits/${ref.object.sha}`);
   const tree = await api<{ sha: string }>('/git/trees', {
     method: 'POST',
@@ -1742,7 +1778,7 @@ async function commitEntries(entries: TreeEntry[], message: string) {
   });
   await api(`/git/refs/heads/${encodeURIComponent(repo.branch)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ sha: commit.sha }),
+    body: JSON.stringify({ sha: commit.sha, force: false }),
   });
 }
 function validateFolderName(name: string) {
@@ -2019,10 +2055,10 @@ function shortName(name: string, max = 18) {
   const head = Math.ceil(keep * 0.6);
   return `${stem.slice(0, head)}…${stem.slice(stem.length - (keep - head))}${ext}`;
 }
-const usedAssetNames = () =>
-  new Set([...editorSource().matchAll(/\.\/([^\s)"'<>\]]+)/g)].map((match) => match[1]));
+const usedAssetNames = () => studioAssetNames(editorSource(), parsePost(originalSource).fields.cover);
 function jumpToAsset(asset: Asset) {
-  const match = new RegExp(`\\./${escapeRegExp(asset.name)}(?![^\\s)"'<>\\]])`).exec(editorSource());
+  const names = [asset.name, encodeURI(asset.name), encodeURIComponent(asset.name)].map(escapeRegExp).join('|');
+  const match = new RegExp(`(?:\\./)?(?:${names})(?![^\\s)"'<>\\]])`).exec(editorSource());
   if (!match) return;
   const from = editor.state.doc.lineAt(match.index).from;
   editor.dispatch({ selection: { anchor: from }, effects: EditorView.scrollIntoView(from, { y: 'center' }) });
@@ -2680,7 +2716,8 @@ function renderMetaChips() {
 function addFiles(files: FileList | File[]) {
   for (const file of Array.from(files)) {
     const safe = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-');
-    const name = assets.some((asset) => asset.name === safe) ? `${Date.now()}-${safe}` : safe;
+    let name = safe;
+    for (let n = 2; assets.some((asset) => asset.name === name); n++) name = `${n}-${safe}`;
     assets.push({ file, name, url: URL.createObjectURL(file) });
     if (file.type.startsWith('image/')) insertText(`![${name}](./${name})`);
   }
@@ -2867,9 +2904,7 @@ function sizeImages() {
 async function renderNow() {
   renderMetaChips();
   const version = ++renderVersion;
-  const source = editorSource().replace(/\]\(\.\/([^\s)]+)\)/g, (all, name) =>
-    assetUrl(name) ? `](${assetUrl(name)})` : all,
-  );
+  const source = editorSource();
   if (!source.trim()) {
     preview.innerHTML = '<p class="placeholder">Preview Markdown sẽ hiện ở đây.</p>';
     previewState.textContent = 'Đang chờ nội dung';
@@ -2877,7 +2912,7 @@ async function renderNow() {
     return;
   }
   previewState.textContent = 'Đang render…';
-  const html = await renderStudioMarkdown(source, title.value);
+  const html = await renderStudioMarkdown(source, title.value, assetUrl);
   if (version !== renderVersion) return;
   preview.innerHTML = html;
   sizeImages();
@@ -2940,7 +2975,9 @@ async function pullToGit(localSynced: boolean): Promise<string | null> {
     ? 'Trên máy chạy npm run sync (hoặc npm run dev) để git nhận bài vừa publish.'
     : null;
   try {
-    const reply = await fetch('/__studio/sync', { method: 'POST', headers: { 'x-studio-sync': '1' } });
+    const reply = await fetch('/__studio/sync', {
+      method: 'POST', headers: { 'x-studio-sync': '1' }, signal: AbortSignal.timeout(60_000),
+    });
     if (!reply.ok) return pending;
     const result = (await reply.json()) as { ok: boolean; message: string };
     return result.ok ? 'Đã git pull về máy.' : `Git: ${result.message}`;
@@ -2967,28 +3004,31 @@ async function pruneUnusedAssets() {
   renderAssets();
 }
 async function publish() {
-  if (!token()) {
-    $('[data-token-box]').hidden = false;
-    return setStatus('Nhập GitHub token trước khi publish.', 'error');
-  }
-  if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
-  if (!slugify(title.value)) return setStatus('Tiêu đề chưa tạo được tên folder hợp lệ.', 'error');
-  const issues = checkMetadata(composePost(), relativeFolder(), title.value).filter(
-    (issue) => issue.severity === 'error',
-  );
-  if (issues.length)
-    return setStatus(issues.map((issue) => `${issue.field}: ${issue.message}`).join('\n'), 'error');
-  if (!(await savePending())) return;
-  await settleDraft();
-  await pruneUnusedAssets();
-  const filePath = currentPath();
-  if (!openFile && remoteBlobs.some((item) => item.path.startsWith(`${articleDirectory()}/`))) {
-    return setStatus(
-      `GitHub đã có ${relPath(articleDirectory())}; đổi tiêu đề hoặc folder để không ghi đè bài khác.`,
-      'error',
-    );
-  }
+  if (studio.inert) return;
+  studio.inert = true;
   try {
+    if (!token()) {
+      $('[data-token-box]').hidden = false;
+      return setStatus('Nhập GitHub token trước khi publish.', 'error');
+    }
+    if (!title.value.trim()) return setStatus('Cần nhập tiêu đề.', 'error');
+    if (!slugify(title.value)) return setStatus('Tiêu đề chưa tạo được tên folder hợp lệ.', 'error');
+    const issues = checkMetadata(composePost(), relativeFolder(), title.value).filter(
+      (issue) => issue.severity === 'error',
+    );
+    if (issues.length)
+      return setStatus(issues.map((issue) => `${issue.field}: ${issue.message}`).join('\n'), 'error');
+    if (!(await savePending())) return;
+    setStatus('Đang lưu nháp trước khi Publish…');
+    await settleDraft();
+    await pruneUnusedAssets();
+    const filePath = currentPath();
+    if (!openFile && remoteBlobs.some((item) => item.path.startsWith(`${articleDirectory()}/`))) {
+      return setStatus(
+        `GitHub đã có ${relPath(articleDirectory())}; đổi tiêu đề hoặc folder để không ghi đè bài khác.`,
+        'error',
+      );
+    }
     setStatus('Đang tạo commit…');
     const commit = await publishArticle(api, {
       path: filePath,
@@ -3036,7 +3076,14 @@ async function publish() {
     );
     void loadTree();
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : String(error), 'error');
+    setStatus(
+      error instanceof Error && error.name === 'TimeoutError'
+        ? 'Quá thời gian chờ Publish. Nháp được giữ lại; kiểm tra GitHub trước khi Publish lại vì request gửi commit có thể vẫn đang được xử lý.'
+        : errorMessage(error),
+      'error',
+    );
+  } finally {
+    studio.inert = false;
   }
 }
 async function chooseLocalFolder(): Promise<boolean> {
@@ -3533,5 +3580,5 @@ import.meta.hot?.on('vite:beforeFullReload', (payload: { path?: string; triggere
 resetEditor();
 void probeLocalStudio().then((local) => {
   localMode = local;
-  loadConfig();
+  void loadConfig();
 });

@@ -27,7 +27,9 @@ const join = (base: string, name: string) => (base ? `${base}/${name}` : name);
 const endpoint = (route: string, relative: string, extra = '') => `/__studio/fs/${route}?path=${encodeURIComponent(relative)}${extra}`;
 
 async function call(input: string, init: RequestInit = {}): Promise<Response> {
-  const response = await fetch(input, { cache: 'no-store', ...init, headers: { 'x-studio-sync': '1' } });
+  const response = await fetch(input, {
+    cache: 'no-store', signal: AbortSignal.timeout(60_000), ...init, headers: { 'x-studio-sync': '1' },
+  });
   // Cùng loại lỗi với File System Access API để code Studio (bắt NotFoundError) chạy như cũ.
   if (response.status === 404) throw new DOMException(`Không tìm thấy ${decodeURIComponent(input.split('path=')[1] ?? '')}`, 'NotFoundError');
   if (response.status === 409) throw new DOMException(await response.text(), 'TypeMismatchError');

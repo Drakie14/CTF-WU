@@ -25,6 +25,17 @@ const publish = (other: string, rel: string, text: string) => {
 };
 
 describe('sync', () => {
+  it('khôi phục file local nếu pull thất bại sau khi dọn file trùng origin', async () => {
+    const { work, other } = setup();
+    publish(other, 'x/index.md', 'giống');
+    mkdirSync(join(work, 'src/content/posts/x'), { recursive: true });
+    writeFileSync(join(work, 'src/content/posts/x/index.md'), 'giống');
+    git(work, 'config', '--unset', 'branch.main.merge');
+    const result = await sync(work);
+    expect(result.ok).toBe(false);
+    expect(readFileSync(join(work, 'src/content/posts/x/index.md'), 'utf8')).toBe('giống');
+  });
+
   it('replaces untracked files identical to origin, then pulls', async () => {
     const { work, other } = setup();
     publish(other, 'x/index.md', 'giống');

@@ -3,8 +3,8 @@
 // (nội dung vẫn nằm trong origin nên pull trả lại nguyên vẹn), rồi pull --rebase. File nào khác bản origin
 // là chỉnh sửa chưa publish: không đụng tới, dừng lại và báo.
 import { execFile } from 'node:child_process';
-import { open, readFile, rm, stat } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const POSTS = 'src/content/posts';
@@ -35,6 +35,8 @@ async function acquire(lock) {
 export async function sync(root) {
   const removed = [];
   const kept = [];
+  /** @type {Map<string, Buffer>} */
+  const backups = new Map();
   let lock;
   try {
     lock = resolve(root, String(await git(root, ['rev-parse', '--git-path', 'blog-sync.lock'])).trim());
@@ -50,7 +52,10 @@ export async function sync(root) {
     for (const path of untracked) {
       if (!inRemote.has(path)) continue;
       const [local, upstream] = await Promise.all([readFile(join(root, path)), git(root, ['show', `${remote}:${path}`], { buffer: true })]);
-      (local.equals(upstream) ? removed : kept).push(path);
+      if (local.equals(upstream)) {
+        removed.push(path);
+        backups.set(path, local);
+      } else kept.push(path);
     }
     if (kept.length) {
       return { ok: false, removed: [], kept, message: `Dừng lại: ${kept.length} file local khác bản trên GitHub (chỉnh sửa chưa publish): ${kept.join(', ')}` };
@@ -59,7 +64,18 @@ export async function sync(root) {
     await git(root, ['pull', '--rebase', '--autostash', '-q']);
     return { ok: true, removed, kept, message: removed.length ? `Đã đồng bộ, ${removed.length} file local giống GitHub được thay bằng bản git theo dõi.` : 'Đã đồng bộ với GitHub.' };
   } catch (error) {
-    return { ok: false, removed, kept, message: error instanceof Error ? error.message : String(error) };
+    const unrestored = [];
+    for (const [file, data] of backups) {
+      try {
+        await mkdir(dirname(join(root, file)), { recursive: true });
+        // Pull có thể đã tạo file hoặc tác giả đã sửa: chỉ khôi phục khi file còn thiếu.
+        await writeFile(join(root, file), data, { flag: 'wx' });
+      } catch (restoreError) {
+        if (/** @type {NodeJS.ErrnoException} */ (restoreError).code !== 'EEXIST') unrestored.push(file);
+      }
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, removed: unrestored, kept, message: message + (unrestored.length ? ` Không khôi phục được: ${unrestored.join(', ')}` : '') };
   } finally {
     if (lock) await rm(lock, { force: true });
   }
