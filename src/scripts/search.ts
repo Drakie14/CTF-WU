@@ -18,6 +18,17 @@ interface Pagefind {
 let pagefindPromise: Promise<Pagefind> | undefined;
 let itemsPromise: Promise<Map<string, SidebarItem>> | undefined;
 
+// ClientRouter chỉ phát sự kiện này cho điều hướng trong tab hiện tại, không cho Ctrl/click mở tab mới.
+document.addEventListener('astro:before-preparation', (event) => {
+  if (!(event.sourceElement instanceof HTMLAnchorElement) ||
+    !event.sourceElement.closest('[data-search-page-results], [data-search-page-all]')) return;
+  try {
+    sessionStorage.setItem('from-list-url', `${event.from.pathname}${event.from.search}${event.from.hash}`);
+  } catch {
+    /* Storage bị chặn: nút Back giữ đường dẫn mặc định. */
+  }
+});
+
 function loadPagefind(): Promise<Pagefind> {
   // URL nằm trong biến để Vite không cố bundle file chỉ có sau khi chạy `pagefind`.
   const url = '/pagefind/pagefind.js';

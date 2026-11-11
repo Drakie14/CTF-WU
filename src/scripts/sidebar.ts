@@ -12,6 +12,7 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const supportsScrollTimeline = CSS.supports('animation-timeline: view()');
 const initialized = new WeakSet<Element>();
 let firstLoad = true;
+let adminGateAbort: AbortController | undefined;
 
 function getList(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-list]');
@@ -240,6 +241,7 @@ function restoreScroll(list: HTMLElement): boolean {
 }
 
 function onPageLoad(): void {
+  setupAdminGate();
   const list = getList();
   const sidebar = document.querySelector<HTMLElement>('[data-sidebar]');
   if (!list || !sidebar) return;
@@ -306,14 +308,17 @@ async function verifyAdminToken(token: string): Promise<void> {
 }
 
 function setupAdminGate(): void {
+  adminGateAbort?.abort();
+  adminGateAbort = undefined;
   const dialog = document.querySelector<HTMLDialogElement>('[data-admin-auth]');
   const form = dialog?.querySelector<HTMLFormElement>('[data-admin-auth-form]');
   const input = dialog?.querySelector<HTMLInputElement>('[data-admin-token]');
   const error = dialog?.querySelector<HTMLElement>('[data-admin-auth-error]');
   const submit = dialog?.querySelector<HTMLButtonElement>('[data-admin-auth-submit]');
   const close = dialog?.querySelector<HTMLButtonElement>('[data-admin-auth-close]');
-  if (!dialog || !form || !input || !error || !submit || !close || dialog.dataset.ready) return;
-  dialog.dataset.ready = 'true';
+  if (!dialog || !form || !input || !error || !submit || !close) return;
+  adminGateAbort = new AbortController();
+  const { signal } = adminGateAbort;
   let adminUrl = '/admin/studio/';
 
   const openDialog = (message = '') => {
@@ -321,8 +326,8 @@ function setupAdminGate(): void {
     if (!dialog.open) dialog.showModal();
     input.focus();
   };
-  close.addEventListener('click', () => dialog.close());
-  dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+  close.addEventListener('click', () => dialog.close(), { signal });
+  dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); }, { signal });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const token = input.value.trim();
@@ -345,7 +350,7 @@ function setupAdminGate(): void {
       submit.disabled = false;
       submit.textContent = 'Kiểm tra và tiếp tục';
     }
-  });
+  }, { signal });
 
   document.addEventListener('click', (event) => {
     const target = event.target;
@@ -360,7 +365,7 @@ function setupAdminGate(): void {
     // Máy đã từng nhập PAT thì mở thẳng tab mới, trang studio tự xác thực bằng PAT đã lưu.
     if (savedAdminTokens().length) { window.open(adminUrl, '_blank'); return; }
     openDialog();
-  }, true);
+  }, { capture: true, signal });
 }
 
 // Khi ClientRouter chuyển phần tử `transition:persist` sang document mới, trình duyệt
