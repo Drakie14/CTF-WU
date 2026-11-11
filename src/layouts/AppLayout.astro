@@ -24,7 +24,10 @@ const panelSwap = {
   old: { name: 'panel-out', duration: '0.15s', easing: 'ease-out', fillMode: 'forwards' },
   new: { name: 'panel-in', duration: '0.4s', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fillMode: 'backwards' },
 };
-const panelTransition = { forwards: panelSwap, backwards: panelSwap };
+const panelTransition = {
+  forwards: panelSwap,
+  backwards: { old: { ...panelSwap.old, name: 'panel-back-out' }, new: { ...panelSwap.new, name: 'panel-back-in' } },
+};
 const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
 ---
 
@@ -33,7 +36,7 @@ const persistKey = filter ? `sidebar-${filter.key}` : 'sidebar-all';
     <div class="shell-side" transition:persist={persistKey} data-persist-key={persistKey}>
       <Sidebar tree={tree} stats={{ posts: posts.length, ctfs: ctfs.terms.length }} currentSlug={currentSlug} filter={filter} />
     </div>
-    <main id="main" class="panel" tabindex="-1" data-panel data-rbar transition:animate={panelTransition}>
+    <main id="main" class="panel" tabindex="-1" data-panel data-rbar transition:name="content-panel" transition:animate={panelTransition}>
       {view === 'post' && <div class="read-progress" aria-hidden="true" />}
       <div class="side-toggle-wrap">
         <button class="side-toggle" type="button" aria-pressed="false" title="Thu gọn danh sách write-up" data-side-toggle>

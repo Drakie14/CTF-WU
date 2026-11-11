@@ -96,3 +96,33 @@ test('đổi bài gỡ listener của mục lục cũ', async ({ page }) => {
   });
   expect(result).toEqual({ detached: true, changed: false });
 });
+
+for (const reduced of [false, true]) test(`chuyển bài và Back ${reduced ? 'tôn trọng giảm chuyển động' : 'có animation đúng hướng'}`, async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+  await page.goto('/posts/xss/');
+  await page.evaluate(() => {
+    const state = window as Window & { panelMotions?: string[][] };
+    state.panelMotions = [];
+    document.addEventListener('astro:before-swap', (event) => {
+      const transition = (event as Event & { viewTransition?: ViewTransition }).viewTransition;
+      void transition?.ready.then(() => {
+        state.panelMotions!.push(document.getAnimations()
+          .filter((animation): animation is CSSAnimation => animation instanceof CSSAnimation)
+          .map((animation) => animation.animationName).filter((name) => name.startsWith('panel-')));
+      }).catch(() => {});
+    });
+  });
+  const link = page.locator('.pn a').first();
+  const target = await link.getAttribute('href');
+  await link.click();
+  await expect(page).toHaveURL(new RegExp(`${target}$`));
+  if (!reduced) {
+    await expect.poll(() => page.evaluate(() => (window as Window & { panelMotions?: string[][] }).panelMotions?.flat())).toContain('panel-in');
+  }
+  await page.goBack();
+  await expect(page).toHaveURL(/\/posts\/xss\/$/);
+  await expect(page.locator('[data-article-body]')).toBeVisible();
+  const motions = () => page.evaluate(() => (window as Window & { panelMotions?: string[][] }).panelMotions?.flat() ?? []);
+  if (reduced) expect(await motions()).toEqual([]);
+  else await expect.poll(motions).toContain('panel-back-in');
+});

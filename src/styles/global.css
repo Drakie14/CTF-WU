@@ -653,17 +653,24 @@ html.reze-cursor-on .reze-cursor {
     transform: scaleX(1);
   }
 }
-/* View Transitions: panel cũ mờ nhanh, panel mới trượt nhẹ từ dưới lên. */
+/* Panel trượt theo hướng điều hướng; Back đi ngược lại mà không làm nền/sidebar nhảy. */
 @keyframes panel-out {
   to {
     opacity: 0;
+    transform: translateX(-10px);
   }
 }
 @keyframes panel-in {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateX(14px);
   }
+}
+@keyframes panel-back-out {
+  to { opacity: 0; transform: translateX(10px); }
+}
+@keyframes panel-back-in {
+  from { opacity: 0; transform: translateX(-14px); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
