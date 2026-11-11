@@ -1,7 +1,6 @@
 import GithubSlugger from 'github-slugger';
 import { getStored, putStored, removeStored, putDraftAssets, getDraftAssets } from '../lib/studio-storage';
 import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
-import { stringify as stringifyYaml } from 'yaml';
 import { STUDIO_REPO, STUDIO_TOKEN_KEY, ctfFromFolder } from '../lib/studio';
 import { localPostsDirectory, probeLocalStudio } from '../lib/studio-local-fs';
 import { slugify } from '../lib/content/slug';
@@ -27,7 +26,7 @@ import {
   lineNumbers,
   type ViewUpdate,
 } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
+import { defaultKeymap, history as editorHistory, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
 import { type Anchor, escapeHtml, lineToTop, normalizeAnchors, topToLine } from '../lib/studio-preview';
 import {
@@ -49,7 +48,8 @@ import { renderDiagrams } from './diagrams';
 import { renderStudioMarkdown, studioAssetNames } from '../lib/studio-renderer';
 import { publishArticle } from '../lib/studio-publish';
 import { checkMetadata } from '../lib/content/quality';
-import { composeDocument, readDocument } from '../lib/studio-document';
+import { composeDocument, readDocument, withDraftFlag, retargetCtf } from '../lib/studio-document';
+import { parseStudioRoute, studioRouteUrl, type StudioRoute } from '../lib/studio-route';
 import { formatIsoDate, parseSiteDate } from '../lib/content/dates';
 
 const $ = <T extends Element = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -187,17 +187,25 @@ let draftTimer: ReturnType<typeof setTimeout> | undefined;
 // (owned) mới được đổi tên thư mục theo tiêu đề; file mở lại từ đĩa giữ nguyên đường dẫn.
 let localDraftPath: string | undefined;
 let localDraftOwned = false;
+let localDraftPersisted = false;
+let localDraftPendingPath: string | undefined;
 let localOnly: RepoFile[] = [];
 let localWrite: Promise<void> = Promise.resolve();
 const writtenAssets = new Set<Asset>();
 
 const editorSource = () => editor.state.doc.toString();
 let editorExtensions: Extension[] = [];
-/** Nạp bài mới: báo cho preview/nháp như một lần sửa, rồi dựng lại state để Ctrl+Z không lùi về bài trước. */
+/** Nạp bài và render preview; chỉ thao tác người dùng mới autosave. Ctrl+Z không lùi về bài trước. */
+let replacingSource = false;
 function setEditorSource(source: string) {
-  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: source } });
-  editor.setState(EditorState.create({ doc: source, extensions: editorExtensions }));
-  viewLine = 0;
+  replacingSource = true;
+  try {
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: source } });
+    editor.setState(EditorState.create({ doc: source, extensions: editorExtensions }));
+    viewLine = 0;
+  } finally {
+    replacingSource = false;
+  }
 }
 const run = (view: EditorView, spec: TransactionSpec | null) => {
   if (spec) view.dispatch(spec);
@@ -209,7 +217,7 @@ function initEditor() {
     highlightActiveLineGutter(),
     highlightActiveLine(),
     drawSelection(),
-    history(),
+    editorHistory(),
     search({ top: true }),
     highlightSelectionMatches(),
     EditorView.lineWrapping,
@@ -274,7 +282,7 @@ function initEditor() {
     ),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
-        scheduleDraft();
+        if (!replacingSource) scheduleDraft();
         scheduleUsage();
         void renderPreview().then(scheduleFollow);
         shiftViewLine(update);
@@ -301,10 +309,11 @@ function initEditor() {
   });
 }
 
-const draftKey = () => `ctf-wu.studio.draft.${openFile?.path ?? `new:${relativeFolder()}`}`;
+const draftKey = () => `ctf-wu.studio.draft.${openFile?.path ?? (localDraftPersisted ? localDraftPath : undefined) ?? `new:${!navigationRunning && displayedRoute.kind === 'new' ? displayedRoute.folder || 'Dreamhack' : relativeFolder()}`}`;
 /** Hash bản GitHub mà editor đang dựa vào: nháp của bản cũ hơn thì không tự đè lên bản mới. */
 let draftBase = '';
 function scheduleDraft() {
+  saveBrowserDraft();
   clearTimeout(draftTimer);
   draftTimer = setTimeout(() => {
     draftTimer = undefined;
@@ -320,12 +329,9 @@ async function settleDraft() {
   }
   await localWrite;
 }
-function saveDraft() {
-  if ($('[data-composer]').hasAttribute('hidden') || !(title.value.trim() || editorSource().trim())) return;
-  if (!openFile) {
-    queueLocalSave();
-    if (localDraftPath) return;
-  }
+function saveBrowserDraft(): boolean {
+  if (navigationRunning || replacingSource) return false;
+  if ($('[data-composer]').hasAttribute('hidden') || !(title.value.trim() || editorSource().trim())) return false;
   const draft: Draft = {
     originalSource,
     summary: summary.value,
@@ -339,12 +345,35 @@ function saveDraft() {
     source: editorSource(),
     ...(openFile ? { base: draftBase } : {}),
   };
-  localStorage.setItem(draftKey(), JSON.stringify(draft));
-  saveDraftAssets();
-  $('[data-save-state]').textContent = 'Nháp lưu trong trình duyệt';
+  try {
+    const value = JSON.stringify(draft);
+    localStorage.setItem(draftKey(), value);
+    saveDraftAssets();
+    if (localDraftPendingPath) {
+      const fileKey = `ctf-wu.studio.draft.${localDraftPendingPath}`;
+      localStorage.setItem(fileKey, value);
+      saveDraftAssets(fileKey);
+    }
+    return true;
+  } catch (error) {
+    setStatus(`Không lưu được nháp trong trình duyệt: ${errorMessage(error)}`, 'error');
+    return false;
+  }
 }
+function saveDraft() {
+  if ($('[data-composer]').hasAttribute('hidden') || !(title.value.trim() || editorSource().trim())) return;
+  const backedUp = saveBrowserDraft();
+  if (!openFile) queueLocalSave();
+  if (backedUp) $('[data-save-state]').textContent = 'Nháp lưu trong trình duyệt';
+}
+window.addEventListener('pagehide', () => saveBrowserDraft());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveBrowserDraft();
+});
+
 function queueLocalSave() {
   localWrite = localWrite.then(saveLocalDraft).catch(async (error) => {
+    saveBrowserDraft();
     if (!(await dropStaleLocalDirectory())) setStatus(errorMessage(error), 'error');
   });
 }
@@ -379,11 +408,12 @@ async function saveLocalDraft() {
     return;
   const path = currentPath();
   const directory = path.replace(/\/[^/]+$/, '');
+  let previousToRemove: string | undefined;
   if (path !== localDraftPath) {
     const previous = localDraftPath?.replace(/\/[^/]+$/, '');
     if (
       remoteBlobs.some((item) => item.path.startsWith(`${directory}/`)) ||
-      (await localEntry(directory)) ||
+      (path !== localDraftPendingPath && (await localEntry(directory))) ||
       (previous && directory.startsWith(`${previous}/`))
     ) {
       $('[data-save-state]').textContent = 'Trùng thư mục bài khác, chưa ghi file';
@@ -395,14 +425,9 @@ async function saveLocalDraft() {
     const old = previous ? await localEntry(previous) : undefined;
     if (previous && old) {
       await copyDirectory(old, target);
-      const holder = parentOf(previous) === postRoot ? localDirectory : await localEntry(parentOf(previous));
-      await holder?.removeEntry(leafName(previous), { recursive: true });
-    } else removeDraft();
-    localDraftPath = path;
-    localDraftOwned = true;
-    $('[data-file-label]').textContent = relPath(path);
-    setStatus(`Đã tạo file local ${relPath(path)}. Bài chỉ lên GitHub khi bấm Publish.`, 'ok');
-    void scanLocalDrafts();
+      previousToRemove = previous;
+    }
+    localDraftPendingPath = path;
   }
   await writeLocalArticle(path, composePost());
   const target = await localEntry(directory);
@@ -411,6 +436,24 @@ async function saveLocalDraft() {
       await writeLocalFile(target, asset.name, asset.file);
       writtenAssets.add(asset);
     }
+  if (previousToRemove) {
+    const holder = parentOf(previousToRemove) === postRoot ? localDirectory : await localEntry(parentOf(previousToRemove));
+    await holder?.removeEntry(leafName(previousToRemove), { recursive: true });
+  }
+  const previousKey = draftKey();
+  const wasNewPath = localDraftPath !== path;
+  localDraftPath = path;
+  if (wasNewPath) localDraftOwned = true;
+  localDraftPendingPath = undefined;
+  localDraftPersisted = true;
+  if (saveBrowserDraft() && previousKey !== draftKey()) {
+    localStorage.removeItem(previousKey);
+    savedDraftAssets.delete(previousKey);
+    void putDraftAssets(previousKey, []).catch(() => {});
+  }
+  if (!navigationRunning && !pendingNavigation) recordStudioRoute({ kind: 'post', path: relPath(path) }, 'replace');
+  $('[data-file-label]').textContent = relPath(path);
+  if (wasNewPath) void scanLocalDrafts();
   $('[data-save-state]').textContent = 'Đã lưu file local · chưa publish';
 }
 const staleButton = $<HTMLButtonElement>('[data-stale-draft]');
@@ -457,6 +500,7 @@ async function restoreDraft(): Promise<boolean | 'stale'> {
     }
     await restoreDraftAssets(draftKey());
     applyDraft(draft);
+    saveBrowserDraft();
     $('[data-save-state]').textContent = 'Đã khôi phục nháp cục bộ';
     return true;
   } catch {
@@ -491,6 +535,7 @@ staleButton.addEventListener('click', async () => {
   }
 });
 function removeDraft() {
+  savedDraftAssets.delete(draftKey());
   localStorage.removeItem(draftKey());
   void putDraftAssets(draftKey(), []).catch(() => {
     /* storage unavailable */
@@ -533,15 +578,25 @@ async function dropStaleLocalDirectory(): Promise<boolean> {
   return true;
 }
 /** Ảnh dán vào nháp chỉ nằm trong RAM; cất File vào IndexedDB cùng khoá với nháp localStorage để tắt máy mở lại vẫn còn. */
-function saveDraftAssets() {
-  const list = assets.filter((asset) => !writtenAssets.has(asset)).map(({ name, file }) => ({ name, file }));
-  void putDraftAssets(draftKey(), list).catch(() => {
-    /* storage unavailable */
+const savedDraftAssets = new Map<string, Asset[]>();
+function saveDraftAssets(key = draftKey()) {
+  const list = assets.filter((asset) => !writtenAssets.has(asset));
+  const saved = savedDraftAssets.get(key);
+  if (saved && saved.length === list.length && saved.every((asset, index) => asset === list[index])) return;
+  savedDraftAssets.set(key, list);
+  void putDraftAssets(key, list.map(({ name, file }) => ({ name, file }))).catch(() => {
+    savedDraftAssets.delete(key);
+    setStatus('Không lưu được ảnh nháp trong trình duyệt. Giữ trang mở và lưu lại file trước khi đóng.', 'error');
   });
 }
 async function restoreDraftAssets(key: string) {
   for (const { name, file } of await getDraftAssets(key).catch(() => [])) {
-    if (assets.some((asset) => asset.name === name)) continue;
+    const previous = assets.find((asset) => asset.name === name);
+    if (previous) {
+      URL.revokeObjectURL(previous.url);
+      writtenAssets.delete(previous);
+      assets = assets.filter((asset) => asset !== previous);
+    }
     assets.push({ file, name, url: URL.createObjectURL(file) });
   }
   // Lượt lưu nháp chạy trước khi đọc xong IndexedDB sẽ ghi danh sách ảnh rỗng; ghi lại đủ ảnh để không mất khi tải lại trang.
@@ -697,7 +752,10 @@ function resetEditor() {
   openFile = undefined;
   localDraftPath = undefined;
   localDraftOwned = false;
+  localDraftPersisted = false;
+  localDraftPendingPath = undefined;
   writtenAssets.clear();
+  savedDraftAssets.clear();
   droppedAssets = [];
   staleButton.hidden = true;
   assets.forEach((asset) => URL.revokeObjectURL(asset.url));
@@ -722,12 +780,15 @@ async function loadConfig() {
   await restoreLocalDirectory();
   void scanLocalDrafts();
   if (token()) void loadTree();
+  navigationReady = true;
+  void navigateStudio(parseStudioRoute(location.pathname) ?? { kind: 'library', folder: '' }, 'replace');
 }
 async function loadTree() {
   if (!token()) {
     $('[data-token-box]').hidden = false;
     return;
   }
+  catalogLoads++;
   updateConnection();
   const tree = $('[data-tree]');
   tree.innerHTML = '<p class="empty-tree">Đang tải write-up…</p>';
@@ -753,6 +814,9 @@ async function loadTree() {
       updateConnection();
     }
     setStatus(message, 'error');
+  } finally {
+    catalogLoads--;
+    void flushStudioNavigation();
   }
 }
 function localRelativePath(path: string) {
@@ -835,117 +899,130 @@ async function reconcileLocalArticle(
       'Xung đột đồng bộ: cả local và GitHub đều đổi. Đang giữ bản local để bạn rà soát trước khi Publish.',
   };
 }
-async function openPost(file: RepoFile) {
-  if (studio.inert) return;
-  studio.inert = true;
-  try {
-    await settleDraft();
-    setStatus('Đang mở write-up…');
-    const content = await api<{ content: string; sha: string }>(
-      `/contents/${file.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repo.branch)}`,
+function openPost(file: RepoFile) {
+  return navigateStudio({ kind: 'post', path: relPath(file.path) });
+}
+async function loadRemotePost(file: RepoFile) {
+  setStatus('Đang mở write-up…');
+  const content = await api<{ content: string; sha: string }>(
+    `/contents/${file.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repo.branch)}`,
+  );
+  const remoteSource = decode(content.content);
+  const base = await hashText(remoteSource);
+  const reconciled = await reconcileLocalArticle(file.path, remoteSource);
+  parsePost(reconciled.source);
+  const localAssets = await readLocalAssets(file.path, true);
+  resetEditor();
+  openFile = { path: file.path, sha: content.sha };
+  localDraftPath = undefined;
+  localDraftOwned = false;
+  folder.value = folderOf(file) || 'uncategorized';
+  const directory = parentOf(file.path);
+  for (const blob of remoteBlobs) {
+    const name = blob.path.slice(directory.length + 1);
+    if (!blob.path.startsWith(`${directory}/`) || name.includes('/') || name === leafName(file.path))
+      continue;
+    const image = /\.(png|jpe?g|gif|webp|avif|svg)$/i.exec(name);
+    const asset: Asset = {
+      file: new File([], name, { type: image ? `image/${image[1].toLowerCase()}` : '' }),
+      name,
+      url: assetUrl(name) ?? '',
+      remote: true,
+    };
+    assets.push(asset);
+    writtenAssets.add(asset);
+  }
+  renderAssets();
+  $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
+  draftBase = base;
+  applyLocalAssets(localAssets);
+  renderAssets();
+  $('[data-save-state]').textContent = 'Đã mở bài';
+  populate(reconciled.source);
+  const restored = await restoreDraft();
+  if (restored === 'stale')
+    setStatus(
+      'Bài trên GitHub đã đổi. Đang giữ bản mới; bấm Mở nháp cũ nếu muốn lấy lại nội dung nháp.',
+      'info',
     );
-    resetEditor();
-    openFile = { path: file.path, sha: content.sha };
-    localDraftPath = undefined;
-    localDraftOwned = false;
-    folder.value = folderOf(file) || 'uncategorized';
-    const directory = parentOf(file.path);
-    for (const blob of remoteBlobs) {
-      const name = blob.path.slice(directory.length + 1);
-      if (!blob.path.startsWith(`${directory}/`) || name.includes('/') || name === leafName(file.path))
-        continue;
-      const image = /\.(png|jpe?g|gif|webp|avif|svg)$/i.exec(name);
-      const asset: Asset = {
-        file: new File([], name, { type: image ? `image/${image[1].toLowerCase()}` : '' }),
-        name,
-        url: assetUrl(name) ?? '',
-        remote: true,
-      };
-      assets.push(asset);
-      writtenAssets.add(asset);
+  else if (restored) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok');
+  else setStatus(reconciled.message, reconciled.message.startsWith('Xung đột') ? 'error' : 'info');
+  activeFolder = folderOf(file) || undefined;
+  renderSidebar();
+  showComposer();
+}
+function openLocalPost(file: RepoFile) {
+  return navigateStudio({ kind: 'post', path: relPath(file.path) });
+}
+async function readLocalAssets(path: string, newOnly = false): Promise<Array<{ name: string; file: File }>> {
+  if (!localDirectory) return [];
+  const directory = await localEntry(parentOf(path));
+  const files: Array<{ name: string; file: File }> = [];
+  if (directory) {
+    for await (const [name, handle] of (directory as ListableDirectory).entries()) {
+      if (newOnly && remoteBlobs.some((blob) => blob.path === `${parentOf(path)}/${name}`)) continue;
+      if (handle.kind === 'file' && !/\.md$/i.test(name)) files.push({ name, file: await handle.getFile() });
     }
-    renderAssets();
-    $('[data-file-label]').textContent = file.path.replace(`${postRoot}/`, '');
-    const remoteSource = decode(content.content);
-    draftBase = await hashText(remoteSource);
-    const reconciled = await reconcileLocalArticle(file.path, remoteSource);
-    $('[data-save-state]').textContent = 'Đã mở bài';
-    populate(reconciled.source);
-    const restored = await restoreDraft();
-    if (restored === 'stale')
-      setStatus(
-        'Bài trên GitHub đã đổi. Đang giữ bản mới; bấm Mở nháp cũ nếu muốn lấy lại nội dung nháp.',
-        'info',
-      );
-    else if (restored) setStatus('Đã khôi phục bản nháp chưa publish.', 'ok');
-    else setStatus(reconciled.message, reconciled.message.startsWith('Xung đột') ? 'error' : 'info');
-    activeFolder = folderOf(file) || undefined;
-    renderSidebar();
-    showComposer();
-  } catch (error) {
-    setStatus(error instanceof Error ? error.message : String(error), 'error');
-  } finally {
-    studio.inert = false;
+  }
+  return files;
+}
+function applyLocalAssets(files: Array<{ name: string; file: File }>) {
+  for (const { name, file } of files) {
+    const previous = assets.find((asset) => asset.name === name);
+    if (previous) {
+      URL.revokeObjectURL(previous.url);
+      writtenAssets.delete(previous);
+      assets = assets.filter((asset) => asset !== previous);
+    }
+    const asset = { file, name, url: URL.createObjectURL(file) };
+    assets.push(asset);
+    writtenAssets.add(asset);
   }
 }
-async function openLocalPost(file: RepoFile) {
-  if (studio.inert) return;
-  studio.inert = true;
-  try {
-    await settleDraft();
-    const source = await readLocalArticle(file.path);
-    if (source === undefined)
-      return setStatus('Không đọc được file local. Kiểm tra quyền thư mục posts.', 'error');
-    resetEditor();
-    folder.value = folderOf(file) || 'uncategorized';
-    localDraftPath = file.path;
-    const directory = await localEntry(parentOf(file.path));
-    if (directory) {
-      for await (const [name, handle] of (directory as ListableDirectory).entries()) {
-        if (handle.kind !== 'file' || name === leafName(file.path)) continue;
-        const asset = { file: await handle.getFile(), name, url: '' };
-        asset.url = URL.createObjectURL(asset.file);
-        assets.push(asset);
-        writtenAssets.add(asset);
-      }
-    }
-    renderAssets();
-    populate(source);
-    $('[data-file-label]').textContent = relPath(file.path);
-    $('[data-save-state]').textContent = 'File local · chưa publish';
-    setStatus('Đang mở bản local chưa publish. Bấm Publish để đưa lên GitHub.', 'info');
-    activeFolder = folderOf(file) || undefined;
-    renderSidebar();
-    showComposer();
-  } catch (error) {
-    setStatus(errorMessage(error), 'error');
-  } finally {
-    studio.inert = false;
-  }
+async function loadLocalPost(file: RepoFile) {
+  const source = await readLocalArticle(file.path);
+  if (source === undefined)
+    throw new Error('Không đọc được file local. Kiểm tra quyền thư mục posts.');
+  parsePost(source);
+  const localAssets = await readLocalAssets(file.path);
+  resetEditor();
+  folder.value = folderOf(file) || 'uncategorized';
+  localDraftPath = file.path;
+  localDraftPersisted = true;
+  applyLocalAssets(localAssets);
+  renderAssets();
+  populate(source);
+  await restoreDraft();
+  $('[data-file-label]').textContent = relPath(file.path);
+  $('[data-save-state]').textContent = 'File local · chưa publish';
+  setStatus('Đang mở bản local chưa publish. Bấm Publish để đưa lên GitHub.', 'info');
+  activeFolder = folderOf(file) || undefined;
+  renderSidebar();
+  showComposer();
 }
 async function scanLocalDrafts() {
-  if (
-    !localDirectory ||
-    (await localDirectory.queryPermission({ mode: 'readwrite' })) !== 'granted'
-  )
-    return;
-  const remote = new Set(remoteBlobs.map((item) => item.path));
-  const found: RepoFile[] = [];
-  const walk = async (directory: FileSystemDirectoryHandle, prefix: string) => {
-    for await (const [name, handle] of (directory as ListableDirectory).entries()) {
-      const path = `${prefix}/${name}`;
-      if (handle.kind === 'directory') await walk(handle, path);
-      else if (name === 'index.md' && !remote.has(path)) found.push({ path, sha: '' });
-    }
-  };
+  if (!localDirectory) return;
+  catalogLoads++;
   try {
+    if ((await localDirectory.queryPermission({ mode: 'readwrite' })) !== 'granted') return;
+    const remote = new Set(remoteBlobs.map((item) => item.path));
+    const found: RepoFile[] = [];
+    const walk = async (directory: FileSystemDirectoryHandle, prefix: string) => {
+      for await (const [name, handle] of (directory as ListableDirectory).entries()) {
+        const path = `${prefix}/${name}`;
+        if (handle.kind === 'directory') await walk(handle, path);
+        else if (name === 'index.md' && !remote.has(path)) found.push({ path, sha: '' });
+      }
+    };
     await walk(localDirectory, postRoot);
+    localOnly = found.sort((a, b) => a.path.localeCompare(b.path));
+    refreshFolderView();
   } catch (error) {
     setStatus(`Không đọc được danh sách bài local: ${errorMessage(error)}`, 'error');
-    return;
+  } finally {
+    catalogLoads--;
+    void flushStudioNavigation();
   }
-  localOnly = found.sort((a, b) => a.path.localeCompare(b.path));
-  refreshFolderView();
 }
 const isLocalOnly = (file: RepoFile) => localOnly.some((entry) => entry.path === file.path);
 async function newWriteup() {
@@ -957,7 +1034,7 @@ async function newWriteup() {
       (localDirectory && (await requestLocalPermission().catch(() => false))) ||
       (!localDirectory && (await chooseLocalFolder()));
     await settleDraft();
-    await startNewInFolder(folderName);
+    void navigateStudio({ kind: 'new', folder: folderName });
     setStatus(
       ready
         ? 'Nhập tiêu đề để tạo file trong thư mục posts local. Bài chỉ lên GitHub khi bấm Publish.'
@@ -974,10 +1051,8 @@ function showComposer() {
   $('[data-composer]').removeAttribute('hidden');
   refreshTagButtons();
   renderTagToast();
-  setTimeout(() => editor.focus(), 0);
 }
 function showLibrary() {
-  void settleDraft();
   $('[data-sidebar-new]').setAttribute('hidden', '');
   $('[data-composer]').setAttribute('hidden', '');
   $('[data-library-home]').removeAttribute('hidden');
@@ -991,8 +1066,6 @@ async function startNewInFolder(folderName = 'Dreamhack') {
   renderSidebar();
   showComposer();
   $('[data-metadata]').setAttribute('open', '');
-  // showComposer hẹn editor.focus() bằng setTimeout; hẹn sau nó để con trỏ nằm ở ô tiêu đề của bài mới.
-  setTimeout(() => title.focus(), 0);
 }
 const KEEP_FILE = '.gitkeep';
 const relPath = (path: string) => path.replace(`${postRoot}/`, '');
@@ -1030,12 +1103,176 @@ function collectFolders() {
   return set;
 }
 function openFolder(path: string) {
-  activeFolder = path || undefined;
-  selectedFiles.clear();
-  selectedFolders.clear();
-  renderFolderHome();
-  renderSidebar();
+  return navigateStudio({ kind: 'library', folder: path });
 }
+
+type NavigationMode = 'push' | 'replace' | 'pop';
+type StudioScroll = { library: number; source: number; preview: number };
+type NavigationRequest = { route: StudioRoute; mode: NavigationMode; scroll?: StudioScroll; resolve: (opened: boolean) => void };
+let displayedRoute: StudioRoute = { kind: 'library', folder: '' };
+let pendingNavigation: NavigationRequest | undefined;
+let navigationRunning = false;
+let navigationReady = false;
+let catalogLoads = 0;
+let navigationIndex = Number(history.state?.studioNavigation?.index ?? 0);
+const navigationSession = String(history.state?.studioNavigation?.session ?? crypto.randomUUID());
+let navigationMax = navigationIndex;
+try { navigationMax = Number(sessionStorage.getItem(`ctf-wu.studio.history.${navigationSession}`) ?? navigationIndex); } catch { /* storage unavailable */ }
+let screenAnimation: Animation | undefined;
+const narrowStudio = matchMedia('(max-width:58rem)');
+function updateSidebarToggle() {
+  const open = narrowStudio.matches ? studio.hasAttribute('data-mobile-library-open') : !studio.hasAttribute('data-sidebar-collapsed');
+  const toggle = $('[data-sidebar-toggle]');
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.setAttribute('aria-label', open ? 'Thu gọn thư viện' : 'Mở thư viện');
+  toggle.setAttribute('title', open ? 'Thu gọn thư viện' : 'Mở thư viện');
+  $('.library').inert = !open;
+}
+function setMobileLibraryOpen(open: boolean) {
+  open = open && narrowStudio.matches;
+  studio.toggleAttribute('data-mobile-library-open', open);
+  $('[data-library-backdrop]').hidden = !open;
+  $('.workspace').inert = open;
+  updateSidebarToggle();
+}
+narrowStudio.addEventListener('change', () => setMobileLibraryOpen(false));
+$('[data-library-backdrop]').addEventListener('click', () => setMobileLibraryOpen(false));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && studio.hasAttribute('data-mobile-library-open')) {
+    setMobileLibraryOpen(false);
+    $('[data-sidebar-toggle]').focus();
+  }
+});
+
+function studioScroll(): StudioScroll {
+  return { library: $('[data-library-home]').scrollTop, source: editor.scrollDOM.scrollTop, preview: preview.scrollTop };
+}
+function updateNavigationButtons() {
+  $<HTMLButtonElement>('[data-history-back]').disabled = navigationIndex <= 0;
+  $<HTMLButtonElement>('[data-history-forward]').disabled = navigationIndex >= navigationMax;
+  $<HTMLButtonElement>('[data-publish]').disabled = $('[data-composer]').hasAttribute('hidden');
+  studio.setAttribute('aria-busy', String(studio.inert));
+}
+function rememberStudioScroll() {
+  if (!navigationRunning && !pendingNavigation && location.pathname === studioRouteUrl(displayedRoute)) {
+    history.replaceState({ ...history.state, studioScroll: studioScroll() }, '');
+  }
+}
+function recordStudioRoute(route: StudioRoute, mode: NavigationMode) {
+  const url = studioRouteUrl(route);
+  if (mode === 'push' && location.pathname !== url) {
+    navigationIndex++;
+    navigationMax = navigationIndex;
+    history.pushState({ studioNavigation: { session: navigationSession, index: navigationIndex }, studioScroll: studioScroll() }, '', url);
+  } else {
+    history.replaceState({ ...history.state, studioNavigation: { session: navigationSession, index: navigationIndex }, studioScroll: studioScroll() }, '', url);
+  }
+  try { sessionStorage.setItem(`ctf-wu.studio.history.${navigationSession}`, String(navigationMax)); } catch { /* storage unavailable */ }
+  displayedRoute = route;
+  const label = route.kind === 'post' ? title.value.trim() || leafName(route.path) : route.kind === 'new' ? 'Bài viết mới' : route.folder || 'Thư viện';
+  document.title = `${label} · Write-up Studio`;
+  $('[data-current-location]').textContent = label;
+  updateNavigationButtons();
+}
+function navigateStudio(route: StudioRoute, mode: NavigationMode = 'push'): Promise<boolean> {
+  if (mode === 'push') {
+    rememberStudioScroll();
+    studio.dataset.navigationDirection = 'forward';
+  }
+  pendingNavigation?.resolve(false);
+  return new Promise((resolve) => {
+    pendingNavigation = { route, mode, resolve, scroll: mode === 'push' ? undefined : history.state?.studioScroll };
+    void flushStudioNavigation();
+  });
+}
+async function flushStudioNavigation() {
+  if (!navigationReady || navigationRunning || studio.inert || !pendingNavigation) return;
+  const request = pendingNavigation;
+  const route = request.route;
+  const path = route.kind === 'post' ? `${postRoot}/${route.path}` : '';
+  const remote = repoFiles.find((file) => file.path === path);
+  const local = localOnly.find((file) => file.path === path);
+  const missing = route.kind === 'post' ? !remote && !local : route.kind === 'library' && route.folder && !folderSet.has(route.folder);
+  if (missing && catalogLoads) return;
+  pendingNavigation = undefined;
+  navigationRunning = true;
+  studio.inert = true;
+  updateNavigationButtons();
+  let opened = false;
+  try {
+    await settleDraft();
+    if (route.kind === 'post') {
+      if (remote) await loadRemotePost(remote);
+      else if (local) await loadLocalPost(local);
+      else throw new Error(token() ? 'Không tìm thấy bài trong thư viện. Bài có thể đã được đổi tên hoặc chuyển folder.' : 'Kết nối GitHub hoặc thư mục local để mở bài từ URL này.');
+    } else if (route.kind === 'new') {
+      await startNewInFolder(route.folder || 'Dreamhack');
+    } else {
+      if (missing) throw new Error('Folder này không còn trong thư viện. Bấm Thư viện để chọn lại.');
+      activeFolder = route.folder || undefined;
+      selectedFiles.clear();
+      selectedFolders.clear();
+      showLibrary();
+      renderFolderHome();
+      renderSidebar();
+    }
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    $('[data-library-home]').scrollTop = request.scroll?.library ?? 0;
+    editor.scrollDOM.scrollTop = request.scroll?.source ?? 0;
+    preview.scrollTop = request.scroll?.preview ?? 0;
+    if (!pendingNavigation) {
+      if (request.mode !== 'replace' || route.kind !== 'library') setMobileLibraryOpen(false);
+      recordStudioRoute(route, request.mode);
+      if (!reduceMotion.matches) {
+        screenAnimation?.cancel();
+        screenAnimation = $('.workspace').animate(
+          [{ opacity: .35, transform: `translateX(${studio.dataset.navigationDirection === 'back' ? '-10px' : '10px'})` }, { opacity: 1, transform: 'none' }],
+          { duration: 180, easing: 'cubic-bezier(.2,.7,.3,1)' },
+        );
+      }
+      opened = true;
+    }
+  } catch (error) {
+    if (!pendingNavigation) recordStudioRoute(displayedRoute, 'replace');
+    setStatus(errorMessage(error), 'error');
+  } finally {
+    navigationRunning = false;
+    studio.inert = false;
+    updateNavigationButtons();
+    if (opened && !pendingNavigation) {
+      const target = route.kind === 'library' ? $('[data-library-title]') : route.kind === 'new' ? title : editor.contentDOM;
+      target.focus({ preventScroll: true });
+    }
+    request.resolve(opened);
+    void flushStudioNavigation();
+  }
+}
+new MutationObserver(() => {
+  updateNavigationButtons();
+  if (!studio.inert) void flushStudioNavigation();
+}).observe(studio, { attributes: true, attributeFilter: ['inert'] });
+window.addEventListener('popstate', () => {
+  const dialog = $<HTMLDialogElement>('[data-name-dialog]');
+  if (dialog.open) dialog.close();
+  const nextIndex = Number(history.state?.studioNavigation?.index ?? 0);
+  studio.dataset.navigationDirection = nextIndex < navigationIndex ? 'back' : 'forward';
+  navigationIndex = nextIndex;
+  const route = parseStudioRoute(location.pathname);
+  if (route) void navigateStudio(route, 'pop');
+});
+$('[data-history-back]').addEventListener('click', () => history.back());
+$('[data-history-forward]').addEventListener('click', () => history.forward());
+document.querySelector<HTMLAnchorElement>('.wordmark')!.addEventListener('click', (event) => {
+  if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  void openFolder('');
+});
+let rememberFrame = 0;
+document.addEventListener('scroll', () => {
+  if (rememberFrame) return;
+  rememberFrame = requestAnimationFrame(() => { rememberFrame = 0; rememberStudioScroll(); });
+}, { capture: true, passive: true });
+
 const hiddenBySha = new Map<string, boolean>();
 const builtTags: TagTerm[] = (() => {
   try {
@@ -1046,15 +1283,7 @@ const builtTags: TagTerm[] = (() => {
 })();
 const tagsBySha = new Map<string, string[]>();
 const hiddenOf = (file: RepoFile) => hiddenBySha.get(file.sha) === true;
-const frontmatterRe = /^---\r?\n([\s\S]*?)\r?\n---/;
-const isDraftSource = (source: string) => /^draft:\s*true\s*$/m.test(frontmatterRe.exec(source)?.[1] ?? '');
-function withDraftFlag(source: string, hidden: boolean) {
-  const match = frontmatterRe.exec(source);
-  if (!match) return hidden ? `---\ndraft: true\n---\n\n${source}` : source;
-  const lines = match[1].split(/\r?\n/).filter((line) => !/^draft\s*:/.test(line));
-  if (hidden) lines.push('draft: true');
-  return `---\n${lines.join('\n')}\n---${source.slice(match[0].length)}`;
-}
+const isDraftSource = (source: string) => parsePost(source).fields.draft === true;
 async function loadHiddenStates() {
   const todo = remoteBlobs.filter(
     (item) => item.path.startsWith(`${postRoot}/`) && item.path.endsWith('.md') && !hiddenBySha.has(item.sha),
@@ -1081,18 +1310,22 @@ async function loadHiddenStates() {
   refreshFolderView();
 }
 async function setVisibility(hide: boolean) {
+  if (studio.inert) return;
   const picked = new Set(selectedFiles);
   for (const path of selectedFolders)
     repoFiles.filter((file) => inFolder(file, path)).forEach((file) => picked.add(file.path));
-  const files = repoFiles.filter((file) => picked.has(file.path) && hiddenOf(file) !== hide);
+  const files = repoFiles.filter((file) => picked.has(file.path));
   if (!files.length)
     return setStatus(hide ? 'Các bài đã chọn đều đang ẩn.' : 'Các bài đã chọn đều đang hiện.', 'info');
   if (!token()) return setStatus('Cần kết nối GitHub để đổi trạng thái bài.', 'error');
+  const preparedHead = remoteHead;
+  studio.inert = true;
   try {
     setStatus(`Đang chuẩn bị ${files.length} bài…`);
     const entries = await Promise.all(
-      files.map(async (file): Promise<TreeEntry> => {
+      files.map(async (file): Promise<TreeEntry | undefined> => {
         const source = decode((await api<{ content: string }>(`/git/blobs/${file.sha}`)).content);
+        if (isDraftSource(source) === hide) return;
         const blob = await api<{ sha: string }>('/git/blobs', {
           method: 'POST',
           body: JSON.stringify({ content: withDraftFlag(source, hide), encoding: 'utf-8' }),
@@ -1101,15 +1334,19 @@ async function setVisibility(hide: boolean) {
         return { path: file.path, mode: '100644', type: 'blob', sha: blob.sha };
       }),
     );
+    const changes = entries.filter((entry): entry is TreeEntry => Boolean(entry));
+    if (!changes.length) return setStatus(hide ? 'Các bài đã chọn đều đang ẩn.' : 'Các bài đã chọn đều đang hiện.', 'info');
     selectedFiles.clear();
     selectedFolders.clear();
-    stageEntries(entries, `content: ${hide ? 'ẩn' : 'hiện'} ${files.length} write-up trên blog`);
+    stageEntries(changes, `content: ${hide ? 'ẩn' : 'hiện'} ${changes.length} write-up trên blog`, preparedHead);
     setStatus(
-      `Đã thêm việc ${hide ? 'ẩn' : 'hiện'} ${files.length} bài vào danh sách chờ. Bấm Save để commit.`,
+      `Đã thêm việc ${hide ? 'ẩn' : 'hiện'} ${changes.length} bài vào danh sách chờ. Bấm Save để commit.`,
       'ok',
     );
   } catch (error) {
     setStatus(errorMessage(error), 'error');
+  } finally {
+    studio.inert = false;
   }
 }
 const selectionMode = () => selectedFiles.size > 0 || selectedFolders.size > 0;
@@ -1549,8 +1786,7 @@ function renderSidebar() {
   const navigate = (target: string) => {
     treeOpen.add(target);
     saveTreeOpen();
-    showLibrary();
-    openFolder(target);
+    void openFolder(target);
   };
   const indent = (row: HTMLElement, depth: number) => row.style.setProperty('--depth', String(depth));
   const addFiles = (parent: string, depth: number) => {
@@ -1712,15 +1948,18 @@ function refreshFolderView() {
   $('[data-pending-count]').textContent = `${count} thay đổi folder chưa lưu`;
   renderFolderHome(repoFiles);
   renderSidebar();
+  if (navigationReady && !navigationRunning && !pendingNavigation && $('[data-composer]').hasAttribute('hidden')) {
+    recordStudioRoute({ kind: 'library', folder: currentFolder() }, 'replace');
+  }
 }
-function stageEntries(entries: TreeEntry[], message: string) {
+function stageEntries(entries: TreeEntry[], message: string, base = remoteHead) {
   const remote = new Set(remoteBlobs.map((item) => item.path));
   const staged = new Map(pending.entries.map((entry) => [entry.path, entry]));
   for (const entry of entries) {
     if (entry.sha === null && !remote.has(entry.path)) staged.delete(entry.path);
     else staged.set(entry.path, entry);
   }
-  pending = { entries: [...staged.values()], messages: [...pending.messages, message], base: pending.messages.length ? pending.base : remoteHead };
+  pending = { entries: [...staged.values()], messages: [...pending.messages, message], base: pending.messages.length ? pending.base : base };
   writePending();
   refreshFolderView();
 }
@@ -1841,15 +2080,8 @@ function askName(request: NameRequest): Promise<string | null> {
     input.select();
   });
 }
-function retargetCtf(source: string, from: string, to: string) {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(source);
-  if (!match) return source;
-  const head = match[1].replace(/^ctf:[ \t]*(.*?)[ \t]*$/m, (line, value: string) =>
-    value.replace(/^(["'])(.*)\1$/, '$2') === from ? stringifyYaml({ ctf: to }).trimEnd() : line,
-  );
-  return head === match[1] ? source : source.replace(match[1], () => head);
-}
 async function createFolder() {
+  if (studio.inert) return;
   if (!token()) return setStatus('Cần kết nối GitHub để tạo folder.', 'error');
   const here = currentFolder();
   const name = await askName({
@@ -1866,6 +2098,8 @@ async function createFolder() {
     return setStatus(`Đã có folder "${path}".`, 'error');
   if (repoFiles.some((file) => file.path.startsWith(`${postRoot}/${path}/`)))
     return setStatus(`"${path}" đang là thư mục của một bài viết.`, 'error');
+  const preparedHead = remoteHead;
+  studio.inert = true;
   try {
     setStatus(`Đang tạo folder "${path}"…`);
     const blob = await api<{ sha: string }>('/git/blobs', {
@@ -1875,13 +2109,17 @@ async function createFolder() {
     stageEntries(
       [{ path: `${postRoot}/${path}/${KEEP_FILE}`, mode: '100644', type: 'blob', sha: blob.sha }],
       `content: tạo folder "${path}"`,
+      preparedHead,
     );
     setStatus(`Đã thêm folder "${path}" vào danh sách chờ. Bấm Save để commit.`, 'ok');
   } catch (error) {
     setStatus(errorMessage(error), 'error');
+  } finally {
+    studio.inert = false;
   }
 }
 async function renameSelectedFolder() {
+  if (studio.inert) return;
   const [oldPath] = [...selectedFolders];
   if (selectedFolders.size !== 1 || !oldPath) return setStatus('Chọn đúng một folder để đổi tên.', 'info');
   if (!token()) return setStatus('Cần kết nối GitHub để đổi tên folder.', 'error');
@@ -1907,6 +2145,8 @@ async function renameSelectedFolder() {
   const prefix = `${postRoot}/${oldPath}/`;
   const items = repoTree.filter((item) => item.path.startsWith(prefix));
   if (!items.length) return setStatus('Folder này chưa có file nào trên GitHub để đổi tên.', 'error');
+  const preparedHead = remoteHead;
+  studio.inert = true;
   try {
     setStatus(`Đang đổi tên "${oldPath}" thành "${newPath}"…`);
     let retargeted = 0;
@@ -1935,13 +2175,15 @@ async function renameSelectedFolder() {
     selectedFiles.clear();
     if (activeFolder === oldPath || activeFolder?.startsWith(`${oldPath}/`))
       activeFolder = newPath + activeFolder.slice(oldPath.length);
-    stageEntries(entries, `content: đổi tên folder "${oldPath}" thành "${newPath}"`);
+    stageEntries(entries, `content: đổi tên folder "${oldPath}" thành "${newPath}"`, preparedHead);
     setStatus(
       `Đã thêm đổi tên "${oldPath}" thành "${newPath}"${retargeted ? ` (cập nhật ctf trong ${retargeted} bài)` : ''} vào danh sách chờ. Bấm Save để commit.`,
       'ok',
     );
   } catch (error) {
     setStatus(errorMessage(error), 'error');
+  } finally {
+    studio.inert = false;
   }
 }
 async function moveSelectionTo(targetFolder: string): Promise<boolean> {
@@ -2112,6 +2354,10 @@ function renderAssets() {
       remove.textContent = '×';
       remove.setAttribute('aria-label', `Bỏ ${asset.name}`);
       remove.addEventListener('click', () => {
+        if (usedAssetNames().has(asset.name)) {
+          setStatus(`File ${asset.name} vẫn đang được dùng. Xoá liên kết trong bài hoặc cover trước khi bỏ file.`, 'info');
+          return;
+        }
         URL.revokeObjectURL(asset.url);
         assets = assets.filter((entry) => entry !== asset);
         if (writtenAssets.has(asset)) droppedAssets.push(asset);
@@ -2296,7 +2542,8 @@ async function autoTags() {
   if (!apiKey && !useClaude) {
     $<HTMLDetailsElement>('[data-ai-key]').open = true;
     const rated = await official;
-    if (rated && !chosen && currentPath() === postPath) difficulty.value = rated;
+    if (currentPath() !== postPath || navigationRunning) return;
+    if (rated && !chosen) difficulty.value = rated;
     return applyTagResult(
       offline,
       undefined,
@@ -3057,6 +3304,8 @@ async function publish() {
     };
     localDraftPath = undefined;
     localDraftOwned = false;
+    localDraftPersisted = true;
+    if (!pendingNavigation) recordStudioRoute({ kind: 'post', path: relPath(filePath) }, 'replace');
     $('[data-file-label]').textContent = filePath.replace(`${postRoot}/`, '');
     activeFolder = relativeFolder();
     $('[data-save-state]').textContent = 'Đã publish';
@@ -3204,7 +3453,7 @@ $('[data-connect]').addEventListener('click', () => {
   void loadTree();
 });
 $('[data-publish]').addEventListener('click', () => void publish());
-$('[data-library]').addEventListener('click', showLibrary);
+$('[data-library]').addEventListener('click', () => void openFolder(currentFolder()));
 $('[data-folder-back]').addEventListener('click', () => openFolder(parentOf(currentFolder())));
 $('[data-folder-create]').addEventListener('click', () => void createFolder());
 document
@@ -3262,8 +3511,15 @@ document
   .querySelectorAll<HTMLButtonElement>('[data-markdown]')
   .forEach((button) => button.addEventListener('click', () => insertMarkdown(button.dataset.markdown ?? '')));
 $('[data-sidebar-toggle]').addEventListener('click', () => {
+  if (narrowStudio.matches) {
+    const open = !studio.hasAttribute('data-mobile-library-open');
+    setMobileLibraryOpen(open);
+    if (open) ($('.library').querySelector<HTMLElement>('input:not([type="hidden"]), button') ?? $('.library')).focus();
+    return;
+  }
   const collapsed = document.querySelector('.studio')!.toggleAttribute('data-sidebar-collapsed');
   localStorage.setItem('ctf-wu.studio-sidebar-collapsed', String(collapsed));
+  updateSidebarToggle();
 });
 $('[data-connection]').addEventListener('click', () => {
   if (localMode)
@@ -3271,8 +3527,14 @@ $('[data-connection]').addEventListener('click', () => {
       'Studio local dùng git trên máy (push bằng credential của git), không cần GitHub token.',
       'info',
     );
-  $('[data-token-box]').hidden = !$('[data-token-box]').hidden;
-  if (!$('[data-token-box]').hidden) tokenInput.focus();
+  const concealed = narrowStudio.matches ? !studio.hasAttribute('data-mobile-library-open') : studio.hasAttribute('data-sidebar-collapsed');
+  $('[data-token-box]').hidden = concealed ? false : !$('[data-token-box]').hidden;
+  if (!$('[data-token-box]').hidden) {
+    if (narrowStudio.matches) setMobileLibraryOpen(true);
+    else studio.removeAttribute('data-sidebar-collapsed');
+    updateSidebarToggle();
+    tokenInput.focus();
+  }
 });
 [title, summary, folder, date, ctf, category, difficulty, tags].forEach((input) =>
   input.addEventListener('input', () => {
@@ -3570,6 +3832,7 @@ editor.scrollDOM.addEventListener(
 );
 if (localStorage.getItem('ctf-wu.studio-sidebar-collapsed') === 'true')
   document.querySelector('.studio')!.setAttribute('data-sidebar-collapsed', '');
+updateSidebarToggle();
 // npm run dev: mỗi khi file trong src/content/posts đổi (Studio ghi nháp, git pull sau Publish), Astro gửi full-reload không có
 // triggeredBy tới mọi trang -> Studio tải lại giữa chừng, mất bài đang soạn. Đổi path sang trang .html khác để Vite bỏ qua;
 // reload do sửa code phía client (có triggeredBy) vẫn giữ.

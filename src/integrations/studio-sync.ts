@@ -6,6 +6,7 @@ import { STUDIO_REPO } from '../lib/studio';
 import { isStudioRequest, studioLocal } from './studio-local';
 import { claudeSuggestTags } from '../lib/studio-claude-tags';
 import type { TagPromptInput } from '../lib/tag-prompt';
+import { studioPagePath } from '../lib/studio-route';
 
 /**
  * Chỉ khi `npm run dev`: POST /__studio/sync cho Studio gọi sau Publish để git pull về máy.
@@ -21,6 +22,12 @@ export default function studioSync(): AstroIntegration {
     name: 'studio-sync',
     hooks: {
       'astro:server:setup': ({ server }) => {
+        server.middlewares.use((request, _response, next) => {
+          const url = new URL(request.url ?? '/', 'http://localhost');
+          const page = studioPagePath(url.pathname);
+          if (page && (request.method === 'GET' || request.method === 'HEAD')) request.url = page + url.search;
+          next();
+        });
         const local = studioLocal(root, STUDIO_REPO);
         server.middlewares.use('/__studio/local', local.probe);
         server.middlewares.use('/__studio/git', local.git);

@@ -358,6 +358,14 @@ khi localhost sẵn sàng (hoặc mở ngay nếu server đã chạy). Bấm X c
 chuột phải chọn **Exit Studio (stop server)** để tắt cả server và trình xem log.
 Log được lưu tại `.cache/studio/server.log`; `Studio.bat` vẫn dùng được để khởi chạy.
 
+Studio có URL riêng cho folder (`/admin/studio/folder/.../`), bài đang sửa
+(`/admin/studio/post/.../index.md/`) và màn tạo bài (`/admin/studio/new/.../`).
+Dùng Back/Forward của trình duyệt hoặc hai nút mũi tên trong Studio; tải lại URL sẽ mở đúng màn
+và khôi phục nháp. Trên màn hình nhỏ, nút thư viện mở cây bài viết và ô kết nối GitHub.
+Nháp được lưu dự phòng trong trình duyệt ngay khi gõ, kể cả khi ghi file local thất bại.
+Các URL con được phục vụ qua rewrite trong `public/_redirects` trên Cloudflare Pages
+([tài liệu](https://developers.cloudflare.com/pages/configuration/redirects/)); dev server cũng hỗ trợ các đường dẫn này.
+
 - Duyệt folder theo cây (folder lồng nhau), breadcrumb ở đầu trang, sidebar liệt kê folder con và bài.
 - `+ Folder mới` / `+ Folder con`: tạo folder rỗng (giữ trên GitHub bằng file `.gitkeep`, loader bỏ qua).
 - Chọn một folder bằng ô vuông ở góc card rồi bấm `Đổi tên folder`: Studio chuyển toàn bộ file sang

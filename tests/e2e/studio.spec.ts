@@ -38,6 +38,139 @@ async function mockRepository(page: Page, holdHiddenState = false) {
   return Object.assign(() => saved, { releaseHidden });
 }
 
+test('URL folder và bài hỗ trợ Back, Forward, reload mà vẫn giữ sửa đổi', async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', 'Luồng authoring chạy trên desktop');
+  await mockRepository(page);
+  await page.goto('/admin/studio/');
+  await page.locator('.folder-open').filter({ hasText: 'Dreamhack' }).click();
+  await expect(page).toHaveURL(/\/admin\/studio\/folder\/Dreamhack\/$/);
+  await page.locator('[data-folder-files] .file-open').click();
+  await expect(page).toHaveURL(/\/admin\/studio\/post\/Dreamhack\/metadata\/index.md\/$/);
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('\nBan nhap qua lai.');
+  await page.goBack();
+  await expect(page.locator('[data-library-home]')).toBeVisible();
+  await expect(page).toHaveURL(/\/folder\/Dreamhack\/$/);
+  await expect(page.locator('[data-history-forward]')).toBeEnabled();
+  await page.locator('[data-history-forward]').click();
+  await expect(page.locator('.cm-content')).toContainText('Ban nhap qua lai.');
+  const reply = await page.reload();
+  expect(reply!.status()).toBe(200);
+  await expect(page.locator('[data-title]')).toHaveValue('Metadata');
+  await expect(page.locator('.cm-content')).toContainText('Ban nhap qua lai.');
+  await expect(page).toHaveTitle('Metadata · Write-up Studio');
+  await page.locator('[data-history-back]').click();
+  await expect(page.locator('[data-library-home]')).toBeVisible();
+  await expect(page.locator('[data-library-title]')).toHaveText('Dreamhack');
+});
+
+test('Back lúc đang mở bài không bị request cũ kéo trở lại editor', async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', 'Luồng authoring chạy trên desktop');
+  await mockRepository(page);
+  let reading = false;
+  let release = () => {};
+  const waiting = new Promise<void>((resolve) => { release = resolve; });
+  page.once('close', release);
+  await page.route('https://api.github.com/**/contents/**', async (route) => {
+    reading = true;
+    await waiting;
+    await route.fallback();
+  });
+  await page.goto('/admin/studio/');
+  await page.locator('.folder-open').filter({ hasText: 'Dreamhack' }).click();
+  await expect(page).toHaveURL(/\/folder\/Dreamhack\/$/);
+  await page.locator('[data-folder-files] .file-open').click();
+  await expect.poll(() => reading).toBe(true);
+  await page.goBack();
+  release();
+  await expect(page).toHaveURL(/\/admin\/studio\/$/);
+  await expect(page.locator('[data-library-home]')).toBeVisible();
+  await expect(page.locator('[data-composer]')).toBeHidden();
+  await page.goForward();
+  await expect(page.locator('[data-library-title]')).toHaveText('Dreamhack');
+  await expect(page.locator('[data-composer]')).toBeHidden();
+});
+
+test('URL nháp mới mở trực tiếp và reload khôi phục đủ metadata/body', async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', 'Luồng authoring chạy trên desktop');
+  await mockRepository(page);
+  await page.goto('/admin/studio/new/Dreamhack/');
+  await expect(page.locator('[data-composer]')).toBeVisible();
+  await page.locator('[data-title]').fill('Draft URL');
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('Noi dung chua publish.');
+  const reply = await page.reload();
+  expect(reply!.status()).toBe(200);
+  await expect(page.locator('[data-title]')).toHaveValue('Draft URL');
+  await expect(page.locator('.cm-content')).toContainText('Noi dung chua publish.');
+  await expect(page.locator('[data-folder]')).toHaveValue('Dreamhack');
+});
+
+for (const reduced of [false, true]) test(`Studio chuyển màn ${reduced ? 'không animation khi giảm chuyển động' : 'có animation'}`, async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', 'Luồng authoring chạy trên desktop');
+  await mockRepository(page);
+  await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+  await page.addInitScript(() => {
+    const animate = Element.prototype.animate;
+    (window as Window & { studioMotionCount?: number }).studioMotionCount = 0;
+    Element.prototype.animate = function (...args) {
+      if (this.classList.contains('workspace')) {
+        const state = window as Window & { studioMotionCount?: number };
+        state.studioMotionCount = (state.studioMotionCount ?? 0) + 1;
+      }
+      return animate.apply(this, args);
+    };
+  });
+  await page.goto('/admin/studio/');
+  await page.locator('.folder-open').filter({ hasText: 'Dreamhack' }).click();
+  await expect(page).toHaveURL(/\/folder\/Dreamhack\/$/);
+  await page.locator('[data-folder-files] .file-open').click();
+  await expect(page).toHaveURL(/\/post\//);
+  const count = await page.evaluate(() => (window as Window & { studioMotionCount?: number }).studioMotionCount ?? 0);
+  if (reduced) expect(count).toBe(0);
+  else expect(count).toBeGreaterThan(0);
+});
+
+test('metadata cuộn được để nhập API key trên màn hình desktop thấp', async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', 'Kiểm tra popup desktop ở chiều cao thấp');
+  await page.setViewportSize({ width: 1440, height: 600 });
+  await mockRepository(page);
+  await page.goto('/admin/studio/post/Dreamhack/metadata/index.md/');
+  await expect(page.locator('[data-composer]')).toBeVisible();
+  await page.locator('[data-metadata-toggle]').click();
+  await page.locator('[data-ai-key] summary').click();
+  await page.locator('[data-gemini-key]').fill('test-key');
+  await expect(page.locator('[data-gemini-key]')).toBeInViewport();
+  const metrics = await page.locator('[data-metadata]').evaluate((panel) => ({
+    bottom: panel.getBoundingClientRect().bottom, scrollable: panel.scrollHeight > panel.clientHeight, scroll: panel.scrollTop,
+  }));
+  expect(metrics.bottom).toBeLessThanOrEqual(600);
+  expect(metrics.scrollable).toBe(true);
+  expect(metrics.scroll).toBeGreaterThan(0);
+});
+
+test('Studio màn hình nhỏ mở được token và thư viện để chọn bài', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile', 'Kiểm tra thư viện dạng drawer trên màn hình nhỏ');
+  await mockRepository(page);
+  await page.addInitScript(() => localStorage.removeItem('ctf-wu.studio-token'));
+  await page.goto('/admin/studio/');
+  await page.locator('[data-connection]').click();
+  await expect(page.locator('[data-token]')).toBeVisible();
+  await page.locator('[data-token]').fill('test-only');
+  await page.locator('[data-connect]').click();
+  await expect(page.locator('.tree-file .tree-open')).toBeVisible();
+  await page.locator('.tree-file .tree-open').click();
+  await expect(page.locator('[data-composer]')).toBeVisible();
+  await expect(page).toHaveURL(/\/post\/Dreamhack\/metadata\/index.md\/$/);
+  await expect(page.locator('[data-sidebar-toggle]')).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('[data-sidebar-toggle]').click();
+  await expect(page.locator('.tree-file .tree-open')).toBeVisible();
+  await page.locator('[data-library-backdrop]').click({ position: { x: 370, y: 150 } });
+  await expect(page.locator('[data-sidebar-toggle]')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.workspace')).not.toHaveAttribute('inert');
+});
+
 test('reload vẫn mở được bài local khi GitHub chưa trả lời', async ({ page }, info) => {
   test.skip(info.project.name === 'mobile', 'Luồng authoring chạy trên desktop');
   const path = 'Dreamhack/Extra/Bronze/blind-command/index.md';

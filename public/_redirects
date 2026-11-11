@@ -1,0 +1,4 @@
+# Studio giữ URL riêng cho thư viện, bài đang sửa và nháp mới.
+/admin/studio/folder/* /admin/studio/ 200
+/admin/studio/post/* /admin/studio/ 200
+/admin/studio/new/* /admin/studio/ 200

@@ -5,6 +5,11 @@ import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 const compressed = new Map();
 const root = path.resolve('dist');
+// Áp dụng các rewrite 200 từ cùng file Cloudflare Pages sử dụng.
+const rewrites = (await readFile(path.join(root, '_redirects'), 'utf8')).split(/\r?\n/)
+  .map((line) => line.trim().split(/\s+/))
+  .filter(([from, , status]) => from && !from.startsWith('#') && status === '200')
+  .map(([from, to]) => ({ from: new RegExp(`^${from.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`), to }));
 const mime = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
@@ -40,7 +45,8 @@ for (const line of (await readFile(path.join(root, '_headers'), 'utf8')).split(/
 createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    let file = path.resolve(root, `.${pathname}`);
+    const target = rewrites.find(({ from }) => from.test(pathname))?.to ?? pathname;
+    let file = path.resolve(root, `.${target}`);
     if (!file.startsWith(root + path.sep) && file !== root) {
       res.writeHead(403).end();
       return;

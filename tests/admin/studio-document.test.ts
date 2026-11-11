@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeDocument, readDocument } from '../../src/lib/studio-document';
+import { composeDocument, readDocument, retargetCtf, withDraftFlag } from '../../src/lib/studio-document';
 const fields = {
   title: 'Bài đã sửa',
   date: '2026-11-03',
@@ -9,6 +9,75 @@ const fields = {
   tags: 'XSS, DOM',
 };
 describe('Studio mở và lưu tài liệu', () => {
+  it.each([
+    '---\n{ title: Flow, ctf: "CSCTF 2026", tags: [Cookie], points: 42 }\n---\n\n`CSCTF{keep}`\n',
+    '---\nctf: \'CSCTF 2026\' # Giữ comment\ncover: ./image.png\n---\n\nPayload\n',
+    '\uFEFF---\r\n"ctf": CSCTF 2026\r\ntitle: BOM\r\n...\r\n\r\nPayload\r\n',
+  ])('đổi ctf đúng tên giải và giữ nguyên body/metadata với source %s', (source) => {
+    const original = readDocument(source);
+    const output = retargetCtf(source, 'CSCTF 2026', 'New CTF: "2027"');
+    expect(readDocument(output)).toEqual({ fields: { ...original.fields, ctf: 'New CTF: "2027"' }, body: original.body });
+    if (source.includes('# Giữ comment')) expect(output).toContain('# Giữ comment');
+    if (source.startsWith('\uFEFF')) {
+      expect(output).toMatch(/^\uFEFF---\r\n/);
+      expect(output).toContain('...\r\n\r\nPayload\r\n');
+    }
+  });
+
+  it.each([
+    '---\nctf: Custom\n---\nBody',
+    '---\ntitle: Missing CTF\n---\nBody',
+    '---\n---\nBody',
+    'Body without frontmatter',
+    '---\nctf: 42\n---\nBody',
+  ])('không tự đổi ctf khác tên folder hoặc thiếu ctf: %s', (source) => {
+    expect(retargetCtf(source, '42', 'New CTF')).toBe(source);
+  });
+
+  it('giữ source khi tên CTF không đổi và từ chối YAML hỏng', () => {
+    const source = '---\nctf: Same\n---\nBody';
+    expect(retargetCtf(source, 'Same', 'Same')).toBe(source);
+    expect(() => retargetCtf('---\nctf: [\n---\nPayload', 'Old', 'New')).toThrow();
+  });
+
+  it.each([
+    '---\n{ title: Flow, ctf: CSCTF 2026, tags: [Cookie], points: 42 }\n---\n\n## Solution\n\n`CSCTF{keep}`\n',
+    '\uFEFF---\r\n# Giữ comment\r\ntitle: BOM\r\ncover: ./image.png\r\n...\r\n\r\nPayload\r\n',
+    '---\n---\n\nTrước\n\n---\n\nSau\n',
+    'Không có frontmatter\n\n`DH{keep}`\n',
+  ])('ẩn rồi hiện bài giữ nguyên body và metadata với source %s', (source) => {
+    const original = readDocument(source);
+    const hidden = withDraftFlag(source, true);
+    expect(readDocument(hidden)).toEqual({ fields: { ...original.fields, draft: true }, body: original.body });
+    expect(readDocument(withDraftFlag(hidden, false))).toEqual(original);
+    if (source.includes('# Giữ comment')) {
+      expect(hidden).toContain('# Giữ comment');
+      expect(hidden).toMatch(/^\uFEFF---\r\n/);
+      expect(hidden).toContain('...\r\n\r\nPayload\r\n');
+    }
+  });
+
+  it.each([
+    '---\n{ title: Flow, draft: true, points: 42 }\n---\n\nBody',
+    '---\ntitle: Block\ndraft: true # Đang ẩn\n---\n\nBody',
+  ])('hiện bài có draft ở flow YAML hoặc kèm comment', (source) => {
+    const output = readDocument(withDraftFlag(source, false));
+    expect(output.fields).not.toHaveProperty('draft');
+    expect(output.fields.title).toBe(readDocument(source).fields.title);
+    expect(output.body).toBe(readDocument(source).body);
+  });
+
+  it('không ghi lại source khi trạng thái ẩn đã đúng', () => {
+    const shown = '---\n{title: Same}\n---\nBody';
+    const hidden = '---\n{title: Same, draft: true}\n---\nBody';
+    expect(withDraftFlag(shown, false)).toBe(shown);
+    expect(withDraftFlag(hidden, true)).toBe(hidden);
+  });
+
+  it('đổi trạng thái ẩn từ chối YAML hỏng', () => {
+    expect(() => withDraftFlag('---\ncover: [\n---\nPayload', true)).toThrow();
+  });
+
   it('không nhầm đường kẻ ngang trong body là phần kết frontmatter rỗng', () => {
     const source = '---\n---\n\nTrước\n\n---\n\nSau';
     const output = composeDocument(source, fields, readDocument(source).body);

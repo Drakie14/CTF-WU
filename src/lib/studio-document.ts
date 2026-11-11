@@ -12,6 +12,41 @@ export interface EditorFields {
   tags: string;
 }
 
+function frontmatterDocument(source: string) {
+  const split = splitFrontmatter(source);
+  if (split.error) throw new Error(`Không thể lưu frontmatter: ${split.error}`);
+  const header = split.hasFrontmatter ? source.slice(0, source.length - split.body.length) : '';
+  const yaml = header.replace(/^\uFEFF?---[ \t]*\r?\n/, '').replace(/(?:^|\r?\n)(?:---|\.\.\.)[ \t]*(?:\r?\n|$)$/, '');
+  const doc = parseDocument(yaml || '{}', { schema: 'core' });
+  if (doc.errors.length) throw new Error(doc.errors[0].message);
+  return { split, header, doc };
+}
+
+function serializeFrontmatter(source: string, { split, header, doc }: ReturnType<typeof frontmatterDocument>): string {
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  const opening = header.match(/^\uFEFF?---[ \t]*\r?\n/)?.[0]
+    ?? `${source.startsWith('\uFEFF') ? '\uFEFF' : ''}---${newline}`;
+  const closing = header.match(/(?:^|\r?\n)((?:---|\.\.\.)[ \t]*(?:\r?\n|$))$/)?.[1] ?? `---${newline}`;
+  return `${opening}${doc.toString().replace(/\n/g, newline)}${closing}${split.body}`;
+}
+
+/** Chỉ đổi trạng thái ẩn; giữ nguyên body và các field/comment khác trong YAML. */
+export function withDraftFlag(source: string, hidden: boolean): string {
+  const document = frontmatterDocument(source);
+  if (hidden ? document.doc.get('draft') === true : !document.doc.has('draft')) return source;
+  if (hidden) document.doc.set('draft', true);
+  else document.doc.delete('draft');
+  return serializeFrontmatter(source, document);
+}
+
+/** Đổi tên giải theo folder mà không ghi đè tên CTF do tác giả đặt riêng. */
+export function retargetCtf(source: string, from: string, to: string): string {
+  const document = frontmatterDocument(source);
+  if (from === to || document.doc.get('ctf') !== from) return source;
+  document.doc.set('ctf', to);
+  return serializeFrontmatter(source, document);
+}
+
 /** Giữ YAML Document để không làm rơi field lạ, comment, cover hoặc summary. */
 export function composeDocument(
   original: string,
@@ -19,12 +54,7 @@ export function composeDocument(
   body: string,
   draft?: boolean,
 ): string {
-  const split = splitFrontmatter(original);
-  if (split.error) throw new Error(`Không thể lưu frontmatter: ${split.error}`);
-  const header = split.hasFrontmatter ? original.slice(0, original.length - split.body.length) : '';
-  const yaml = header.replace(/^\uFEFF?---[ \t]*\r?\n/, '').replace(/(?:^|\r?\n)(?:---|\.\.\.)[ \t]*(?:\r?\n|$)$/, '');
-  const doc = parseDocument(yaml || '{}', { schema: 'core' });
-  if (doc.errors.length) throw new Error(doc.errors[0].message);
+  const { doc } = frontmatterDocument(original);
   for (const key of ['title', 'date', 'ctf', 'category', 'difficulty'] as const) {
     const value = fields[key].trim();
     if (key === 'date' && value) {
