@@ -97,6 +97,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
             <span data-save-state>Chưa publish</span>
             <button type="button" data-stale-draft hidden title="Nháp này viết trên bản cũ hơn bản đang có trên GitHub">Mở nháp cũ</button>
             <button type="button" data-metadata-toggle>Thông tin bài</button>
+            <button type="button" class="delete-post" data-delete-current>Xóa bài</button>
           </div>
 
           <details class="metadata" data-metadata>
@@ -291,6 +292,9 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
     .studio[data-mobile-library-open] .library { display:block; grid-area:2/1; z-index:30; width:min(21rem,calc(100vw - 2rem)); padding:1rem; overflow:auto; opacity:1; pointer-events:auto; box-shadow:1rem 0 3rem #0007; }
   }
   /* Library polish: breadcrumb, selection bar, name dialog, empty state */
+  .delete-post { padding:.3rem .5rem; border:1px solid var(--line); border-radius:.35rem; background:var(--panel); color:#f6a5a5; font:inherit; font-size:.65rem; cursor:pointer; }
+  .delete-post:hover { border-color:#f6a5a5; }
+  .recent-card > .delete-post,.folder-file-card > .delete-post { position:absolute; top:.6rem; right:2.4rem; }
   .new-file[hidden],.create-folder[hidden],.back-folder[hidden],.selection-bar[hidden],.library-empty[hidden],.folder-grid[hidden],.folder-posts[hidden],.recent-posts[hidden] { display:none; }
   .library-home { padding:1.6rem clamp(1.2rem,4vw,3.5rem) 3rem; } .browser-head { align-items:flex-end; margin-bottom:1.4rem; padding-bottom:1.2rem; border-bottom:1px solid var(--line); } .browser-title { min-width:0; } .browser-head h1 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1.7rem; }
   .crumbs { display:flex; flex-wrap:wrap; align-items:center; gap:.15rem .35rem; margin:0 0 .5rem; color:var(--muted); font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; } .crumbs button { padding:.1rem .25rem; border:0; border-radius:.25rem; background:transparent; color:var(--muted); font:inherit; letter-spacing:inherit; text-transform:inherit; } .crumbs button:hover { background:var(--accent-soft); color:#e2bbff; } .crumbs i { color:#5d606b; font-style:normal; } .crumbs [aria-current] { padding:.1rem .25rem; color:var(--text); }

@@ -1725,6 +1725,14 @@ function makeFileCard(file: RepoFile, className = 'recent-card') {
   card.className = className;
   card.innerHTML = `<button type="button" class="selection-checkbox" aria-label="Chọn bài">${selectedFiles.has(file.path) ? '■' : '□'}</button><button type="button" class="file-open"><span class="file-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path class="file-sheet" d="M8 3.5h10l7 7v17a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-23a1 1 0 0 1 1-1z"/><path class="file-fold" d="M18 3.5v7h7"/><path class="file-lines" d="M11 16h10M11 20h10M11 24h7"/></svg></span><strong></strong><small></small></button>`;
   card.querySelector('strong')!.textContent = articleName(file);
+  const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Xóa bài', className: 'delete-post' });
+  remove.setAttribute('aria-label', `Xóa bài ${articleName(file)}`);
+  remove.addEventListener('pointerdown', (event) => event.stopPropagation());
+  remove.addEventListener('click', (event) => {
+    event.stopPropagation();
+    void deletePost(file);
+  });
+  card.append(remove);
   card.querySelector('small')!.textContent = folderOf(file) || 'Chưa phân loại';
   card.dataset.selected = String(selectedFiles.has(file.path));
   if (hiddenOf(file)) {
@@ -1747,6 +1755,63 @@ function makeFileCard(file: RepoFile, className = 'recent-card') {
   });
   enableCardDrag(card, 'file', file.path);
   return card;
+}
+async function deletePost(file: RepoFile) {
+  if (studio.inert) return;
+  const local = isLocalOnly(file);
+  if (!local && pending.messages.length)
+    return setStatus('Save hoặc Hủy các thay đổi đang chờ trước khi xóa bài.', 'error');
+  if (!local && !token()) return setStatus('Cần kết nối GitHub để xóa bài đã publish.', 'error');
+  if (!window.confirm(`Xóa bài "${articleName(file)}"?\n${relPath(file.path)}\n\n${local ? 'Xóa file Markdown local' : 'Tạo commit xóa file Markdown trên GitHub và xóa bản local nếu đã kết nối'}. Nháp trình duyệt của bài cũng bị xóa. Giữ lại ảnh và tệp đính kèm.`)) return;
+  const preparedHead = remoteHead;
+  let remoteDeleted = false;
+  studio.inert = true;
+  try {
+    await settleDraft();
+    if (!local) {
+      await commitEntries([{ path: file.path, mode: '100644', type: 'blob', sha: null }], `content: xóa bài "${articleName(file)}"`, preparedHead);
+      remoteDeleted = true;
+      remoteBlobs = remoteBlobs.filter((entry) => entry.path !== file.path);
+    }
+    let localError = '';
+    try {
+      if (localDirectory) {
+        if (!(await requestLocalPermission())) throw new Error('Cần cấp quyền thư mục posts local.');
+        let directory: FileSystemDirectoryHandle = localDirectory;
+        const parts = localRelativePath(file.path).split('/');
+        for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part);
+        await directory.removeEntry(parts.at(-1)!);
+      } else if (local) throw new Error('Cần kết nối lại thư mục posts local.');
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'NotFoundError')) {
+        if (!remoteDeleted) throw error;
+        localError = ` Chưa xóa được bản local: ${errorMessage(error)}`;
+      }
+    }
+    const keys = [`ctf-wu.studio.draft.${file.path}`, `ctf-wu.studio.draft.${file.path}.stale`];
+    const opened = !$('[data-composer]').hasAttribute('hidden') && currentPath() === file.path;
+    if (opened) keys.push(draftKey());
+    for (const key of new Set(keys)) {
+      localStorage.removeItem(key);
+      savedDraftAssets.delete(key);
+      await putDraftAssets(key, []).catch(() => {});
+    }
+    selectedFiles.delete(file.path);
+    localOnly = localOnly.filter((entry) => entry.path !== file.path);
+    if (opened) {
+      showLibrary();
+      resetEditor();
+    }
+    if (remoteDeleted) await loadTree();
+    await scanLocalDrafts();
+    refreshFolderView();
+    setStatus(`Đã xóa bài "${articleName(file)}"${remoteDeleted ? ' trên GitHub' : ' local'}.${localError}${remoteDeleted && !localDirectory ? ' Kết nối thư mục posts để xóa bản local nếu có.' : ''}`, localError ? 'error' : 'ok');
+  } catch (error) {
+    setStatus(`${remoteDeleted ? 'Đã xóa trên GitHub. ' : ''}${errorMessage(error)}`, 'error');
+  } finally {
+    studio.inert = false;
+    void flushStudioNavigation();
+  }
 }
 function makeFolderCard(path: string) {
   const postCount = repoFiles.filter((file) => inFolder(file, path)).length;
@@ -3453,6 +3518,11 @@ $('[data-connect]').addEventListener('click', () => {
   void loadTree();
 });
 $('[data-publish]').addEventListener('click', () => void publish());
+$('[data-delete-current]').addEventListener('click', () => {
+  const file = [...repoFiles, ...localOnly].find((entry) => entry.path === currentPath());
+  if (file) void deletePost(file);
+  else setStatus('Bài chưa có file để xóa.', 'info');
+});
 $('[data-library]').addEventListener('click', () => void openFolder(currentFolder()));
 $('[data-folder-back]').addEventListener('click', () => openFolder(parentOf(currentFolder())));
 $('[data-folder-create]').addEventListener('click', () => void createFolder());

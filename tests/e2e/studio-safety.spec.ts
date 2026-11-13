@@ -8,7 +8,7 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 const source = (title: string, body = '## Solution\n\nOriginal body.', tags = '') =>
   `---\ntitle: ${title}\ndate: 2026-11-03\nctf: Dreamhack\ncategory: web\ntags: [${tags}]\n---\n\n${body}\n`;
 type Post = { path: string; source: string; sha: string };
-type TreeEntry = { path: string; sha?: string; content?: string };
+type TreeEntry = { path: string; sha?: string | null; content?: string };
 
 test.beforeEach(async ({ page }, info) => {
   test.skip(info.project.name === 'mobile', 'Luồng authoring chạy trên desktop');
@@ -42,7 +42,13 @@ async function mockRepository(page: Page, posts: Post[], local = false, remoteAs
       writes.tree = request.postDataJSON().tree;
       data = { sha: 'tree' };
     } else if (path === '/git/commits' && request.method() === 'POST') data = { sha: 'commit', html_url: 'https://example.com/commit' };
-    else if (path === '/git/refs/heads/main' && request.method() === 'PATCH') data = { object: { sha: 'commit' } };
+    else if (path === '/git/refs/heads/main' && request.method() === 'PATCH') {
+      for (const entry of writes.tree.filter((entry) => entry.sha === null)) {
+        const index = posts.findIndex((post) => postsRoot + post.path === entry.path);
+        if (index >= 0) posts.splice(index, 1);
+      }
+      data = { object: { sha: 'commit' } };
+    }
     await route.fulfill(data ? { json: data } : { status: 404, body: `Missing mock: ${path}` });
   });
   return writes;
@@ -315,4 +321,100 @@ test('Hiện đọc source thật dù trạng thái ẩn của flow YAML chưa t
   } finally {
     release();
   }
+});
+
+test('hủy xác nhận xóa giữ nguyên bài và file local', async ({ page }) => {
+  const post = { path: 'Dreamhack/first/index.md', sha: 'first', source: source('First') };
+  const writes = await mockRepository(page, [post], true);
+  const filesystem = await mockFilesystem(page, { [post.path]: Buffer.from(post.source) });
+  await openPost(page, post.path);
+  page.once('dialog', async (dialog) => { await dialog.dismiss(); });
+  await page.locator('[data-delete-current]').click();
+  await expect(page.locator('[data-composer]')).toBeVisible();
+  expect(filesystem.removed).toEqual([]);
+  expect(writes.tree).toEqual([]);
+});
+
+test('xóa nháp local dọn autosave, không tạo lại sau reload và giữ ảnh', async ({ page }) => {
+  const path = 'Dreamhack/local/index.md';
+  const writes = await mockRepository(page, [], true);
+  const filesystem = await mockFilesystem(page, { [path]: Buffer.from(source('Local')), 'Dreamhack/local/image.png': png });
+  await openPost(page, path);
+  await page.locator('.cm-content').click();
+  await page.keyboard.insertText('Pending autosave.');
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('local');
+    await dialog.accept();
+  });
+  await page.locator('[data-delete-current]').click();
+  await expect(page.locator('[data-library-status]')).toContainText('Đã xóa bài');
+  expect(filesystem.removed).toEqual([path]);
+  expect(filesystem.files.has(path)).toBe(false);
+  expect(filesystem.files.has('Dreamhack/local/image.png')).toBe(true);
+  expect(writes.tree).toEqual([]);
+  const key = 'ctf-wu.studio.draft.' + postsRoot + path;
+  expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBeNull();
+  await page.reload();
+  await expect(page.locator('[data-library-home]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Xóa bài local', exact: true })).toHaveCount(0);
+  expect(filesystem.files.has(path)).toBe(false);
+});
+
+test('xóa bài đã publish tạo commit chỉ xóa Markdown và dọn bản local', async ({ page }) => {
+  const post = { path: 'Dreamhack/first/index.md', sha: 'first', source: source('First') };
+  const writes = await mockRepository(page, [post], true, [{ path: 'Dreamhack/first/image.png', sha: 'image' }]);
+  const filesystem = await mockFilesystem(page, { [post.path]: Buffer.from(post.source), 'Dreamhack/first/image.png': png });
+  await page.goto(studioRouteUrl({ kind: 'library', folder: 'Dreamhack' }));
+  page.once('dialog', async (dialog) => { await dialog.accept(); });
+  await page.getByRole('button', { name: 'Xóa bài first', exact: true }).click();
+  await expect(page.locator('[data-library-status]')).toContainText('trên GitHub');
+  expect(writes.tree).toEqual([{ path: postsRoot + post.path, mode: '100644', type: 'blob', sha: null }]);
+  expect(filesystem.removed).toEqual([post.path]);
+  expect(filesystem.files.has('Dreamhack/first/image.png')).toBe(true);
+  await expect(page.getByRole('button', { name: 'Xóa bài first', exact: true })).toHaveCount(0);
+});
+
+test('GitHub đổi trong lúc xác nhận xóa: giữ file local và nháp', async ({ page }) => {
+  const post = { path: 'Dreamhack/first/index.md', sha: 'first', source: source('First') };
+  const writes = await mockRepository(page, [post], true);
+  const filesystem = await mockFilesystem(page, { [post.path]: Buffer.from(post.source) });
+  await openPost(page, post.path);
+  await page.locator('.cm-content').click();
+  await page.keyboard.insertText('Keep this draft.');
+  await page.route('**/__studio/git/git/ref/heads/main', (route) => route.fulfill({ json: { object: { sha: 'changed' } } }));
+  page.once('dialog', async (dialog) => { await dialog.accept(); });
+  await page.locator('[data-delete-current]').click();
+  await expect(page.locator('[data-status]')).toContainText('GitHub đã đổi');
+  expect(filesystem.removed).toEqual([]);
+  expect(writes.tree).toEqual([]);
+  await expect(page.locator('.cm-content')).toContainText('Keep this draft.');
+});
+
+test('lỗi xóa file local giữ bài và nháp để thử lại', async ({ page }) => {
+  const path = 'Dreamhack/local/index.md';
+  await mockRepository(page, [], true);
+  const filesystem = await mockFilesystem(page, { [path]: Buffer.from(source('Local')) });
+  await openPost(page, path);
+  await page.locator('.cm-content').click();
+  await page.keyboard.insertText('Keep this draft.');
+  await page.route('**/__studio/fs/entry?**', (route) => route.fulfill({ status: 503, body: 'Cannot delete' }));
+  page.once('dialog', async (dialog) => { await dialog.accept(); });
+  await page.locator('[data-delete-current]').click();
+  await expect(page.locator('[data-status]')).toContainText('Cannot delete');
+  expect(filesystem.files.has(path)).toBe(true);
+  expect(await page.evaluate((key) => localStorage.getItem(key), 'ctf-wu.studio.draft.' + postsRoot + path)).toContain('Keep this draft.');
+  await expect(page.locator('[data-composer]')).toBeVisible();
+});
+
+test('xóa trên GitHub thành công nhưng local lỗi: báo rõ và giữ bản local để thử lại', async ({ page }) => {
+  const post = { path: 'Dreamhack/first/index.md', sha: 'first', source: source('First') };
+  await mockRepository(page, [post], true);
+  const filesystem = await mockFilesystem(page, { [post.path]: Buffer.from(post.source) });
+  await openPost(page, post.path);
+  await page.route('**/__studio/fs/entry?**', (route) => route.fulfill({ status: 503, body: 'Cannot delete' }));
+  page.once('dialog', async (dialog) => { await dialog.accept(); });
+  await page.locator('[data-delete-current]').click();
+  await expect(page.locator('[data-library-status]')).toContainText('Chưa xóa được bản local');
+  expect(filesystem.files.has(post.path)).toBe(true);
+  await expect(page.locator('[data-folder-files] .file-open')).toContainText('Chưa publish');
 });
