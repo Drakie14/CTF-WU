@@ -2670,15 +2670,16 @@ function refreshTagButtons() {
     else delete button.dataset.busy;
   });
 }
-type DifficultySource = 'dreamhack' | 'gemini';
+type DifficultySource = 'dreamhack' | 'gemini' | 'gemini-fallback';
 const difficultySourceLabel: Record<DifficultySource, string> = {
   dreamhack: 'chính thức từ Dreamhack',
   gemini: 'AI ước lượng',
+  'gemini-fallback': 'AI ước lượng, không lấy được tier Dreamhack',
 };
 /** Tier chính thức qua /api/dreamhack (Pages Function khi deploy, middleware khi npm run dev); lỗi thì để Gemini đoán. */
 async function dreamhackLookup(id: string): Promise<string | undefined> {
   try {
-    const reply = await fetch(`/api/dreamhack/${id}`);
+    const reply = await fetch(`/api/dreamhack/${id}`, { signal: AbortSignal.timeout(15_000) });
     if (!reply.ok) return undefined;
     return ((await reply.json()) as { difficulty?: string | null }).difficulty ?? undefined;
   } catch {
@@ -2731,7 +2732,7 @@ async function autoTags() {
     const [ai, rated] = await Promise.all([gemini, official]);
     const pick: [string | undefined, DifficultySource] = rated
       ? [rated, 'dreamhack']
-      : [ai.difficulty, 'gemini'];
+      : [ai.difficulty, dreamhackId ? 'gemini-fallback' : 'gemini'];
     showTagToast({
       ai: engine,
       previous: chosen || undefined,
@@ -2851,7 +2852,7 @@ function renderTagToast() {
   const body = $('[data-toast-body]');
   // Lý do chỉ có nghĩa khi độ khó đang hiện đúng là mức AI chấm.
   const reason =
-    result.difficultySource === 'gemini' && result.difficultyReason
+    result.difficultySource?.startsWith('gemini') && result.difficultyReason
       ? `Vì sao ${result.difficulty}: ${result.difficultyReason}`
       : '';
   body.textContent =
