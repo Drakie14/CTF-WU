@@ -11,7 +11,7 @@ let processor: Awaited<ReturnType<typeof createMarkdownProcessor>> | undefined;
 export async function renderMd(
   md: string,
   opts: { title?: string; fileURL?: URL } = {},
-): Promise<{ html: string; warnings: string[]; summary: string }> {
+): Promise<{ html: string; warnings: string[]; summary: string; wordCount: number }> {
   processor ??= await createMarkdownProcessor({ ...markdownOptions, syntaxHighlight: false });
   const warnings: string[] = [];
   const spy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
@@ -22,7 +22,7 @@ export async function renderMd(
       frontmatter: opts.title ? { title: opts.title } : {},
       ...(opts.fileURL ? { fileURL: opts.fileURL } : {}),
     });
-    return { html: code, warnings, summary: String(metadata.frontmatter.autoSummary ?? '') };
+    return { html: code, warnings, summary: String(metadata.frontmatter.autoSummary ?? ''), wordCount: Number(metadata.frontmatter.wordCount) };
   } finally {
     spy.mockRestore();
   }

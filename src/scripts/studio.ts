@@ -51,6 +51,7 @@ import { checkMetadata } from '../lib/content/quality';
 import { composeDocument, readDocument, withDraftFlag, retargetCtf } from '../lib/studio-document';
 import { parseStudioRoute, studioRouteUrl, type StudioRoute } from '../lib/studio-route';
 import { formatIsoDate, parseSiteDate } from '../lib/content/dates';
+import { formatWordCount } from '../lib/content/text';
 
 const $ = <T extends Element = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const studio = $('.studio');
@@ -64,6 +65,7 @@ const difficulty = $<HTMLInputElement>('[data-difficulty]');
 const tags = $<HTMLInputElement>('[data-tags]');
 const preview = $('[data-preview]');
 const previewState = $('[data-preview-state]');
+const editorWordCount = $('[data-word-count]');
 const status = $('[data-status]');
 const libraryStatus = $('[data-library-status]');
 const tokenInput = $<HTMLInputElement>('[data-token]');
@@ -181,6 +183,7 @@ const saveTreeOpen = () => {
 };
 const selectedFiles = new Set<string>();
 const selectedFolders = new Set<string>();
+const cutFiles = new Set<string>();
 let folderSet = new Set<string>();
 let draftTimer: ReturnType<typeof setTimeout> | undefined;
 // Write-up chưa publish nằm trong thư mục posts local. Chỉ file Studio vừa tạo trong phiên này
@@ -1139,6 +1142,7 @@ narrowStudio.addEventListener('change', () => setMobileLibraryOpen(false));
 $('[data-library-backdrop]').addEventListener('click', () => setMobileLibraryOpen(false));
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && studio.hasAttribute('data-mobile-library-open')) {
+    event.preventDefault();
     setMobileLibraryOpen(false);
     $('[data-sidebar-toggle]').focus();
   }
@@ -1965,12 +1969,18 @@ function renderSelectionBar() {
     selectedFiles.size ? `${selectedFiles.size} bài` : '',
   ].filter(Boolean);
   const bar = $('[data-selection-bar]');
-  bar.toggleAttribute('hidden', !parts.length);
-  $('[data-selection-summary]').textContent = parts.length ? `Đã chọn ${parts.join(' và ')}` : '';
+  bar.toggleAttribute('hidden', !parts.length && !cutFiles.size);
+  $('[data-selection-summary]').textContent = [
+    parts.length ? `Đã chọn ${parts.join(' và ')}` : '',
+    cutFiles.size ? `Đã cắt ${cutFiles.size} bài` : '',
+  ].filter(Boolean).join(' · ');
+  $('[data-cut-posts]').hidden = !selectedFiles.size;
+  $('[data-paste-posts]').hidden = !cutFiles.size;
+  $('[data-cancel-cut]').hidden = !cutFiles.size;
+  $('[data-selection-clear]').hidden = !parts.length;
   const rename = $<HTMLButtonElement>('[data-folder-rename]');
-  document.querySelectorAll<HTMLButtonElement>('[data-visibility]').forEach((button) => {
-    button.disabled = !selectedFiles.size && !selectedFolders.size;
-  });
+  document.querySelectorAll<HTMLButtonElement>('[data-visibility]').forEach((button) => { button.hidden = !parts.length; });
+  rename.hidden = !parts.length;
   rename.disabled = selectedFolders.size !== 1;
   rename.title = selectedFolders.size === 1 ? 'Đổi tên folder đang chọn' : 'Chọn đúng một folder để đổi tên';
 }
@@ -2048,7 +2058,8 @@ async function savePending() {
     await commitEntries(pending.entries, message, pending.base);
     pending = { entries: [], messages: [] };
     writePending();
-    setStatus(`Đã lưu ${count} thay đổi folder lên GitHub.`, 'ok');
+    const git = localMode ? await pullToGit(true) : null;
+    setStatus(`Đã lưu ${count} thay đổi folder lên GitHub.${git ? ` ${git}` : ''}`, git?.startsWith('Git:') ? 'error' : 'ok');
     await loadTree();
     return true;
   } catch (error) {
@@ -2251,19 +2262,47 @@ async function renameSelectedFolder() {
     studio.inert = false;
   }
 }
-async function moveSelectionTo(targetFolder: string): Promise<boolean> {
+function cutSelectedPosts() {
+  cutFiles.clear();
+  for (const path of selectedFiles) cutFiles.add(path);
+  selectedFiles.clear();
+  selectedFolders.clear();
+  renderFolderHome();
+  renderSidebar();
+  setStatus(`Đã cắt ${cutFiles.size} bài. Mở folder đích rồi nhấn Ctrl+V.`, 'info');
+}
+function cancelCut() {
+  cutFiles.clear();
+  renderSelectionBar();
+  setStatus('Đã hủy cắt bài.', 'info');
+}
+async function pasteCutPosts() {
+  if (!cutFiles.size || studio.inert) return;
+  if (await moveSelectionTo(currentFolder(), cutFiles, [])) {
+    cutFiles.clear();
+    renderSelectionBar();
+  }
+}
+async function moveSelectionTo(
+  targetFolder: string,
+  filePaths: ReadonlySet<string> = selectedFiles,
+  folderPaths: Iterable<string> = selectedFolders,
+): Promise<boolean> {
+  if (studio.inert) return false;
   const isInside = (path: string, parent: string) => path === parent || path.startsWith(`${parent}/`);
-  const folders = [...selectedFolders]
+  const folders = [...folderPaths]
     .filter((path) => !isInside(targetFolder, path) && parentOf(path) !== targetFolder)
     .filter((path, _, all) => !all.some((other) => other !== path && isInside(path, other)));
-  const files = repoFiles.filter(
-    (file) =>
-      selectedFiles.has(file.path) &&
-      folderOf(file) !== targetFolder &&
-      !folders.some((path) => inFolder(file, path)),
+  const pickedFiles = repoFiles.filter((file) => filePaths.has(file.path));
+  if (pickedFiles.length !== filePaths.size) {
+    setStatus('Vị trí bài đã thay đổi. Chọn lại bài để di chuyển.', 'error');
+    return false;
+  }
+  const files = pickedFiles.filter(
+    (file) => folderOf(file) !== targetFolder && !folders.some((path) => inFolder(file, path)),
   );
   if (!files.length && !folders.length) {
-    setStatus('Chọn ít nhất một bài hoặc folder ở vị trí khác trước khi kéo thả.', 'info');
+    setStatus('Chọn folder đích khác để di chuyển.', 'info');
     return false;
   }
   if (!token()) {
@@ -2279,21 +2318,36 @@ async function moveSelectionTo(targetFolder: string): Promise<boolean> {
     setStatus(`Folder đích đã có folder tên "${leafName(clash)}".`, 'error');
     return false;
   }
-  const conflict = files.find((file) =>
-    repoFiles.some(
-      (candidate) => folderOf(candidate) === targetFolder && articleName(candidate) === articleName(file),
-    ),
+  const names = new Set(
+    [...repoFiles, ...localOnly].filter((file) => folderOf(file) === targetFolder).map((file) => articleName(file).toLowerCase()),
   );
-  if (conflict) {
-    setStatus(`Folder đích đã có bài trùng tên: ${articleName(conflict)}.`, 'error');
-    return false;
+  for (const file of files) {
+    const name = articleName(file);
+    if (names.has(name.toLowerCase())) {
+      setStatus(`Trùng tên bài khi chuyển vào folder đích: ${name}.`, 'error');
+      return false;
+    }
+    names.add(name.toLowerCase());
   }
+  studio.inert = true;
   try {
     setStatus(`Đang chuyển vào ${targetFolder || 'thư mục gốc'}…`);
+    const preparedHead = remoteHead;
+    const occupied = [...repoTree, ...localOnly].map((entry) => entry.path.toLowerCase());
+    const destinations: string[] = [];
+    const reserve = (path: string) => {
+      const key = path.toLowerCase();
+      if (occupied.some((entry) => isInside(entry, key) || isInside(key, entry)) ||
+          destinations.some((entry) => isInside(entry, key) || isInside(key, entry))) {
+        throw new Error(`Đường dẫn đích đã tồn tại: ${relPath(path)}.`);
+      }
+      destinations.push(key);
+    };
     const entries: TreeEntry[] = [];
     for (const path of folders) {
       const prefix = `${postRoot}/${path}`;
-      const base = `${joinPath(postRoot, targetFolder, leafName(path))}`;
+      const base = joinPath(postRoot, targetFolder, leafName(path));
+      reserve(base);
       for (const item of repoTree.filter((entry) => entry.path.startsWith(`${prefix}/`))) {
         entries.push(
           { path: `${base}${item.path.slice(prefix.length)}`, mode: '100644', type: 'blob', sha: item.sha },
@@ -2302,23 +2356,36 @@ async function moveSelectionTo(targetFolder: string): Promise<boolean> {
       }
     }
     for (const file of files) {
-      const oldDirectory = file.path.replace(/\/[^/]+$/, '');
-      const moved = isIndexFile(file)
+      const bundled = isIndexFile(file);
+      const oldDirectory = parentOf(file.path);
+      const base = joinPath(postRoot, targetFolder, bundled ? articleName(file) : leafName(file.path));
+      reserve(base);
+      const moved = bundled
         ? repoTree
-            .filter((entry) => entry.path === oldDirectory || entry.path.startsWith(`${oldDirectory}/`))
+            .filter((entry) => entry.path.startsWith(`${oldDirectory}/`))
             .map((entry) => ({
               item: entry,
-              target: `${joinPath(postRoot, targetFolder, articleName(file))}${entry.path.slice(oldDirectory.length)}`,
+              target: `${base}${entry.path.slice(oldDirectory.length)}`,
             }))
         : repoTree
             .filter((entry) => entry.path === file.path)
-            .map((entry) => ({
-              item: entry,
-              target: joinPath(postRoot, targetFolder, leafName(entry.path)),
-            }));
+            .map((item) => ({ item, target: base }));
+      const fromCtf = ctfFromFolder(folderOf(file));
+      const toCtf = ctfFromFolder(targetFolder);
+      let postSha = file.sha;
+      if (toCtf && fromCtf !== toCtf) {
+        const source = decode((await api<{ content: string }>(`/git/blobs/${file.sha}`)).content);
+        const updated = retargetCtf(source, fromCtf, toCtf);
+        if (updated !== source) {
+          postSha = (await api<{ sha: string }>('/git/blobs', {
+            method: 'POST',
+            body: JSON.stringify({ content: updated, encoding: 'utf-8' }),
+          })).sha;
+        }
+      }
       for (const { item, target } of moved) {
         entries.push(
-          { path: target, mode: '100644', type: 'blob', sha: item.sha },
+          { path: target, mode: '100644', type: 'blob', sha: item.path === file.path ? postSha : item.sha },
           { path: item.path, mode: '100644', type: 'blob', sha: null },
         );
       }
@@ -2331,7 +2398,7 @@ async function moveSelectionTo(targetFolder: string): Promise<boolean> {
     ]
       .filter(Boolean)
       .join(' và ');
-    stageEntries(entries, `content: chuyển ${label} vào ${targetFolder || 'thư mục gốc'}`);
+    stageEntries(entries, `content: chuyển ${label} vào ${targetFolder || 'thư mục gốc'}`, preparedHead);
     setStatus(
       `Đã thêm việc chuyển ${label} vào ${targetFolder || 'thư mục gốc'} vào danh sách chờ. Bấm Save để commit.`,
       'ok',
@@ -2340,6 +2407,8 @@ async function moveSelectionTo(targetFolder: string): Promise<boolean> {
   } catch (error) {
     setStatus(errorMessage(error), 'error');
     return false;
+  } finally {
+    studio.inert = false;
   }
 }
 const assetsList = $('[data-assets-list]');
@@ -3220,13 +3289,15 @@ async function renderNow() {
   if (!source.trim()) {
     preview.innerHTML = '<p class="placeholder">Preview Markdown sẽ hiện ở đây.</p>';
     previewState.textContent = 'Đang chờ nội dung';
+    editorWordCount.textContent = formatWordCount(0);
     layoutNow();
     return;
   }
   previewState.textContent = 'Đang render…';
-  const html = await renderStudioMarkdown(source, title.value, assetUrl);
+  const { html, wordCount } = await renderStudioMarkdown(source, title.value, assetUrl);
   if (version !== renderVersion) return;
   preview.innerHTML = html;
+  editorWordCount.textContent = formatWordCount(wordCount);
   sizeImages();
   renderTableOfContents();
   layoutNow();
@@ -3532,6 +3603,27 @@ document
     button.addEventListener('click', () => void setVisibility(button.dataset.visibility === 'hide')),
   );
 $('[data-folder-rename]').addEventListener('click', () => void renameSelectedFolder());
+$('[data-cut-posts]').addEventListener('click', cutSelectedPosts);
+$('[data-paste-posts]').addEventListener('click', () => void pasteCutPosts());
+$('[data-cancel-cut]').addEventListener('click', cancelCut);
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented || event.isComposing || studio.inert || drag || $('[data-library-home]').hidden) return;
+  if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable], dialog, [role="dialog"]')) return;
+  if (event.key === 'Escape' && cutFiles.size) {
+    event.preventDefault();
+    cancelCut();
+    return;
+  }
+  if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+  const key = event.key.toLowerCase();
+  if (key === 'x' && selectedFiles.size && getSelection()?.isCollapsed) {
+    event.preventDefault();
+    if (!event.repeat) cutSelectedPosts();
+  } else if (key === 'v' && cutFiles.size) {
+    event.preventDefault();
+    if (!event.repeat) void pasteCutPosts();
+  }
+});
 $('[data-pending-save]').addEventListener('click', () => void savePending());
 $('[data-pending-discard]').addEventListener('click', discardPending);
 $('[data-selection-clear]').addEventListener('click', () => {

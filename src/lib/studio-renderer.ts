@@ -54,10 +54,12 @@ const processor = unified()
   .use(sourceLines)
   .use(rehypeStringify);
 
-export async function renderStudioMarkdown(source: string, title = '', resolveAsset?: (name: string) => string | undefined): Promise<string> {
+export async function renderStudioMarkdown(source: string, title = '', resolveAsset?: (name: string) => string | undefined) {
   const sourceMap: number[] = [];
   const value = preprocessHackmd(source, undefined, sourceMap);
-  return String(await processor.process({ value, data: { sourceMap, resolveAsset, astro: { frontmatter: { title } } } }));
+  const frontmatter = { title, wordCount: 0 };
+  const file = await processor.process({ value, data: { sourceMap, resolveAsset, astro: { frontmatter } } });
+  return { html: String(file), wordCount: frontmatter.wordCount };
 }
 
 /** Dùng cùng parser với preview để không xoá nhầm ảnh/file được tham chiếu bằng URL encode hoặc reference link. */

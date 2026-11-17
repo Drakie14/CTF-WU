@@ -3,6 +3,7 @@ import { categoryColor, categoryLabel } from '../lib/categories';
 import { difficultyFamily } from '../lib/content/constants';
 import { slugify } from '../lib/content/slug';
 import { formatDisplayDate, formatIsoDate } from '../lib/content/dates';
+import { formatWordCount } from '../lib/content/text';
 import type { Taxonomy } from '../lib/content/tags';
 import { isUnsorted, type Post } from '../lib/posts';
 
@@ -13,7 +14,7 @@ interface Props {
 }
 
 const { post, tags, ctfs } = Astro.props;
-const { title, ctf, category, difficulty, date, readingTime } = post.data;
+const { title, ctf, category, difficulty, date, readingTime, wordCount } = post.data;
 ---
 
 <header class="art-head">
@@ -36,6 +37,8 @@ const { title, ctf, category, difficulty, date, readingTime } = post.data;
     <time datetime={formatIsoDate(date)}>{formatDisplayDate(date)}</time>
     <span aria-hidden="true">·</span>
     <span>{readingTime} phút đọc</span>
+    <span aria-hidden="true">·</span>
+    <span data-word-count>{formatWordCount(wordCount)}</span>
   </p>
   {
     post.data.tags.length > 0 && (

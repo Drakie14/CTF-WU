@@ -79,6 +79,9 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
           </div>
           <div class="selection-bar" data-selection-bar hidden>
             <span data-selection-summary></span>
+            <button type="button" data-cut-posts aria-keyshortcuts="Control+X" hidden>Cắt (Ctrl+X)</button>
+            <button type="button" data-paste-posts aria-keyshortcuts="Control+V" hidden>Dán vào đây (Ctrl+V)</button>
+            <button type="button" data-cancel-cut hidden>Hủy cắt</button>
             <button type="button" data-visibility="hide">Ẩn khỏi blog</button>
             <button type="button" data-visibility="show">Hiện trên blog</button>
             <button type="button" data-folder-rename>Đổi tên folder</button>
@@ -166,6 +169,7 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
               <div class="asset-bar">
                 <button type="button" class="asset-toggle" data-assets-toggle aria-expanded="false" aria-label="Mở kho tệp"><span data-assets-count>📎 0 tệp</span><i>▴</i></button>
                 <button type="button" class="asset-add" data-assets-add aria-label="Thêm tệp" title="Thêm tệp">＋</button>
+                <span class="editor-word-count" data-word-count>0 từ</span>
                 <input type="file" multiple hidden data-assets accept="image/*,.svg,.txt,.py,.js,.ts,.zip,.pdf" />
               </div>
               <div class="drop-overlay" data-drop-overlay hidden>Thả để thêm</div>
@@ -326,4 +330,5 @@ const tagExamples = JSON.stringify(posts.filter((post) => post.data.tags.length)
   .folder-card[data-drop] { transform:scale(1.035); border-color:var(--accent); box-shadow:0 0 0 3px #c674ff33,0 .9rem 2rem #0006; }
   .folder-icon { transition:transform .25s cubic-bezier(.34,1.56,.64,1); } .folder-card[data-drop] .folder-icon { transform:scale(1.15) rotate(-7deg); }
   .tree-folder[data-drop],[data-library-path] button[data-drop] { background:var(--accent-soft); color:#fff; box-shadow:inset 0 0 0 1px var(--accent); border-radius:.35rem; }
+  .editor-word-count { flex:none; padding:0 .25rem; color:var(--muted); font-size:.66rem; white-space:nowrap; }
 </style>

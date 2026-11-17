@@ -1,5 +1,7 @@
-import type { Element, Root } from 'hast';
+import type { Element, Nodes, Root } from 'hast';
 import { SKIP, visit } from 'unist-util-visit';
+import type { VFile } from 'vfile';
+import { countTextWords } from '../content/text';
 const classList = (el: Element): string[] =>
   Array.isArray(el.properties.className)
     ? el.properties.className.map(String)
@@ -10,6 +12,33 @@ const h = (tagName: string, properties: Element['properties'], children: Element
   properties,
   children,
 });
+
+const textBoundaries = new Set([
+  'address', 'article', 'aside', 'blockquote', 'br', 'dd', 'details', 'div', 'dl', 'dt', 'figcaption', 'figure',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'img', 'li', 'ol', 'p', 'section', 'summary', 'table', 'td', 'th', 'ul',
+]);
+
+function articleText(node: Nodes): string {
+  if (node.type === 'text') return node.value;
+  if (node.type === 'root') return node.children.map(articleText).join('');
+  if (node.type !== 'element') return '';
+  const classes = classList(node);
+  if (node.tagName === 'pre' || classes.includes('language-math') || classes.includes('math-inline') || classes.includes('math-display')) return ' ';
+  if (node.properties.dataFootnoteRef !== undefined || node.properties.dataFootnoteBackref !== undefined ||
+      classes.includes('sr-only') || classes.includes('callout-title')) return '';
+  const text = node.children.map(articleText).join('');
+  return textBoundaries.has(node.tagName) ? ` ${text} ` : text;
+}
+
+/** Đếm nội dung bài sau sanitize, trước khi thêm giao diện cho code và công thức. */
+export function rehypeWordCount() {
+  return (tree: Root, file: VFile) => {
+    const data = file.data as { astro?: { frontmatter?: Record<string, unknown> } };
+    data.astro ??= {};
+    data.astro.frontmatter ??= {};
+    data.astro.frontmatter.wordCount = countTextWords(articleText(tree));
+  };
+}
 
 export function rehypeFixClobberedAnchors() {
   return (tree: Root) => {

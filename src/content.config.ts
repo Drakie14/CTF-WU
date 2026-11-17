@@ -32,6 +32,7 @@ const posts = defineCollection({
       summaryInferred: z.boolean().catch(true),
       cover: image().optional().catch(undefined),
       readingTime: z.number().int().positive().catch(1),
+      wordCount: z.number().int().nonnegative().catch(0),
       sourcePath: z.string().catch(''),
     }),
 });

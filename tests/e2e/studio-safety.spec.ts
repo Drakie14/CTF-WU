@@ -105,6 +105,78 @@ async function openPost(page: Page, path: string) {
   await expect(page.locator('[data-composer]')).toBeVisible();
 }
 
+test('số từ Studio cập nhật khi sửa nội dung và mở bài khác', async ({ page }) => {
+  const first = { path: 'Dreamhack/first/index.md', sha: 'first', source: source('First') };
+  const second = { path: 'Dreamhack/second/index.md', sha: 'second', source: source('Second', 'Một hai ba bốn.') };
+  await mockRepository(page, [first, second]);
+  await openPost(page, first.path);
+  const count = page.locator('[data-word-count]');
+  await expect(count).toHaveText('3 từ');
+
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.insertText('\n\nMột hai');
+  await expect(count).toHaveText('5 từ');
+
+  await page.locator('[data-library]').click();
+  await page.locator('.file-open').filter({ hasText: 'second' }).click();
+  await expect(count).toHaveText('4 từ');
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await expect(count).toHaveText('0 từ');
+});
+
+test('Ctrl+X và Ctrl+V chuyển bài cùng ảnh qua folder khác sau khi Save', async ({ page }) => {
+  const original = { path: 'Dreamhack/Source/article/index.md', sha: 'original', source: source('Article') };
+  const duplicate = { path: 'Dreamhack/Occupied/article.md', sha: 'duplicate', source: source('Duplicate') };
+  const image = { path: 'Dreamhack/Source/article/image.png', sha: 'image' };
+  const writes = await mockRepository(page, [original, duplicate], true, [image, { path: 'New CTF/.gitkeep', sha: 'keep' }]);
+  await mockFilesystem(page);
+  await page.goto(studioRouteUrl({ kind: 'library', folder: 'Dreamhack/Source' }));
+
+  const article = page.locator('.folder-file-card').filter({ hasText: 'article' });
+  await article.getByRole('button', { name: 'Chọn bài' }).click();
+  await page.keyboard.press('Control+x');
+  await expect(page.locator('[data-selection-summary]')).toHaveText('Đã cắt 1 bài');
+  await expect(article).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-paste-posts]')).toBeHidden();
+  await expect(page.locator('[data-pending-bar]')).toBeHidden();
+
+  await article.getByRole('button', { name: 'Chọn bài' }).click();
+  await page.keyboard.press('Control+x');
+  await page.locator('[data-folder-back]').click();
+  await page.locator('.folder-open').filter({ hasText: 'Occupied' }).click();
+  await expect(page.locator('[data-library-title]')).toBeFocused();
+  await page.keyboard.press('Control+v');
+  await expect(page.locator('[data-library-status]')).toContainText('Trùng tên bài');
+  await expect(page.locator('[data-paste-posts]')).toBeVisible();
+  await expect(page.locator('[data-pending-bar]')).toBeHidden();
+
+  await page.locator('[data-library-path]').getByRole('button', { name: 'WU', exact: true }).click();
+  await page.locator('.folder-open').filter({ hasText: 'New CTF' }).click();
+  await expect(page.locator('[data-library-title]')).toBeFocused();
+  await page.keyboard.press('Control+v');
+  await expect(article).toBeVisible();
+  await expect(page.locator('[data-paste-posts]')).toBeHidden();
+  expect(writes.tree).toEqual([]);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('[data-library-status]')).toContainText('Đã git pull về máy.');
+  expect(writes.blobs).toHaveLength(1);
+  expect(readDocument(writes.blobs[0].content)).toEqual({
+    ...readDocument(original.source),
+    fields: { ...readDocument(original.source).fields, ctf: 'New CTF' },
+  });
+  expect(writes.tree).toEqual(expect.arrayContaining([
+    expect.objectContaining({ path: `${postsRoot}${original.path}`, sha: null }),
+    expect.objectContaining({ path: `${postsRoot}${image.path}`, sha: null }),
+    expect.objectContaining({ path: `${postsRoot}New CTF/article/index.md`, sha: 'asset-1' }),
+    expect.objectContaining({ path: `${postsRoot}New CTF/article/image.png`, sha: image.sha }),
+  ]));
+  expect(writes.tree).toHaveLength(4);
+});
+
 test('lỗi ghi file local vẫn giữ nháp trình duyệt và khôi phục sau reload URL mới', async ({ page }) => {
   await mockRepository(page, [], true);
   const filesystem = await mockFilesystem(page, {}, true);

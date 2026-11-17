@@ -61,6 +61,7 @@ test('trang chủ giữ giới thiệu và bài mới trên mobile, cây thư m�
 test('copy code, mục lục và bàn phím trên bài dài', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/posts/xss/');
+  await expect(page.locator('.art-sub [data-word-count]')).toHaveText(/^[1-9][\d.]* từ$/);
   await page.keyboard.press('Tab');
   await expect(page.locator('.skip-link')).toBeFocused();
   await page.keyboard.press('Enter');

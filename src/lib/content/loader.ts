@@ -204,6 +204,7 @@ async function loadAll(ctx: LoaderContext, options: PostsLoaderOptions): Promise
         summaryInferred,
         ...(cover ? { cover } : {}),
         readingTime: readingTimeMinutes(split.body),
+        wordCount: rendered.metadata?.frontmatter?.wordCount,
         sourcePath: relToRoot,
       },
     });

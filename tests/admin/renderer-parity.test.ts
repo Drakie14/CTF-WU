@@ -11,7 +11,7 @@ const examples = [
 ] as const;
 it('resolves encoded and bare relative asset URLs without treating fragments as files', async () => {
   const assets = new Map([['ảnh chụp #1.png', 'blob:image'], ['file.zip', 'blob:file']]);
-  const html = await renderStudioMarkdown('![image](./%E1%BA%A3nh%20ch%E1%BB%A5p%20%231.png)\n\n[file](file.zip)\n\n[section](#heading)', '', (name) => assets.get(name));
+  const { html } = await renderStudioMarkdown('![image](./%E1%BA%A3nh%20ch%E1%BB%A5p%20%231.png)\n\n[file](file.zip)\n\n[section](#heading)', '', (name) => assets.get(name));
   expect(html).toContain('src="blob:image"');
   expect(html).toContain('href="blob:file"');
   expect(html).toContain('href="#heading"');
@@ -24,43 +24,62 @@ it('nhận đúng file đang dùng và cover để không xoá nhầm lúc publi
 
 it('resolves local images and attachments after sanitization without rewriting code', async () => {
   const source = '![image](./image.png)\n\n[file](./file.zip)\n\n`![image](./image.png)`\n\n<img src="blob:untrusted" onerror="alert(1)">';
-  const html = await renderStudioMarkdown(source, '', (name) => `blob:trusted-${name}`);
+  const { html } = await renderStudioMarkdown(source, '', (name) => `blob:trusted-${name}`);
   expect(html).toContain('src="blob:trusted-image.png"');
   expect(html).toContain('href="blob:trusted-file.zip"');
   expect(html).toContain('<code>![image](./image.png)</code>');
   expect(html).not.toContain('blob:untrusted');
   expect(html).not.toContain('onerror');
-  expect(await renderStudioMarkdown('![image](./missing.png)', '', () => undefined)).toContain('src="./missing.png"');
+  expect((await renderStudioMarkdown('![image](./missing.png)', '', () => undefined)).html).toContain('src="./missing.png"');
 });
 describe('cú pháp chung giữa Studio và public', () => {
   it.each(examples)('%s', async (source, expected) => {
-    expect(await renderStudioMarkdown(source)).toContain(expected);
+    expect((await renderStudioMarkdown(source)).html).toContain(expected);
     expect((await renderMd(source)).html).toContain(expected);
   });
   it('cùng loại bỏ script và event của raw HTML', async () => {
     const source = '<script>alert(1)</script><img src="x" onerror="alert(1)">';
-    for (const html of [await renderStudioMarkdown(source), (await renderMd(source)).html]) {
+    for (const { html } of [await renderStudioMarkdown(source), await renderMd(source)]) {
       expect(html).not.toMatch(/<script|onerror=/);
     }
   });
   it('công thức và dấu == trong code không bị render thành markup', async () => {
-    const html = await renderStudioMarkdown('```php!\n$x = 1; $y = 2;\n$x == $y;\n```');
+    const { html } = await renderStudioMarkdown('```php!\n$x = 1; $y = 2;\n$x == $y;\n```');
     expect(html).not.toContain('class="katex"');
     expect(html).not.toContain('<mark>');
     expect(html).toContain('data-wrap="true"');
   });
   it('giữ source Mermaid để client render an toàn', async () => {
-    expect(await renderStudioMarkdown('```mermaid\ngraph TD\nA-->B\n```')).toContain('data-lang="mermaid"');
+    expect((await renderStudioMarkdown('```mermaid\ngraph TD\nA-->B\n```')).html).toContain('data-lang="mermaid"');
     expect((await renderMd('```mermaid\ngraph TD\nA-->B\n```')).html).toContain('class="mermaid"');
   });
 });
 it('giữ dòng nguồn sau callout khi preprocess thêm dòng HTML', async () => {
-  const html = await renderStudioMarkdown(':::info\nNội dung\n:::\n\nSau callout');
+  const { html } = await renderStudioMarkdown(':::info\nNội dung\n:::\n\nSau callout');
   expect(html).toMatch(/data-line="4"[^>]*>Sau callout/);
 });
 
 it('preview bỏ heading trùng title như public',async()=>{
  const source='# Tiêu đề\n\nNội dung';
- expect(await renderStudioMarkdown(source,'Tiêu đề')).not.toContain('<h1');
+ expect((await renderStudioMarkdown(source,'Tiêu đề')).html).not.toContain('<h1');
  expect((await renderMd(source,{title:'Tiêu đề'})).html).not.toContain('<h1');
+});
+
+it('Studio và public đếm cùng phần chữ của bài Markdown', async () => {
+  const title = 'Tiêu đề';
+  const source = [
+    '# Tiêu đề',
+    '[TOC]',
+    '## Phân tích',
+    'Một **ví dụ** và [tài liệu](https://example.com) với `CVE-2026-1234`.',
+    '![Văn bản thay thế](./anh.png)',
+    '```text!\nnội dung code block\n```',
+    '$x + y = 42$',
+    '<div>Một</div><div>hai</div>',
+    ':::info\nĐọc tiếp\n:::',
+    'Ghi chú[^note].',
+    '[^note]: Các bước.',
+  ].join('\n\n');
+  expect((await renderStudioMarkdown(source, title)).wordCount).toBe(18);
+  expect((await renderMd(source, { title })).wordCount).toBe(18);
 });

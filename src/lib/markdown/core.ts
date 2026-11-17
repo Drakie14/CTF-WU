@@ -14,7 +14,7 @@ import {
   remarkRemoveToc,
 } from './remark-hackmd';
 import { sanitizeSchema } from './sanitize-schema';
-import { rehypeFixClobberedAnchors, rehypeLinksAndTables } from './shared';
+import { rehypeFixClobberedAnchors, rehypeLinksAndTables, rehypeWordCount } from './shared';
 
 /** Cú pháp và security boundary dùng chung ở browser và build. */
 export const coreRemarkPlugins: PluggableList = [
@@ -31,6 +31,7 @@ export const coreRemarkPlugins: PluggableList = [
 export const coreRehypePlugins: PluggableList = [
   rehypeRaw,
   [rehypeSanitize, sanitizeSchema],
+  rehypeWordCount,
   rehypeFixClobberedAnchors,
   [rehypeKatex, { trust: false, strict: 'ignore', throwOnError: false }],
   rehypeLinksAndTables,
