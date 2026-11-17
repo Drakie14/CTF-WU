@@ -1,5 +1,6 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 /**
  * Lấy ngày commit đầu tiên (commit thêm file) cho mọi file trong một thư mục
@@ -7,13 +8,15 @@ import path from 'node:path';
  * Không bao giờ throw: nếu Git không khả dụng thì trả Map rỗng (fallback mtime).
  */
 
-function git(args: string[], cwd: string): string {
-  return execFileSync('git', ['-c', 'core.quotepath=false', ...args], {
+const execGit = promisify(execFile);
+
+async function git(args: string[], cwd: string): Promise<string> {
+  const { stdout } = await execGit('git', ['-c', 'core.quotepath=false', ...args], {
     cwd,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
     maxBuffer: 64 * 1024 * 1024,
   });
+  return stdout;
 }
 
 /** Key chuẩn hóa để so sánh đường dẫn (Windows không phân biệt hoa thường). */
@@ -28,32 +31,32 @@ let unshallowTried = false;
  * Trên CI (Cloudflare Pages) repo có thể là shallow clone → thiếu commit đầu tiên.
  * Thử `git fetch --unshallow` một lần; lỗi thì bỏ qua.
  */
-function ensureFullHistory(cwd: string, log: (msg: string) => void): void {
+async function ensureFullHistory(cwd: string, log: (msg: string) => void): Promise<void> {
   if (unshallowTried) return;
   unshallowTried = true;
   if (!process.env.CI && !process.env.CF_PAGES) return;
   try {
-    if (git(['rev-parse', '--is-shallow-repository'], cwd).trim() !== 'true') return;
+    if ((await git(['rev-parse', '--is-shallow-repository'], cwd)).trim() !== 'true') return;
     log('[content] shallow Git clone detected, fetching full history for post dates...');
-    execFileSync('git', ['fetch', '--unshallow', '--quiet'], { cwd, stdio: 'ignore', timeout: 120_000 });
+    await execGit('git', ['fetch', '--unshallow', '--quiet'], { cwd, timeout: 120_000 });
   } catch {
     log('[content] could not fetch full Git history; falling back to file modification dates where needed');
   }
 }
 
-export function getGitFirstCommitDates(dir: string, log: (msg: string) => void = () => {}): Map<string, Date> {
+export async function getGitFirstCommitDates(dir: string, log: (msg: string) => void = () => {}): Promise<Map<string, Date>> {
   const result = new Map<string, Date>();
   let top: string;
   try {
-    top = git(['rev-parse', '--show-toplevel'], dir).trim();
+    top = (await git(['rev-parse', '--show-toplevel'], dir)).trim();
   } catch {
     return result;
   }
-  ensureFullHistory(top, log);
+  await ensureFullHistory(top, log);
 
   let out: string;
   try {
-    out = git(
+    out = await git(
       ['log', '--diff-filter=A', '--no-renames', '--format=%x01%aI', '--name-only', '--', path.relative(top, dir) || '.'],
       top,
     );

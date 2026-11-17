@@ -74,16 +74,16 @@ describe('git first-commit dates', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('returns the first commit date of each file', () => {
-    const dates = getGitFirstCommitDates(path.join(dir, 'posts'));
+  it('returns the first commit date of each file', async () => {
+    const dates = await getGitFirstCommitDates(path.join(dir, 'posts'));
     expect(dates.get(pathKey(path.join(dir, 'posts', 'a.md')))?.toISOString()).toBe('2024-01-01T03:00:00.000Z');
     expect(dates.get(pathKey(path.join(dir, 'posts', 'Giải CTF', 'b.md')))?.toISOString()).toBe('2025-06-15T03:00:00.000Z');
   });
 
-  it('returns an empty map outside a git repo', () => {
+  it('returns an empty map outside a git repo', async () => {
     const outside = mkdtempSync(path.join(os.tmpdir(), 'ctf-no-git-'));
     try {
-      expect(getGitFirstCommitDates(outside).size).toBe(0);
+      expect((await getGitFirstCommitDates(outside)).size).toBe(0);
     } finally {
       rmSync(outside, { recursive: true, force: true });
     }

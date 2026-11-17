@@ -70,4 +70,30 @@ describe('live content updates', () => {
     await vi.waitFor(() => expect(entries.has('new')).toBe(true));
     expect(entries.get('new')!.data.title).toBe('New');
   });
+
+  it('finishes a slow reload before rendering the next autosave', async () => {
+    const { watcher, entries, renderMarkdown } = await setup();
+    const file = path.join(root, 'old.md');
+    let release = () => {};
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    renderMarkdown.mockClear().mockImplementationOnce(async () => {
+      await waiting;
+      return { html: '<p>First edit</p>', metadata: {} };
+    });
+    try {
+      await writeFile(file, '---\ntitle: First edit\ndate: 2026-11-07\n---\nFirst edit');
+      watcher.emit('change', file);
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.waitFor(() => expect(renderMarkdown).toHaveBeenCalledOnce());
+
+      await writeFile(file, '---\ntitle: Latest edit\ndate: 2026-11-07\n---\nLatest edit');
+      watcher.emit('change', file);
+      await vi.advanceTimersByTimeAsync(6500);
+      expect(renderMarkdown).toHaveBeenCalledOnce();
+    } finally {
+      release();
+    }
+    await vi.waitFor(() => expect(entries.get('old')?.data.title).toBe('Latest edit'));
+    expect(renderMarkdown).toHaveBeenCalledTimes(2);
+  });
 });

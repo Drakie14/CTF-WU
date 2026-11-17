@@ -37,6 +37,11 @@ async function call(input: string, init: RequestInit = {}): Promise<Response> {
   return response;
 }
 
+/** Endpoint tự tạo thư mục cha, ghi ngay nội dung mà không tạo file rỗng trước. */
+export async function writeLocalPostFile(relative: string, data: BlobPart): Promise<void> {
+  await call(endpoint('file', relative), { method: 'PUT', body: new Blob([data]) });
+}
+
 async function kindOf(relative: string): Promise<Kind | undefined> {
   return ((await (await call(endpoint('stat', relative))).json()) as { kind: Kind | null }).kind ?? undefined;
 }

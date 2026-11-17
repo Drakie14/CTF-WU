@@ -193,6 +193,56 @@ test('lỗi ghi file local vẫn giữ nháp trình duyệt và khôi phục sau
   await expect(page.locator('.cm-content')).toContainText('Noi dung phai giu khi o dia loi.');
 });
 
+test('đổi độ khó sau đánh giá vẫn lưu được nháp khi ghi local bị kẹt', async ({ page }) => {
+  const path = 'Dreamhack/local/index.md';
+  const writes = await mockRepository(page, [], true);
+  const filesystem = await mockFilesystem(page, { [path]: Buffer.from(source('Local')) });
+  await page.route('https://generativelanguage.googleapis.com/**', (route) => route.fulfill({ json: {
+    candidates: [{ content: { parts: [{ text: JSON.stringify({ tags: ['PHP'], difficulty: 'Bronze 4' }) }] } }],
+  } }));
+  let release = () => {};
+  const waiting = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/__studio/fs/file?*', async (route) => {
+    if (route.request().method() === 'PUT') await waiting;
+    await route.fallback();
+  });
+  try {
+    await openPost(page, path);
+    await page.locator('[data-metadata-toggle]').click();
+    await page.locator('[data-ai-key] summary').click();
+    await page.locator('[data-gemini-key]').fill('test-only');
+    await page.locator('[data-auto-tags]').click();
+    await expect(page.locator('[data-tag-toast]')).toBeVisible();
+    const writeStarted = page.waitForRequest((request) => request.method() === 'PUT' && request.url().includes('/__studio/fs/file?'));
+    await page.locator('[data-toast-apply]').click();
+    await writeStarted;
+    await expect(page.locator('[data-difficulty]')).toHaveValue('Bronze 4');
+
+    await page.clock.install();
+    const difficulty = page.locator('[data-chip-group="difficulty"]').getByRole('button', { name: 'Bronze 3', exact: true });
+    await difficulty.click();
+    await expect(difficulty).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('[data-publish]').click();
+    await expect(page.locator('[data-status]')).toContainText('Đang lưu nháp trước khi Publish');
+    await page.clock.fastForward(11_000);
+    await expect(page.locator('[data-status]')).toContainText('Lưu file local quá lâu');
+    await expect(page.locator('.studio')).not.toHaveAttribute('inert');
+    expect(writes.tree).toEqual([]);
+    const savedDifficulty = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}').difficulty,
+      `ctf-wu.studio.draft.${postsRoot}${path}`);
+    expect(savedDifficulty).toBe('Bronze 3');
+
+    release();
+    await expect.poll(() => readDocument(filesystem.files.get(path)!.toString()).fields.difficulty).toBe('Bronze 3');
+    await page.locator('[data-publish]').click();
+    await expect(page.locator('[data-save-state]')).toHaveText('Đã publish');
+    const published = writes.tree.find((entry) => entry.path === `${postsRoot}${path}`);
+    expect(readDocument(published!.content!).fields.difficulty).toBe('Bronze 3');
+  } finally {
+    release();
+  }
+});
+
 test('reload trước debounce autosave vẫn giữ phần vừa sửa trong bài đã publish', async ({ page }) => {
   const post = { path: 'Dreamhack/first/index.md', sha: 'first', source: source('First') };
   await mockRepository(page, [post]);

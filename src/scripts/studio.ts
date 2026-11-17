@@ -2,7 +2,7 @@ import GithubSlugger from 'github-slugger';
 import { getStored, putStored, removeStored, putDraftAssets, getDraftAssets } from '../lib/studio-storage';
 import { bundledLanguagesInfo, codeToHtml } from 'shiki/bundle/full';
 import { STUDIO_REPO, STUDIO_TOKEN_KEY, ctfFromFolder } from '../lib/studio';
-import { localPostsDirectory, probeLocalStudio } from '../lib/studio-local-fs';
+import { localPostsDirectory, probeLocalStudio, writeLocalPostFile } from '../lib/studio-local-fs';
 import { slugify } from '../lib/content/slug';
 import {
   buildVocabulary,
@@ -194,6 +194,7 @@ let localDraftPersisted = false;
 let localDraftPendingPath: string | undefined;
 let localOnly: RepoFile[] = [];
 let localWrite: Promise<void> = Promise.resolve();
+let localSaveQueued = false;
 const writtenAssets = new Set<Asset>();
 
 const editorSource = () => editor.state.doc.toString();
@@ -324,13 +325,28 @@ function scheduleDraft() {
   }, 450);
 }
 /** Ghi nốt nháp đang chờ và đợi chuỗi ghi file local xong trước khi đổi bài, để không ghi nội dung bài này vào thư mục bài kia. */
-async function settleDraft() {
+async function settleDraft(waitMs?: number) {
   if (draftTimer) {
     clearTimeout(draftTimer);
     draftTimer = undefined;
     saveDraft();
   }
-  await localWrite;
+  if (waitMs === undefined) return localWrite;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      localWrite,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(
+          saveBrowserDraft()
+            ? 'Lưu file local quá lâu. Bản nháp đã lưu trong trình duyệt. Bấm Publish lại khi ổ đĩa phản hồi.'
+            : 'Lưu file local quá lâu. Giữ tab mở và bấm Publish lại khi ổ đĩa phản hồi.',
+        )), waitMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 function saveBrowserDraft(): boolean {
   if (navigationRunning || replacingSource) return false;
@@ -375,7 +391,12 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function queueLocalSave() {
-  localWrite = localWrite.then(saveLocalDraft).catch(async (error) => {
+  if (localSaveQueued) return;
+  localSaveQueued = true;
+  localWrite = localWrite.then(() => {
+    localSaveQueued = false;
+    return saveLocalDraft();
+  }).catch(async (error) => {
     saveBrowserDraft();
     if (!(await dropStaleLocalDirectory())) setStatus(errorMessage(error), 'error');
   });
@@ -433,12 +454,14 @@ async function saveLocalDraft() {
     localDraftPendingPath = path;
   }
   await writeLocalArticle(path, composePost());
-  const target = await localEntry(directory);
-  for (const asset of assets)
-    if (target && !writtenAssets.has(asset)) {
-      await writeLocalFile(target, asset.name, asset.file);
+  const pendingAssets = assets.filter((asset) => !writtenAssets.has(asset));
+  const target = !localMode && pendingAssets.length ? await localEntry(directory) : undefined;
+  for (const asset of pendingAssets) {
+    if (localMode) await writeLocalPostFile(localRelativePath(`${directory}/${asset.name}`), asset.file);
+    else if (target) await writeLocalFile(target, asset.name, asset.file);
+    if (localMode || target)
       writtenAssets.add(asset);
-    }
+  }
   if (previousToRemove) {
     const holder = parentOf(previousToRemove) === postRoot ? localDirectory : await localEntry(parentOf(previousToRemove));
     await holder?.removeEntry(leafName(previousToRemove), { recursive: true });
@@ -848,6 +871,10 @@ async function readLocalArticle(path: string): Promise<string | undefined> {
 async function writeLocalArticle(path: string, source: string): Promise<boolean> {
   if (!localDirectory || (await localDirectory.queryPermission({ mode: 'readwrite' })) !== 'granted')
     return false;
+  if (localMode) {
+    await writeLocalPostFile(localRelativePath(path), source);
+    return true;
+  }
   const parts = localRelativePath(path).split('/');
   let target: FileSystemDirectoryHandle = localDirectory;
   for (const part of parts.slice(0, -1)) target = await target.getDirectoryHandle(part, { create: true });
@@ -3403,7 +3430,8 @@ async function publish() {
       return setStatus(issues.map((issue) => `${issue.field}: ${issue.message}`).join('\n'), 'error');
     if (!(await savePending())) return;
     setStatus('Đang lưu nháp trước khi Publish…');
-    await settleDraft();
+    await settleDraft(10_000);
+    setStatus('Đang kiểm tra tệp đính kèm trước khi Publish…');
     await pruneUnusedAssets();
     const filePath = currentPath();
     if (!openFile && remoteBlobs.some((item) => item.path.startsWith(`${articleDirectory()}/`))) {
@@ -3445,6 +3473,7 @@ async function publish() {
     $('[data-file-label]').textContent = filePath.replace(`${postRoot}/`, '');
     activeFolder = relativeFolder();
     $('[data-save-state]').textContent = 'Đã publish';
+    setStatus('Đã publish GitHub. Đang đồng bộ file local…');
     const localSynced = await syncLocal({ quiet: true });
     if (localSynced) localStorage.setItem(localBaselineKey(filePath), await hashText(composePost()));
     const git = await pullToGit(localSynced);
@@ -3698,7 +3727,11 @@ $('[data-connection]').addEventListener('click', () => {
     tokenInput.focus();
   }
 });
-[title, summary, folder, date, ctf, category, difficulty, tags].forEach((input) =>
+difficulty.addEventListener('input', () => {
+  renderMetaChips();
+  scheduleDraft();
+});
+[title, summary, folder, date, ctf, category, tags].forEach((input) =>
   input.addEventListener('input', () => {
     void renderPreview();
     scheduleDraft();

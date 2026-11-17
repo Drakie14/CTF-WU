@@ -85,16 +85,33 @@ export function postsLoader(options: PostsLoaderOptions): Loader {
       const dirs = [options.base, ...(options.extraBases ?? [])].map((b) => path.resolve(root, b));
       let last = await postsSignature(dirs);
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let loading = false;
+      let pending = false;
+      const drainReloads = async () => {
+        if (loading) return;
+        loading = true;
+        try {
+          while (pending) {
+            pending = false;
+            try {
+              const sig = await postsSignature(dirs);
+              await loadAll(ctx, options);
+              // Chỉ xác nhận sau khi nạp thành công để poll còn thử lại khi file đang được ghi.
+              last = sig;
+            } catch (error) {
+              ctx.logger.error(String(error));
+            }
+          }
+        } finally {
+          loading = false;
+        }
+      };
       const reload = () => {
         clearTimeout(timer);
         timer = setTimeout(() => {
-          postsSignature(dirs)
-            .then(async (sig) => {
-              // Chỉ xác nhận sau khi nạp thành công; lỗi đọc file tạm thời phải được poll thử lại.
-              await loadAll(ctx, options);
-              last = sig;
-            })
-            .catch((err: unknown) => ctx.logger.error(String(err)));
+          timer = undefined;
+          pending = true;
+          void drainReloads();
         }, 100);
       };
       const onEvent = (changed: string) => {
@@ -104,9 +121,10 @@ export function postsLoader(options: PostsLoaderOptions): Loader {
       // (Studio publish → /__studio/sync hoặc service blog-sync), nên quét lại định kỳ làm lưới an toàn.
       clearInterval(pollTimer);
       pollTimer = setInterval(() => {
+        if (loading || timer) return;
         postsSignature(dirs)
           .then((sig) => {
-            if (sig !== last) reload();
+            if (sig !== last && !loading && !timer) reload();
           })
           .catch(() => {});
       }, 3000);
@@ -143,7 +161,7 @@ async function loadAll(ctx: LoaderContext, options: PostsLoaderOptions): Promise
 
   const gitDates = new Map<string, Date>();
   for (const b of bases) {
-    for (const [k, v] of getGitFirstCommitDates(b, (m) => logger.info(m))) gitDates.set(k, v);
+    for (const [k, v] of await getGitFirstCommitDates(b, (m) => logger.info(m))) gitDates.set(k, v);
   }
 
   const untouched = new Set(store.keys());
