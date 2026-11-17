@@ -55,7 +55,7 @@ const { title, ctf, category, difficulty, date, readingTime, wordCount } = post.
 
 <style>
   .art-head {
-    padding-bottom: 1.4rem;
+    padding-bottom: 1.5rem;
     border-bottom: 1px solid var(--panel-border);
   }
   .art-title-row {
@@ -66,7 +66,7 @@ const { title, ctf, category, difficulty, date, readingTime, wordCount } = post.
   }
   .art-title {
     margin: 0;
-    font-size: clamp(1.9rem, 3vw, 2.6rem);
+    font-size: clamp(1.85rem, 2.5vw + 0.45rem, 3rem);
     font-weight: 700;
     line-height: 1.15;
     letter-spacing: -0.02em;
@@ -125,9 +125,12 @@ const { title, ctf, category, difficulty, date, readingTime, wordCount } = post.
   }
   .art-sub {
     display: flex;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.2rem 0.55rem;
     margin: 0.7rem 0 0;
-    font-size: 0.85rem;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
     color: var(--muted);
   }
   .art-tags {

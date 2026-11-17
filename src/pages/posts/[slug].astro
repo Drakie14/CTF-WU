@@ -101,17 +101,17 @@ const ogImage = cover
     padding: 2.25rem clamp(1.25rem, 3vw, 2.75rem) 4rem;
   }
   .article-grid {
-    margin-top: 1.5rem;
+    margin-top: 1.8rem;
   }
   /* Chừa chỗ cho thanh mục lục thu gọn để không đè lên chữ. */
   .article-grid:has(> :global(.toc)) > .prose {
     padding-right: 3rem;
   }
-  /* Giữ dòng văn vừa đọc khi mở rộng panel; ảnh, code và bảng dùng toàn bộ bề ngang. */
+  /* Các khối dùng chung lề trái, riêng đoạn văn giữ độ dài dòng dễ đọc. */
   .prose > :global(:is(p:not(:has(img, picture)), h1, h2, h3, h4, h5, h6, ul, ol, blockquote, hr)) {
     box-sizing: border-box;
     max-width: var(--prose-measure, 65ch);
-    margin-inline: auto;
+    margin-inline: 0 auto;
   }
   @media (max-width: 640px) {
     .article {

@@ -126,7 +126,7 @@ a {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgb(22 16 31 / 0.55), rgb(22 16 31 / 0.15) 60%, rgb(22 16 31 / 0.05));
+  background: linear-gradient(105deg, rgb(22 16 31 / 0.66), rgb(22 16 31 / 0.30) 60%, rgb(22 16 31 / 0.19));
 }
 
 .particles {
@@ -280,9 +280,8 @@ html.reze-cursor-on .reze-cursor {
 .prose {
   --prose-measure: 65ch;
   font-family: var(--font-sans);
-  /* Phóng to chữ theo bề rộng màn hình để nội dung lấp đầy panel khi zoom out. */
-  font-size: clamp(1rem, 0.6rem + 0.7vw, 1.5rem);
-  line-height: 1.8;
+  font-size: clamp(1rem, 0.9rem + 0.26vw, 1.2rem);
+  line-height: 1.78;
   color: var(--text-soft);
   overflow-wrap: break-word;
 }
@@ -310,7 +309,7 @@ html.reze-cursor-on .reze-cursor {
 }
 .prose h2 {
   font-size: 1.3em;
-  margin-top: 2.4em;
+  margin-top: 1.95em;
   padding-bottom: 0.35em;
   border-bottom: 1px solid var(--panel-border);
 }
@@ -323,6 +322,9 @@ html.reze-cursor-on .reze-cursor {
 .prose h6 {
   font-size: 1em;
   margin-top: 1.4em;
+}
+.prose > :first-child {
+  margin-top: 0;
 }
 .prose a {
   color: var(--accent);

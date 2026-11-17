@@ -40,6 +40,7 @@
     "@codemirror/view": "6.43.15",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
     "@fontsource-variable/lexend": "5.3.0",
+    "ascii-magic-art": "1.1.0",
     "astro": "7.4.5",
     "github-slugger": "2.0.0",
     "katex": "0.19.1",

@@ -74,6 +74,10 @@ const { posts } = await getSiteContent();
       try {
         const found = await searchItems(q, 100);
         if (my !== seq) return;
+        if (!found.length) {
+          out.innerHTML = `<p class="sp-status">Không tìm thấy write-up cho “${esc(q)}”.</p>`;
+          return;
+        }
         out.innerHTML =
           `<p class="sp-status">${found.length} kết quả cho “${esc(q)}”</p><ul>` +
           found
@@ -114,8 +118,9 @@ const { posts } = await getSiteContent();
   }
   h1 {
     margin: 0 0 1.25rem;
-    font-size: 2rem;
+    font-size: clamp(1.85rem, 3vw, 2.55rem);
     font-weight: 600;
+    line-height: 1.2;
   }
   .sp-form {
     display: flex;
@@ -159,7 +164,7 @@ const { posts } = await getSiteContent();
     list-style: none;
   }
   .search-page :global(li) {
-    padding: 0.8rem 0;
+    padding: 0.85rem 0;
     border-bottom: 1px solid var(--panel-border);
   }
   .search-page :global(li > a) {
@@ -167,18 +172,21 @@ const { posts } = await getSiteContent();
     font-weight: 500;
     text-decoration: none;
   }
-  .search-page :global(li > a:hover) {
+  .search-page :global(li > a:hover),
+  .search-page :global(li > a:focus-visible) {
     color: var(--accent);
   }
   .search-page :global(.meta) {
     display: block;
     margin-top: 0.2rem;
-    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
     color: var(--muted);
   }
   .search-page :global(.sum) {
     margin: 0.35rem 0 0;
     font-size: 0.9rem;
+    line-height: 1.6;
     color: var(--text-soft);
   }
   .search-page :global(.sum mark) {

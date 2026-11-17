@@ -1,5 +1,30 @@
 import { test, expect } from '@playwright/test';
 
+test('skyline phát ở trang chủ và giữ ảnh tĩnh khi bật giảm chuyển động', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  const skyline = page.locator('[data-skyline]');
+  const canvas = skyline.locator('canvas');
+  const snapshot = () => canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+  const poster = skyline.locator('img');
+  await expect(poster).toBeVisible();
+  await expect.poll(() => poster.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  await expect(canvas).toBeHidden();
+
+  await skyline.getByRole('button', { name: 'Phát skyline' }).click();
+  await expect(canvas).toBeVisible();
+  const firstFrame = await snapshot();
+  await expect.poll(snapshot).not.toBe(firstFrame);
+  await skyline.getByRole('button', { name: 'Tạm dừng skyline' }).click();
+  await expect(skyline.getByRole('button', { name: 'Phát skyline' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Tất cả bài viết' }).click();
+  await expect(skyline).toHaveCount(0);
+  await page.goBack();
+  await expect(skyline.locator('img')).toBeVisible();
+  await expect(canvas).toBeHidden();
+});
+
 test('trang chủ giữ giới thiệu và bài mới trên mobile, cây thư mục vẫn truy cập được', async ({
   page,
 }, info) => {

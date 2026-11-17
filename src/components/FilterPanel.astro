@@ -1,5 +1,5 @@
 ---
-import EmptyState from './EmptyState.astro';
+import PostRow from './PostRow.astro';
 import type { Taxonomy } from '../lib/content/tags';
 import type { Post } from '../lib/posts';
 
@@ -18,7 +18,12 @@ for (const p of posts) for (const t of p.data.tags) counts.set(tags.slugOf(t), (
 const topTags = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
 ---
 
-<EmptyState title={`${kind} · ${label}`} description={description}>
+<section class="filter-overview" aria-labelledby="filter-title">
+  <header class="filter-header">
+    <p class="filter-kind">{kind}</p>
+    <h1 id="filter-title">{label}</h1>
+    <p class="filter-count">{description}</p>
+  </header>
   {
     topTags.length > 0 && (
       <ul class="chips" aria-label="Tags trong nhóm">
@@ -32,39 +37,80 @@ const topTags = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
       </ul>
     )
   }
-  <p class="hint">Chọn một write-up ở danh sách bên trái · <a href="/">Xem tất cả</a></p>
-</EmptyState>
+  {
+    posts.length > 0 && (
+      <section class="filter-latest" aria-labelledby="filter-latest-title">
+        <h2 id="filter-latest-title">Mới nhất</h2>
+        <ul>{posts.slice(0, 6).map((post) => <PostRow post={post} />)}</ul>
+      </section>
+    )
+  }
+</section>
 
 <style>
+  .filter-overview {
+    box-sizing: border-box;
+    max-width: 48rem;
+    margin-inline: auto;
+    padding: 2.5rem 1.5rem 3rem;
+  }
+  .filter-header {
+    margin-bottom: 1.15rem;
+  }
+  .filter-kind {
+    margin: 0 0 0.38rem;
+    font: 600 0.76rem/1.4 var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+  }
+  .filter-header h1 {
+    margin: 0;
+    font-size: clamp(1.85rem, 3vw, 2.55rem);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  .filter-count {
+    margin: 0.45rem 0 0;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+  }
   .chips {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
     gap: 0.45rem;
-    max-width: 32rem;
-    margin: 1.75rem 0 0;
+    margin: 0;
     padding: 0;
     list-style: none;
   }
   .chips a {
     display: inline-block;
-    padding: 0.15rem 0.7rem;
-    border: 1px solid rgb(134 239 172 / 0.4);
+    padding: 0.25rem 0.65rem;
+    border: 1px solid var(--panel-border);
     border-radius: 999px;
-    color: var(--tag);
+    background: var(--panel-2);
+    color: var(--text-soft);
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     text-decoration: none;
+  }
+  .chips a:hover,
+  .chips a:focus-visible {
+    border-color: var(--accent);
+    color: var(--text);
   }
   .chips span {
     color: var(--muted);
   }
-  .hint {
-    margin-top: 1.75rem;
-    font-size: 0.85rem;
-    color: var(--muted);
+  .filter-latest { margin-top: 1.75rem; }
+  .filter-latest h2 {
+    margin: 0 0 0.65rem;
+    font-size: 1.125rem;
+    font-weight: 600;
   }
-  .hint a {
-    color: var(--accent);
+  .filter-latest ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 </style>
