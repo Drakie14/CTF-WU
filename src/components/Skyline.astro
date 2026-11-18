@@ -4,15 +4,13 @@ import poster from '../assets/desert-needle-skyline.webp';
 
 <div class="skyline" data-skyline>
   <div class="skyline-art" aria-hidden="true">
-    <img src={poster.src} width={poster.width} height={poster.height} alt="" decoding="async" />
+    <img src={poster.src} width={poster.width} height={poster.height} alt="" decoding="async" fetchpriority="high" />
     <canvas hidden></canvas>
   </div>
   <button class="skyline-playback" type="button" aria-label="Tạm dừng skyline" data-skyline-playback hidden></button>
 </div>
 
 <script>
-  import type { createSkylinePlayer } from '../lib/skyline-player';
-
   let dispose: (() => void) | undefined;
   let current: HTMLElement | undefined;
   let pausedByUser = false;
@@ -22,32 +20,39 @@ import poster from '../assets/desert-needle-skyline.webp';
     if (!skyline || current === skyline) return;
     const canvas = skyline.querySelector('canvas');
     const button = skyline.querySelector('button');
-    if (!canvas || !button) return;
+    if (!canvas || !button || !canvas.transferControlToOffscreen || !('Worker' in window) || !('IntersectionObserver' in window)) return;
     current = skyline;
 
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     let playing = !motion.matches && !pausedByUser;
     let visible = false;
-    let disposed = false;
-    let player: ReturnType<typeof createSkylinePlayer>;
-    let loading: Promise<void> | undefined;
+    let worker: Worker | undefined;
+    const showPoster = () => {
+      worker?.terminate();
+      worker = undefined;
+      canvas.hidden = true;
+      button.hidden = true;
+    };
     const update = () => {
       button.dataset.playing = String(playing);
       button.setAttribute('aria-label', playing ? 'Tạm dừng skyline' : 'Phát skyline');
       if (!playing || !visible || document.hidden) {
-        player?.pause();
+        worker?.postMessage('pause');
         return;
       }
-      if (player) {
-        player.play();
-        return;
+      if (button.hidden) return;
+      try {
+        if (!worker) {
+          worker = new Worker(new URL('../lib/skyline-worker.ts', import.meta.url), { type: 'module' });
+          worker.onmessage = () => { canvas.hidden = false; };
+          worker.onerror = showPoster;
+          const surface = canvas.transferControlToOffscreen();
+          worker.postMessage(surface, [surface]);
+        }
+        worker.postMessage('play');
+      } catch {
+        showPoster();
       }
-      loading ??= import('../lib/skyline-player').then(({ createSkylinePlayer }) => {
-        if (disposed) return;
-        player = createSkylinePlayer(canvas);
-        if (player) update();
-        else button.hidden = true;
-      }).catch(() => { button.hidden = true; });
     };
 
     const observer = new IntersectionObserver(([entry]) => {
@@ -70,8 +75,7 @@ import poster from '../assets/desert-needle-skyline.webp';
     update();
 
     dispose = () => {
-      disposed = true;
-      player?.pause();
+      worker?.terminate();
       observer.disconnect();
       motion.removeEventListener('change', onPreference);
       document.removeEventListener('visibilitychange', update);

@@ -31,6 +31,7 @@ test('trang chủ giữ giới thiệu và bài mới trên mobile, cây thư m�
   await page.goto('/');
   await expect(page.locator('.hero h1')).toHaveText('Drakie14');
   await expect(page.locator('#main')).toBeVisible();
+  await expect(page.locator('[data-skyline] canvas')).toBeVisible();
   if (info.project.name === 'mobile')
     await page.screenshot({ path: info.outputPath('home-mobile.png'), fullPage: true });
   const latest = page.locator('.latest a.row:visible');

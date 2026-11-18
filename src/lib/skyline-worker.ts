@@ -1,8 +1,8 @@
 import createSkyline, { meta, type SkylineFrame } from 'ascii-magic-art/pieces/desert-needle-skyline.js';
 
-export function createSkylinePlayer(canvas: HTMLCanvasElement) {
+function createSkylinePlayer(canvas: OffscreenCanvas) {
   const context = canvas.getContext('2d', { alpha: false });
-  if (!context) return;
+  if (!context) throw new Error('Skyline canvas is unavailable');
 
   const cell = 5;
   const shades = '▁▂▃▄▅▆▇█';
@@ -57,7 +57,6 @@ export function createSkylinePlayer(canvas: HTMLCanvasElement) {
   }
 
   paint(elapsed);
-  canvas.hidden = false;
 
   return {
     play() { request ??= requestAnimationFrame(tick); },
@@ -68,3 +67,13 @@ export function createSkylinePlayer(canvas: HTMLCanvasElement) {
     },
   };
 }
+
+let player: ReturnType<typeof createSkylinePlayer> | undefined;
+globalThis.addEventListener('message', ({ data }: MessageEvent<OffscreenCanvas | 'play' | 'pause'>) => {
+  if (data === 'play') player?.play();
+  else if (data === 'pause') player?.pause();
+  else {
+    player = createSkylinePlayer(data);
+    globalThis.postMessage('ready');
+  }
+});
