@@ -66,8 +66,14 @@ export default defineConfig({
     build: {
       minify: true,
       cssMinify: true,
-      // Chunk lớn nhất là script Studio (~850 kB: CodeMirror, shiki, katex), chỉ tải ở /admin; mermaid.min nạp bằng
-      // thẻ <script> (asset, không tính là chunk). Cảnh báo chunk size ở mức mặc định chỉ làm nhiễu log build.
+      // Tách parser YAML và HTML khỏi script Studio để giữ từng chunk dưới ngưỡng.
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [{ name: 'studio-parsers', test: /[/\\]node_modules[/\\](yaml|parse5)[/\\]/ }],
+          },
+        },
+      },
       chunkSizeWarningLimit: 1000,
       // Không bao giờ inline JavaScript (CSP chỉ cho phép script từ 'self', không 'unsafe-inline')
       // và font (CSP font-src 'self', không data:). Asset khác giữ ngưỡng mặc định (4 KB).
