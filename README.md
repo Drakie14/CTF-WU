@@ -11,8 +11,6 @@ tự build lại. Nội dung được build tĩnh; Pages Function `/api/dreamhac
 - Mục lục tự tạo từ heading `#`, `##`, `###` (thu gọn ở góc phải bài).
 - Tìm kiếm Pagefind, sitemap, RSS feed `/rss.xml` (không có link trên giao diện), `/admin` (Write-up Studio)
   không cần server.
-- `/admin/import/`: import **một** file `.md` của cả giải → tự tách thành từng bài theo `# Category` /
-  `## Challenge` (xem [Import một file .md nhiều bài](#import-một-file-md-nhiều-bài)).
 
 ## Mục lục
 
@@ -25,7 +23,6 @@ tự build lại. Nội dung được build tĩnh; Pages Function `/api/dreamhac
 - [Code block](#code-block)
 - [HackMD syntax](#hackmd-syntax)
 - [Admin (Write-up Studio)](#admin-write-up-studio)
-  - [Import một file .md nhiều bài](#import-một-file-md-nhiều-bài)
 - [Lệnh npm](#lệnh-npm)
 - [Kiểm tra chất lượng](#kiểm-tra-chất-lượng)
 - [Version](#version)
@@ -95,9 +92,7 @@ npm run verify    # chạy riêng: quét dist/ (XSS, ảnh remote, link hỏng, 
 4. Cloudflare Pages tự build (1–2 phút) → website cập nhật: bài xuất hiện ở trang chủ, `/ctf/...`,
    `/category/...`, `/tags/...`, `/archive`, RSS, sitemap và search.
 
-Có thể dùng [`/admin/studio/`](#admin-write-up-studio) thay cho bước 2–3. Note HackMD chứa **cả giải** (nhiều
-challenge trong một file)? Dùng [`/admin/import/`](#import-một-file-md-nhiều-bài) để tự tách thành
-từng bài riêng, phân loại theo heading `#`.
+Có thể dùng [`/admin/studio/`](#admin-write-up-studio) thay cho bước 2–3.
 
 ### Frontmatter mẫu
 
@@ -337,7 +332,7 @@ Cú pháp bên trong code block/inline code không bao giờ bị xử lý.
 
 `/admin/studio/` là trang soạn write-up tự viết, chạy hoàn toàn trên trình duyệt và ghi thẳng lên GitHub
 qua API (không cần server). Repo/nhánh được khai báo trong `src/lib/studio.ts` (hiện là `Drakie14/CTF-WU`,
-nhánh `main`); `/admin/import/` dùng chung cấu hình này.
+nhánh `main`).
 
 **Studio local** (mở qua `npm run dev`, ví dụ bằng `Studio.bat`): Studio tự nhận dev server (pill `Git local`,
 nút `Local: dev server`) và không cần token hay chọn thư mục:
@@ -372,59 +367,6 @@ Các URL con được phục vụ qua rewrite trong `public/_redirects` trên Cl
   đường dẫn mới trong một commit và cập nhật `ctf:` trong frontmatter nếu trùng tên cũ.
 - Kéo thả bài đã chọn vào folder khác để chuyển bài. Nút `+ Bài viết mới` ở sidebar chỉ hiện khi đang mở
   một bài; trong folder dùng `+ Tạo write-up`.
-- `/admin/import/` import một file `.md` nhiều bài (xem [bên dưới](#import-một-file-md-nhiều-bài)).
-
-### Import một file .md nhiều bài
-
-Note HackMD thường gom **cả giải** vào một file: mỗi `# Category` là một mảng, mỗi `## Challenge` là
-một bài. Trang `/admin/import/` tách file đó thành từng bài riêng và commit tất cả trong **một commit**:
-
-1. Trang import dùng lại token mà Studio đã lưu trên trình duyệt đó. Chưa có thì trang hiện ô nhập token
-   (fine-grained, **Contents: Read and write**); token nhập ở đây cũng được lưu để Studio dùng chung.
-2. Mở `https://<site>/admin/import/` → kéo thả
-   file `.md`, hoặc paste Markdown từ HackMD.
-3. Xem trước: sửa **CTF**, **Ngày**, và title / category / slug của từng bài; bỏ tick bài không muốn đăng.
-4. **Commit N bài lên GitHub** → Cloudflare tự build. Bài mới hiện trong thư viện của Studio.
-
-```markdown
----
-title: NNS CTF          # tên CTF (ưu tiên ctf:, không có thì lấy tên file)
-date: 2026-09-20        # tùy chọn — gán cho mọi bài (tags: cũng vậy)
----
-
-# Web                   ← category web
-## NNS Travel           ← bài 1
-...
-## File monster (misc)  ← bài 2, category ghi đè thành misc
-...
-# Reversing             ← category rev (alias)
-## Crackme              ← bài 3
-```
-
-Kết quả: `src/content/posts/NNS CTF/nns-travel/index.md`, `…/file-monster/index.md`, … mỗi file có
-frontmatter `title`, `ctf`, `category` (và `date`, `tags` nếu file gốc có).
-
-| Trong file gốc | Xử lý |
-| --- | --- |
-| `# Web`, `# WEB`, `# Reversing`… | Category của các bài bên dưới: không phân biệt hoa thường, nhận alias (`reverse`, `forensic`, `binary`, `cryptography`…). `#` không khớp category (ví dụ `# Labs`) → bài không có category, chọn tay trong bảng xem trước. |
-| `## Tên challenge` | Một bài. `## Tên (misc)` → category `misc`, title bỏ phần `(misc)`. `## ` rỗng bị bỏ qua. |
-| Nội dung giữa `#` và `##` đầu tiên | Ghép vào đầu bài đầu tiên của nhóm; nhóm không có `##` nào thì chính nhóm thành một bài. |
-| `#`, `##` trong code block | Không bao giờ bị tách (ví dụ dòng `# comment` trong script). |
-| `####`, `#####` trong bài | Tùy chọn **Nâng heading** (mặc định bật): heading nông nhất thành `##` để mục lục có mục. Bỏ tick để giữ nguyên. |
-
-- **Trùng slug** (lỗi duy nhất làm build fail) bị chặn trước khi commit: trang đọc danh sách bài trong
-  repo, slug đã có → tự thêm tiền tố CTF (`nns-ctf-ass`); vẫn sửa tay được. Trang cảnh báo khi bài
-  có vẻ **đã import rồi**, dừng lại nếu repo vừa thay đổi giữa lúc xem trước và lúc commit, và khóa
-  nút sau khi commit xong (chọn file khác để import tiếp).
-- Công cụ chỉ **thêm** file. Nếu bản gộp của giải đã nằm trong repo (ví dụ `posts/CTF/NNS CTF.md`),
-  xóa nó (trên GitHub) để không có hai bản.
-- Ảnh đường dẫn tương đối (`![](./a.png)`) không được chép theo → trang cảnh báo; upload lại ảnh qua
-  Studio. Ảnh HackMD (`https://hackmd.io/_uploads/…`) không bị ảnh hưởng.
-- Chạy local: `npm run dev` → `http://localhost:4321/admin/import/`. Commit vẫn ghi thẳng lên repo
-  GitHub trong `STUDIO_REPO` (`src/lib/studio.ts`), kể cả khi chạy local.
-- Logic tách nằm ở `src/lib/content/split-ctf.ts` (test: `tests/content/split-ctf.test.ts`); trang ở
-  `src/pages/admin/import.astro`.
-
 
 ### Authentication
 
@@ -463,7 +405,7 @@ Shiki khởi tạo WebAssembly và tô màu code trong Preview. Test: `tests/adm
 ## Kiểm tra chất lượng
 
 - **Test** (`tests/`): pipeline Markdown/HackMD, alias ngôn ngữ, XSS, frontmatter, tag, múi giờ,
-  CSP của `/admin`, tách file CTF cho `/admin/import/`.
+  CSP của `/admin`.
 - **Lighthouse**: `npm run lighthouse` cần Chrome/Chromium. Nếu không tự tìm thấy, đặt
   `CHROME_PATH` tới file chạy của Chrome. Mục tiêu ≥ 95 cho Performance/Accessibility/Best
   Practices/SEO (chế độ mobile).

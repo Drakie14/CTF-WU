@@ -28,7 +28,7 @@ describe('Studio URL paths', () => {
     for (const path of ['/admin/studio/folder/new/', '/admin/studio/new/', '/admin/studio/post/new/index.md/']) {
       expect(studioPagePath(path)).toBe('/admin/studio/');
     }
-    for (const path of ['/admin/studio/', '/admin/import/', '/__studio/fs/file', '/_astro/studio.js', '/missing/']) {
+    for (const path of ['/admin/studio/', '/admin/', '/__studio/fs/file', '/_astro/studio.js', '/missing/']) {
       expect(studioPagePath(path)).toBeUndefined();
     }
   });
